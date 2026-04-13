@@ -1,0 +1,25 @@
+# Build outputs
+bin/
+obj/
+
+# IDE/tooling
+.vs/
+.vscode/
+.git/
+.git-publish/
+*.csproj.user
+
+# Local Codex artifacts
+.codex-build/
+.tmpobj/
+_perm_test*.tmp
+src/CodexDesk.App/completed-chats.json
+src/CodexDesk.App/completed-chats.pending.json
+
+# Installer redistributables & build artifacts
+installer/redist/
+artifacts/
+
+# OS files
+.DS_Store
+Thumbs.db

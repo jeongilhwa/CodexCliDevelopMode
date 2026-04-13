@@ -1,0 +1,1026 @@
+﻿namespace CodexDesk;
+
+using CodexDesk.Services;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
+#if WINDOWS
+using Microsoft.Web.WebView2.Core;
+using UI = Microsoft.UI.Xaml;
+#endif
+
+public partial class MainPage : ContentPage
+{
+#if WINDOWS
+    private void OnNaverTalkWebViewHandlerChanged(object? sender, EventArgs e)
+    {
+        ConfigureWebView2ForWindows();
+    }
+
+    private void ConfigureWebView2ForWindows()
+    {
+        try
+        {
+            var handler = NaverTalkWebView.Handler as Microsoft.Maui.Handlers.WebViewHandler;
+            if (handler?.PlatformView is Microsoft.UI.Xaml.Controls.WebView2 webView2)
+            {
+                webView2.CoreWebView2Initialized -= OnCoreWebView2Initialized;
+                webView2.CoreWebView2Initialized += OnCoreWebView2Initialized;
+                if (webView2.CoreWebView2 is not null)
+                {
+                    AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
+                    _ = EnsureWebViewInspectorScriptRegisteredAsync(webView2.CoreWebView2);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Cookie configuration failed: {ex.Message}");
+        }
+    }
+
+    private void OnCoreWebView2Initialized(Microsoft.UI.Xaml.Controls.WebView2 sender, Microsoft.UI.Xaml.Controls.CoreWebView2InitializedEventArgs args)
+    {
+        if (sender.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        _naverTalkBrowser.SetStatus("WebView2 cookies enabled.");
+        AttachWebViewKeyboardDebugHandlers(sender.CoreWebView2);
+        _ = EnsureWebViewInspectorScriptRegisteredAsync(sender.CoreWebView2);
+        _ = ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
+    }
+
+    private void AttachWebViewKeyboardDebugHandlers(CoreWebView2 coreWebView2)
+    {
+        if (_webViewKeyboardBridgeAttached)
+        {
+            return;
+        }
+
+        _webViewKeyboardBridgeAttached = true;
+        coreWebView2.WebMessageReceived -= OnWebViewMessageReceived;
+        coreWebView2.WebMessageReceived += OnWebViewMessageReceived;
+        _ = coreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            """
+            (() => {
+                if (!window.chrome?.webview || window.__codexKeyDebugHook) {
+                    return;
+                }
+                window.__codexKeyDebugHook = true;
+                window.addEventListener('keydown', (e) => {
+                    const key = e.key ?? '';
+                    const code = e.code ?? '';
+                    const msg = `codex-keydbg:${key}|${code}|${e.ctrlKey}|${e.shiftKey}|${e.altKey}|${e.metaKey}`;
+                    try { window.chrome.webview.postMessage(msg); } catch {}
+                }, true);
+            })();
+            """);
+    }
+
+    private void OnWebViewMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        var message = e.TryGetWebMessageAsString();
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return;
+        }
+
+        if (message.StartsWith(WebViewKeyDebugPrefix, StringComparison.Ordinal))
+        {
+            var payload = message[WebViewKeyDebugPrefix.Length..];
+            var parts = payload.Split('|');
+            var key = parts.Length > 0 ? parts[0] : string.Empty;
+            var code = parts.Length > 1 ? parts[1] : string.Empty;
+            var ctrl = parts.Length > 2 ? parts[2] : "false";
+            var shift = parts.Length > 3 ? parts[3] : "false";
+            var alt = parts.Length > 4 ? parts[4] : "false";
+            var meta = parts.Length > 5 ? parts[5] : "false";
+            var keyMessage =
+                $"{DateTime.Now:HH:mm:ss} webview key={key}, code={code}, ctrl={ctrl}, shift={shift}, alt={alt}, meta={meta}";
+
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                _codexPromptMacroService.PublishKeyObserved(keyMessage);
+            });
+            return;
+        }
+
+        if (message.StartsWith(WebViewInspectPrefix, StringComparison.Ordinal))
+        {
+            var payload = message[WebViewInspectPrefix.Length..];
+            var separatorIndex = payload.IndexOf('|');
+            var action = separatorIndex < 0 ? payload : payload[..separatorIndex];
+            var details = separatorIndex < 0 ? string.Empty : payload[(separatorIndex + 1)..];
+            var status = action switch
+            {
+                "enabled" => "Developer inspect mode enabled.",
+                "disabled" => "Developer inspect mode disabled.",
+                "selected" => $"Selected element: {details}",
+                "unlocked" => "Element selection unlocked.",
+                "escape" => "Inspector selection canceled (Esc).",
+                _ => $"Inspector event: {action}"
+            };
+
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                _naverTalkBrowser.SetStatus(status, _naverTalkBrowser.CurrentUrl);
+            });
+        }
+    }
+
+    private async Task ToggleWebViewInspectorModeAsync()
+    {
+        try
+        {
+            _webViewInspectorModeEnabled = !_webViewInspectorModeEnabled;
+            UpdateWebViewInspectorToggleButton();
+            await ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
+            _naverTalkBrowser.SetStatus(
+                _webViewInspectorModeEnabled
+                    ? "Developer inspect mode turned on."
+                    : "Developer inspect mode turned off.",
+                _naverTalkBrowser.CurrentUrl);
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Developer inspect toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+
+    private async Task EnsureWebViewInspectorScriptRegisteredAsync(CoreWebView2 coreWebView2)
+    {
+        if (_webViewInspectorScriptRegistered)
+        {
+            return;
+        }
+
+        _webViewInspectorScriptRegistered = true;
+        await coreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            """
+            (() => {
+                if (!window.chrome?.webview || window.__codexInspectorBootstrap) {
+                    return;
+                }
+
+                window.__codexInspectorBootstrap = true;
+                const overlay = document.createElement('div');
+                overlay.style.position = 'fixed';
+                overlay.style.pointerEvents = 'none';
+                overlay.style.zIndex = '2147483646';
+                overlay.style.border = '2px solid #0d8a65';
+                overlay.style.background = 'rgba(13, 138, 101, 0.15)';
+                overlay.style.display = 'none';
+                overlay.style.boxSizing = 'border-box';
+
+                const badge = document.createElement('div');
+                badge.style.position = 'fixed';
+                badge.style.pointerEvents = 'none';
+                badge.style.zIndex = '2147483647';
+                badge.style.fontFamily = 'Consolas, monospace';
+                badge.style.fontSize = '12px';
+                badge.style.maxWidth = '42vw';
+                badge.style.padding = '4px 8px';
+                badge.style.borderRadius = '4px';
+                badge.style.color = '#ffffff';
+                badge.style.background = '#0d8a65';
+                badge.style.boxShadow = '0 2px 8px rgba(0,0,0,.25)';
+                badge.style.display = 'none';
+                badge.style.whiteSpace = 'nowrap';
+                badge.style.textOverflow = 'ellipsis';
+                badge.style.overflow = 'hidden';
+
+                const state = {
+                    enabled: false,
+                    locked: false,
+                    current: null
+                };
+
+                const post = (kind, details = '') => {
+                    try {
+                        window.chrome.webview.postMessage(`codex-inspect:${kind}|${details}`);
+                    } catch {}
+                };
+
+                const ensureUi = () => {
+                    if (!overlay.isConnected) {
+                        document.documentElement.appendChild(overlay);
+                    }
+                    if (!badge.isConnected) {
+                        document.documentElement.appendChild(badge);
+                    }
+                };
+
+                const describe = (el) => {
+                    if (!el) {
+                        return '';
+                    }
+
+                    const tag = String(el.tagName || '').toLowerCase();
+                    const id = el.id ? `#${el.id}` : '';
+                    const classes = typeof el.className === 'string'
+                        ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 3).map(v => `.${v}`).join('')
+                        : '';
+                    return `${tag}${id}${classes}`;
+                };
+
+                const clearUi = () => {
+                    overlay.style.display = 'none';
+                    badge.style.display = 'none';
+                };
+
+                const placeBadge = (x, y) => {
+                    const viewportWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+                    const viewportHeight = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
+                    const left = Math.min(Math.max(x + 12, 8), Math.max(8, viewportWidth - badge.offsetWidth - 8));
+                    const top = Math.min(Math.max(y + 12, 8), Math.max(8, viewportHeight - badge.offsetHeight - 8));
+                    badge.style.left = `${left}px`;
+                    badge.style.top = `${top}px`;
+                };
+
+                const renderTarget = (target, clientX, clientY) => {
+                    if (!target || target === overlay || target === badge) {
+                        clearUi();
+                        return;
+                    }
+
+                    const rect = target.getBoundingClientRect();
+                    if (!rect || rect.width <= 0 || rect.height <= 0) {
+                        clearUi();
+                        return;
+                    }
+
+                    ensureUi();
+                    overlay.style.display = 'block';
+                    overlay.style.left = `${rect.left}px`;
+                    overlay.style.top = `${rect.top}px`;
+                    overlay.style.width = `${rect.width}px`;
+                    overlay.style.height = `${rect.height}px`;
+
+                    badge.style.display = 'block';
+                    badge.textContent = describe(target);
+                    placeBadge(clientX, clientY);
+                };
+
+                document.addEventListener('mousemove', (event) => {
+                    if (!state.enabled || state.locked) {
+                        return;
+                    }
+
+                    const target = document.elementFromPoint(event.clientX, event.clientY);
+                    state.current = target;
+                    renderTarget(target, event.clientX, event.clientY);
+                }, true);
+
+                document.addEventListener('click', (event) => {
+                    if (!state.enabled) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+
+                    const target = state.current ?? document.elementFromPoint(event.clientX, event.clientY);
+                    if (!target) {
+                        return;
+                    }
+
+                    state.current = target;
+                    state.locked = !state.locked;
+                    renderTarget(target, event.clientX, event.clientY);
+                    post(state.locked ? 'selected' : 'unlocked', describe(target));
+                }, true);
+
+                document.addEventListener('keydown', (event) => {
+                    if (!state.enabled) {
+                        return;
+                    }
+
+                    if (event.key === 'Escape') {
+                        state.locked = false;
+                        clearUi();
+                        post('escape', '');
+                    }
+                }, true);
+
+                window.__codexInspectorSetEnabled = (enabled) => {
+                    state.enabled = !!enabled;
+                    state.locked = false;
+                    state.current = null;
+                    if (!state.enabled) {
+                        clearUi();
+                        post('disabled', '');
+                        return true;
+                    }
+
+                    ensureUi();
+                    post('enabled', '');
+                    return true;
+                };
+            })();
+            """);
+    }
+
+    private async Task ApplyWebViewInspectorModeAsync(bool enabled)
+    {
+        var coreWebView2 = await TryEnsureCoreWebView2Async();
+        if (coreWebView2 is null)
+        {
+            return;
+        }
+
+        await EnsureWebViewInspectorScriptRegisteredAsync(coreWebView2);
+        var script = $"window.__codexInspectorSetEnabled?.({enabled.ToString().ToLowerInvariant()});";
+        await RunBrowserScriptAsync(script);
+    }
+
+#endif
+
+    private async void OnLoaded(object? sender, EventArgs e)
+    {
+        Loaded -= OnLoaded;
+
+        SetupSplitterGesture();
+
+#if WINDOWS
+        try
+        {
+            ConfigureWebView2ForWindows();
+            await TryEnsureCoreWebView2Async();
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"WebView2 initialization failed: {ex.Message}");
+        }
+
+        SetupWindowKeyboardHook();
+#endif
+
+        await _naverTalkBrowser.EnsureInitializedAsync();
+        UpdateBrowserChrome();
+        await TryRestoreCookieLoginSessionAsync();
+        await _naverTalkBrowser.NavigateAsync(_naverTalkBrowser.Settings.TargetUrl);
+    }
+
+    private void OnUnloaded(object? sender, EventArgs e)
+    {
+        _naverTalkBrowser.StateChanged -= OnBrowserStateChanged;
+        _naverTalkBrowser.CommandRequested -= OnBrowserCommandRequested;
+        BrowserPane.SizeChanged -= OnBrowserPaneSizeChanged;
+#if WINDOWS
+        TeardownWindowKeyboardHook();
+#endif
+        Unloaded -= OnUnloaded;
+    }
+
+    private void OnBrowserStateChanged()
+    {
+        _ = MainThread.InvokeOnMainThreadAsync(UpdateBrowserChrome);
+    }
+
+    private void OnNaverTalkWebViewFocused(object? sender, FocusEventArgs e)
+    {
+        _isNaverTalkWebViewFocused = true;
+    }
+
+    private void OnNaverTalkWebViewUnfocused(object? sender, FocusEventArgs e)
+    {
+        _isNaverTalkWebViewFocused = false;
+    }
+
+    private void OnBrowserCommandRequested(BrowserCommand command)
+    {
+        _ = MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            switch (command.Type)
+            {
+                case BrowserCommandType.Navigate:
+                    var targetUrl = string.IsNullOrWhiteSpace(command.Url)
+                        ? _naverTalkBrowser.Settings.TargetUrl
+                        : command.Url;
+
+                    await TryRestoreCookieLoginSessionAsync();
+                    NaverTalkWebView.Source = new UrlWebViewSource { Url = targetUrl };
+                    break;
+
+                case BrowserCommandType.Reload:
+                    NaverTalkWebView.Reload();
+                    break;
+
+                case BrowserCommandType.TypeText:
+                    await TypeTextIntoNaverTalkAsync(command.Text, command.Submit);
+                    break;
+
+                case BrowserCommandType.CollectCompletedChats:
+                    _naverTalkBrowser.SetStatus("WebView completed chat collection is disabled. The app now uses Playwright for this action.");
+                    break;
+            }
+
+            UpdateBrowserChrome();
+
+            if (command.ForceLogin)
+            {
+                await AttemptAutoLoginAsync(command.Url ?? _naverTalkBrowser.CurrentUrl, force: true);
+            }
+        });
+    }
+
+    private async Task TypeTextIntoNaverTalkAsync(string? text, bool submit)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _naverTalkBrowser.SetStatus("Typing macro text is empty.");
+            return;
+        }
+
+        try
+        {
+#if WINDOWS
+            if (NaverTalkWebView.Handler?.PlatformView is UI.Controls.WebView2 platformWebView)
+            {
+                //platformWebView.Focus(UI.FocusState.Programmatic);
+            }
+            var insertedByJs = await InsertTextIntoNaverTalkByJavaScriptAsync(text, submit);
+            if (insertedByJs)
+            {
+                _naverTalkBrowser.SetStatus(submit ? "Typing macro inserted by WebView JS and sent." : "Typing macro inserted by WebView JS.");
+                return;
+            }
+
+            ReleasePressedAltKeys();
+            await Task.Delay(40);
+
+            var pasted = await TryPasteTextIntoFocusedTargetAsync(text, submit);
+            if (pasted)
+            {
+                _naverTalkBrowser.SetStatus(submit ? "Typing macro pasted by clipboard." : "Typing macro pasted by clipboard.");
+                return;
+            }
+
+            var typed = SendUnicodeText(text);
+            var submitted = !submit || SendEnterKey();
+
+            if (typed && submitted)
+            {
+                _naverTalkBrowser.SetStatus(submit ? "Typing macro sent by SendInput." : "Typing macro typed by SendInput.");
+                return;
+            }
+
+            var devToolsTyped = await TryTypeTextIntoNaverTalkByDevToolsAsync(text, submit);
+            _naverTalkBrowser.SetStatus(devToolsTyped
+                ? (submit ? "Typing macro sent by WebView2 DevTools fallback." : "Typing macro typed by WebView2 DevTools fallback.")
+                : "Typing macro failed: SendInput/WebView2 DevTools both failed.");
+#else
+            _naverTalkBrowser.SetStatus("Typing macro failed: SendInput is only available on Windows.");
+#endif
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Typing macro failed: {ex.Message}");
+        }
+    }
+
+    private static async Task<bool> TryPasteTextIntoFocusedTargetAsync(string text, bool submit)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        string? previousClipboard = null;
+        var clipboardCaptured = false;
+        try
+        {
+            previousClipboard = await Clipboard.Default.GetTextAsync();
+            clipboardCaptured = true;
+        }
+        catch
+        {
+            // 일부 환경에서는 기존 클립보드 읽기를 막을 수 있습니다.
+        }
+
+        try
+        {
+            await Clipboard.Default.SetTextAsync(text);
+            await Task.Delay(30);
+
+            var pasted = SendCtrlVKey();
+            var submitted = !submit || SendEnterKey();
+            return pasted && submitted;
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            if (clipboardCaptured)
+            {
+                try
+                {
+                    await Clipboard.Default.SetTextAsync(previousClipboard ?? string.Empty);
+                }
+                catch
+                {
+                    // 복원 실패 시 무시
+                }
+            }
+        }
+    }
+
+    private async Task<bool> FocusNaverTalkTypingTargetAsync()
+    {
+#if WINDOWS
+        if (NaverTalkWebView.Handler?.PlatformView is UI.Controls.WebView2 platformWebView)
+        {
+            platformWebView.Focus(UI.FocusState.Programmatic);
+        }
+#endif
+
+        var focusScript = """
+(() => {
+    const isTypingTarget = (el) => !!el &&
+        (el.tagName === 'TEXTAREA' ||
+         (el.tagName === 'INPUT' && el.type !== 'password') ||
+         el.isContentEditable);
+
+    if (!window.__codexTypingFocusTrackerAttached) {
+        window.__codexTypingFocusTrackerAttached = true;
+        document.addEventListener('focusin', (e) => {
+            const focused = e.target;
+            if (isTypingTarget(focused)) {
+                window.__codexLastTypingTarget = focused;
+            }
+        }, true);
+    }
+
+    let target = document.activeElement;
+    if (!isTypingTarget(target)) {
+        const remembered = window.__codexLastTypingTarget;
+        if (isTypingTarget(remembered) && document.contains(remembered)) {
+            target = remembered;
+        }
+    }
+
+    if (!isTypingTarget(target)) {
+        const candidates = [
+            'div[role="textbox"][contenteditable="true"]',
+            '[contenteditable="true"][data-testid*="chat"]',
+            '[contenteditable="true"][aria-label*="메시지"]',
+            '[contenteditable="true"][aria-label*="message"]',
+            'textarea',
+            'input[type="text"]',
+            'input[type="search"]',
+            '[contenteditable="true"]'
+        ];
+
+        for (const selector of candidates) {
+            const found = document.querySelector(selector);
+            if (isTypingTarget(found)) {
+                target = found;
+                break;
+            }
+        }
+    }
+
+    if (!isTypingTarget(target)) {
+        return JSON.stringify({ success: false });
+    }
+
+    target.focus();
+    window.__codexLastTypingTarget = target;
+    return JSON.stringify({ success: true, tag: target.tagName });
+})();
+""";
+
+        var result = await RunBrowserScriptAsync(focusScript);
+        return !string.IsNullOrWhiteSpace(result) && result.Contains("\"success\":true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<bool> InsertTextIntoNaverTalkByJavaScriptAsync(string text, bool submit)
+    {
+        var textJson = JsonSerializer.Serialize(text);
+        var script = $$"""
+(() => {
+    const text = {{textJson}};
+    if (!text) return JSON.stringify({ success: false });
+
+    const isTypingTarget = (el) => !!el &&
+        (el.tagName === 'TEXTAREA' ||
+         (el.tagName === 'INPUT' && el.type !== 'password') ||
+         el.isContentEditable);
+
+    let target = document.activeElement;
+    if (!isTypingTarget(target)) target = window.__codexLastTypingTarget;
+    if (!isTypingTarget(target)) {
+        target = document.querySelector('div[role="textbox"][contenteditable="true"], textarea, input[type="text"], input[type="search"], [contenteditable="true"]');
+    }
+    if (!isTypingTarget(target)) return JSON.stringify({ success: false });
+
+    target.focus();
+    window.__codexLastTypingTarget = target;
+
+    if (target.isContentEditable) {
+        const sel = window.getSelection?.();
+        const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+        if (range && target.contains(range.startContainer)) {
+            range.deleteContents();
+            const node = document.createTextNode(text);
+            range.insertNode(node);
+            range.setStartAfter(node);
+            range.setEndAfter(node);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else {
+            target.textContent = (target.textContent ?? '') + text;
+        }
+    } else {
+        const start = typeof target.selectionStart === 'number' ? target.selectionStart : (target.value ?? '').length;
+        const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : start;
+        const current = target.value ?? '';
+        target.value = current.slice(0, start) + text + current.slice(end);
+        const next = start + text.length;
+        if (typeof target.setSelectionRange === 'function') target.setSelectionRange(next, next);
+    }
+
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const submitNow = {{submit.ToString().ToLowerInvariant()}};
+    if (submitNow) {
+        const down = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
+        const up = new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
+        target.dispatchEvent(down);
+        target.dispatchEvent(up);
+        target.form?.requestSubmit?.();
+    }
+
+    return JSON.stringify({ success: true });
+})();
+""";
+
+        var result = await RunBrowserScriptAsync(script);
+        return !string.IsNullOrWhiteSpace(result) && result.Contains("\"success\":true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    #if WINDOWS
+    private async Task<bool> TryTypeTextIntoNaverTalkByDevToolsAsync(string text, bool submit)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var coreWebView2 = await TryEnsureCoreWebView2Async();
+        if (coreWebView2 is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            await coreWebView2.CallDevToolsProtocolMethodAsync(
+                "Input.insertText",
+                JsonSerializer.Serialize(new { text }));
+
+            if (submit)
+            {
+                var enterKeyDown = JsonSerializer.Serialize(new
+                {
+                    type = "keyDown",
+                    key = "Enter",
+                    code = "Enter",
+                    windowsVirtualKeyCode = 13
+                });
+                var enterKeyUp = JsonSerializer.Serialize(new
+                {
+                    type = "keyUp",
+                    key = "Enter",
+                    code = "Enter",
+                    windowsVirtualKeyCode = 13
+                });
+
+                await coreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", enterKeyDown);
+                await coreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", enterKeyUp);
+            }
+
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    #endif
+
+#if WINDOWS
+    private static bool SendUnicodeText(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var inputs = new List<INPUT>(text.Length * 2);
+        foreach (var ch in text)
+        {
+            inputs.Add(CreateUnicodeKeyInput(ch, keyUp: false));
+            inputs.Add(CreateUnicodeKeyInput(ch, keyUp: true));
+        }
+
+        var sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<INPUT>());
+        return sent == inputs.Count;
+    }
+
+    private static bool SendEnterKey()
+    {
+        var down = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_RETURN,
+                    wScan = 0,
+                    dwFlags = 0,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        var up = down;
+        up.U.ki.dwFlags = KEYEVENTF_KEYUP;
+
+        var inputs = new[] { down, up };
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        return sent == inputs.Length;
+    }
+
+    private static bool SendCtrlVKey()
+    {
+        var ctrlDown = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_CONTROL,
+                    wScan = 0,
+                    dwFlags = 0,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        var vDown = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = VK_V,
+                    wScan = 0,
+                    dwFlags = 0,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        var vUp = vDown;
+        vUp.U.ki.dwFlags = KEYEVENTF_KEYUP;
+
+        var ctrlUp = ctrlDown;
+        ctrlUp.U.ki.dwFlags = KEYEVENTF_KEYUP;
+
+        var inputs = new[] { ctrlDown, vDown, vUp, ctrlUp };
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        return sent == inputs.Length;
+    }
+
+    private static void ReleasePressedAltKeys()
+    {
+        if (IsVirtualKeyDown(VK_MENU) || IsVirtualKeyDown(VK_LMENU) || IsVirtualKeyDown(VK_RMENU))
+        {
+            SendVirtualKeyUp((ushort)VK_MENU);
+            SendVirtualKeyUp((ushort)VK_LMENU);
+            SendVirtualKeyUp((ushort)VK_RMENU);
+        }
+    }
+
+    private static void SendVirtualKeyUp(ushort virtualKey)
+    {
+        var keyUp = new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = virtualKey,
+                    wScan = 0,
+                    dwFlags = KEYEVENTF_KEYUP,
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+
+        _ = SendInput(1, new[] { keyUp }, Marshal.SizeOf<INPUT>());
+    }
+
+    private static INPUT CreateUnicodeKeyInput(char ch, bool keyUp)
+    {
+        return new INPUT
+        {
+            type = INPUT_KEYBOARD,
+            U = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = 0,
+                    wScan = ch,
+                    dwFlags = KEYEVENTF_UNICODE | (keyUp ? KEYEVENTF_KEYUP : 0),
+                    time = 0,
+                    dwExtraInfo = IntPtr.Zero
+                }
+            }
+        };
+    }
+
+    private const uint INPUT_KEYBOARD = 1;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+    private const uint KEYEVENTF_UNICODE = 0x0004;
+    private const ushort VK_RETURN = 0x0D;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct INPUT
+    {
+        public uint type;
+        public InputUnion U;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private struct InputUnion
+    {
+        [FieldOffset(0)]
+        public KEYBDINPUT ki;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint dwFlags;
+        public uint time;
+        public IntPtr dwExtraInfo;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+#endif
+
+    private void OnNaverTalkNavigating(object? sender, WebNavigatingEventArgs e)
+    {
+        var nextUrl = string.IsNullOrWhiteSpace(e.Url) ? _naverTalkBrowser.CurrentUrl : e.Url;
+        _naverTalkBrowser.SetStatus("Opening the Naver Talk page.", nextUrl);
+    }
+
+    private async void OnNaverTalkNavigated(object? sender, WebNavigatedEventArgs e)
+    {
+        var currentUrl = string.IsNullOrWhiteSpace(e.Url) ? _naverTalkBrowser.CurrentUrl : e.Url;
+
+        if (e.Result != WebNavigationResult.Success)
+        {
+            _naverTalkBrowser.SetStatus($"Page load failed: {e.Result}", currentUrl);
+            return;
+        }
+
+        if (IsLoginPage(currentUrl))
+        {
+            _naverTalkBrowser.SetStatus("Login page detected. Checking auto-login.", currentUrl);
+        }
+        else if (IsPartnerTalkPage(currentUrl))
+        {
+            _naverTalkBrowser.SetStatus("The Naver Talk page is open.", currentUrl);
+            await PersistCookieLoginSessionAsync();
+
+            // 네이버톡톡 페이지에서 로그아웃 팝업 자동 처리
+            await Task.Delay(1000);
+            await HandleLogoutPopupAsync(currentUrl);
+        }
+        else
+        {
+            _naverTalkBrowser.SetStatus("The WebView page is open.", currentUrl);
+        }
+
+        await RefreshWebViewLayoutMetricsAsync();
+        await ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
+        await AttemptAutoLoginAsync(currentUrl);
+    }
+
+    private void OnBrowserPaneSizeChanged(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        ApplyAdaptiveWebViewZoom();
+#endif
+    }
+
+    private async Task HandleLogoutPopupAsync(string currentUrl)
+    {
+        try
+        {
+            var script = _naverTalkBrowser.GetLogoutPopupCloseScript();
+            var result = await RunBrowserScriptAsync(script);
+
+            if (!string.IsNullOrWhiteSpace(result) && result.Contains("\"closed\":true"))
+            {
+                _naverTalkBrowser.SetStatus("Closed logout popup. Attempting to re-login.", currentUrl);
+
+                // 팝업 닫은 후 잠시 대기 후 로그인 시도
+                await Task.Delay(500);
+                await _naverTalkBrowser.NavigateAsync(forceLogin: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Logout popup handler failed: {ex.Message}", currentUrl);
+        }
+    }
+
+    private async Task AttemptAutoLoginAsync(string? currentUrl, bool force = false)
+    {
+        if (string.IsNullOrWhiteSpace(currentUrl))
+        {
+            return;
+        }
+
+        if (!force && !_naverTalkBrowser.CanAutoLoginAtUrl(currentUrl))
+        {
+            return;
+        }
+
+        if (!force && WasRecentAutoLoginAttempt(currentUrl))
+        {
+            return;
+        }
+
+        var scripts = await _naverTalkBrowser.BuildAutoLoginScriptsIfAvailableAsync(currentUrl, force);
+        if (scripts is null)
+        {
+            if (IsLoginPage(currentUrl))
+            {
+                _naverTalkBrowser.SetStatus("Auto-login needs a saved id and password.", currentUrl);
+            }
+
+            return;
+        }
+
+        RememberAutoLoginAttempt(currentUrl);
+
+        try
+        {
+            await Task.Delay(1000);
+
+            // Step 1: ID 입력
+            _naverTalkBrowser.SetStatus("Step 1: Entering login ID...", currentUrl);
+            var step1Result = await RunBrowserScriptAsync(scripts.Step1Script);
+
+            await Task.Delay(500);
+
+            // Step 2: 비밀번호 입력
+            _naverTalkBrowser.SetStatus("Step 2: Entering password...", currentUrl);
+            var step2Result = await RunBrowserScriptAsync(scripts.Step2Script);
+
+            await Task.Delay(500);
+
+            // Step 3: 비밀번호 필드 클릭하여 포커스 이동
+            _naverTalkBrowser.SetStatus("Step 3: Focusing password field...", currentUrl);
+            var step3Result = await RunBrowserScriptAsync(scripts.Step3Script);
+
+            await Task.Delay(500);
+
+            // Step 4: 로그인 버튼 클릭
+            _naverTalkBrowser.SetStatus("Step 4: Clicking login button...", currentUrl);
+            var step4Result = await RunBrowserScriptAsync(scripts.Step4Script);
+
+            _naverTalkBrowser.SetStatus("Auto-login completed. Finish any extra verification manually.", currentUrl);
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Auto-login failed: {ex.Message}", currentUrl);
+        }
+    }
+
+}
+

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/CodexDesk.App/CodexDesk.App.csproj" />
+  <Project Path="src/CodexDesk.App.Tests/CodexDesk.App.Tests.csproj" />
+</Solution>

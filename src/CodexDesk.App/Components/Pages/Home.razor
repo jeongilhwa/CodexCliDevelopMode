@@ -1,0 +1,1530 @@
+﻿@page "/"
+
+@implements IDisposable
+@inject CodexInteractiveChatService CodexCli
+@inject NaverTalkBrowserService NaverTalkBrowser
+@inject PlaywrightCompletedChatsCollectionService PlaywrightCompletedChatsCollection
+@inject CodexPromptMacroService CodexPromptMacroService
+@inject IJSRuntime JS
+
+<PageTitle>CodexDesk</PageTitle>
+
+<div class="page" tabindex="0">
+    <section class="hero">
+        <div>
+            <p class="eyebrow">Windows-only MAUI Blazor shell</p>
+            <h1>CodexDesk</h1>
+            <p class="lede">
+                <code>codex exec</code>와 <code>codex exec resume</code>를 감싸서 별도 UI에서 Codex와 대화할 수 있게 만든 최소 시작점입니다.
+                작업 폴더, 모델, 실행 모드를 바꿔가며 로컬 에이전트처럼 사용할 수 있습니다.
+            </p>
+        </div>
+
+        <div class="status-card desktop-status-card">
+            <div class="status-row">
+                <span>Status</span>
+                <strong>@StatusLabel</strong>
+            </div>
+            <button type="button" class="primary" @onclick="ShowCurrentCodexCmd">Show Current Codex CMD</button>
+            <button type="button" class="ghost" @onclick="OpenSessionModal">설정</button>
+        </div>
+
+        <button type="button" class="ghost hamburger-button" @onclick="ToggleHamburger">
+            ☰
+        </button>
+    </section>
+
+    @if (IsHamburgerOpen)
+    {
+        <div class="hamburger-backdrop" @onclick="CloseHamburger">
+            <div class="hamburger-panel panel" @onclick:stopPropagation="true">
+                <div class="panel-header">
+                    <h2>Menu</h2>
+                    <button class="ghost close-hamburger-btn" @onclick="CloseHamburger">×</button>
+                </div>
+                <div class="status-card mobile-status-card">
+                    <div class="status-row">
+                        <span>Status</span>
+                        <strong>@StatusLabel</strong>
+                    </div>
+                    <button type="button" class="primary" @onclick="ShowCurrentCodexCmd">Show Current Codex CMD</button>
+                    <button type="button" class="ghost" @onclick="OpenSessionModal">설정</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <section class="control-grid">
+        <div class="panel chat-panel">
+            <div class="panel-header">
+                <h2>Conversation</h2>
+                <p>첫 메시지는 <code>exec</code>, 이후에는 같은 thread id로 <code>resume</code>을 사용합니다.</p>
+            </div>
+
+            <div class="tab-bar">
+                @foreach (var tab in _tabs)
+                {
+                    <button class="tab-item @(tab.Id == _activeTabId ? "active" : "")"
+                            @onclick="() => SwitchTab(tab.Id)"
+                            title="@(tab.ThreadId ?? "new conversation")">
+                        <span class="tab-title">@tab.Title</span>
+                        @if (tab.IsBusy)
+                        {
+                            <span class="tab-busy">●</span>
+                        }
+                        @if (_tabs.Count > 1)
+                        {
+                            <span class="tab-close" @onclick:stopPropagation="true" @onclick="() => CloseTab(tab.Id)">×</span>
+                        }
+                    </button>
+                }
+                <button class="tab-add" @onclick="AddNewTab" title="New chat tab">+</button>
+            </div>
+
+            <div class="transcript">
+                @if (ActiveTab.Messages.Count == 0)
+                {
+                    <div class="empty-state">
+                        <h3>Start with a prompt</h3>
+                        <p>질문만 입력하면 첫 전송 때 `completed-chat-threads.jsonl` 기준 안내가 내부적으로 자동 적용됩니다.</p>
+                    </div>
+                }
+                else
+                {
+                    @foreach (var message in ActiveTab.Messages)
+                    {
+                        <article class="@message.CssClass">
+                            <header>
+                                <strong>@message.RoleLabel</strong>
+                                <span>@message.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                            </header>
+                            <pre>@message.Content</pre>
+                        </article>
+                    }
+
+                    @if (ActiveTab.IsBusy)
+                    {
+                        <article class="message system loading-message">
+                            <header>
+                                <strong>Codex</strong>
+                                <span>@(ActiveTab.BusyStartedAt?.ToLocalTime().ToString("HH:mm:ss") ?? string.Empty)</span>
+                            </header>
+                            <pre>@BusyIndicatorText</pre>
+                        </article>
+                    }
+                }
+            </div>
+
+            @if (CodexPromptMacros.Count > 0)
+            {
+                <div class="codex-macro-toolbar">
+                    @foreach (var macro in CodexPromptMacros)
+                    {
+                        <button type="button" class="macro-shortcut-chip" @onclick="() => ApplyCodexPromptMacroAsync(macro)">
+                            @macro.Name (@macro.Shortcut)
+                        </button>
+                    }
+                </div>
+            }
+
+            <div class="composer">
+                <label class="field">
+                    <span>Prompt</span>
+                    <textarea @bind="ActiveTab.DraftMessage" @bind:event="oninput" @onkeydown="HandlePromptKeyDown" placeholder="질문만 입력하세요." disabled="@ActiveTab.IsBusy"></textarea>
+                </label>
+
+                <div class="button-row">
+                    <button type="button" class="primary" @onclick="SendAsync" disabled="@ActiveTab.IsBusy">Send</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    @if (IsSessionModalOpen)
+    {
+        <div class="session-modal-backdrop" @onclick="CloseSessionModal">
+            <section class="session-modal panel" @onclick:stopPropagation="true">
+                <div class="panel-header">
+                    <h2>설정</h2>
+                    <p>Codex CLI 실행 조건을 설정합니다.</p>
+                </div>
+
+                <div class="settings-tab-bar">
+                    <button class="settings-tab @(SettingsTab == "macros" ? "active" : "")" @onclick='() => SettingsTab = "macros"'>Macros</button>
+                    <button class="settings-tab @(SettingsTab == "naver" ? "active" : "")" @onclick='() => SettingsTab = "naver"'>Naver Talk</button>
+                </div>
+
+                @if (SettingsTab == "codex")
+                {
+                    <label class="field">
+                        <span>Workspace Path</span>
+                        <input @bind="WorkspacePath" @bind:event="oninput" disabled="@ActiveTab.IsBusy" />
+                    </label>
+
+                    <label class="field">
+                        <span>Codex Command</span>
+                        <input @bind="CommandPath" @bind:event="oninput" disabled="@ActiveTab.IsBusy" />
+                    </label>
+
+                    <label class="field">
+                        <span>Model</span>
+                        <input @bind="Model" @bind:event="oninput" placeholder="비워두면 Codex 기본값 사용" disabled="@ActiveTab.IsBusy" />
+                    </label>
+
+                    <label class="toggle">
+                        <input type="checkbox" @bind="AllowWorkspaceWrite" disabled="@ActiveTab.IsBusy" />
+                        <span><code>--full-auto</code>로 workspace-write 허용</span>
+                    </label>
+                }
+
+                @if (SettingsTab == "macros")
+                {
+                    <div class="status-row">
+                        <span>Keydown Debug</span>
+                        <strong>@MacroKeyDebug</strong>
+                    </div>
+
+                    <label class="field">
+                        <span>Macro Name</span>
+                        <input @bind="NewCodexMacroName" @bind:event="oninput" placeholder="예: 버그 분석 요청" disabled="@ActiveTab.IsBusy" />
+                    </label>
+
+                    <label class="field">
+                        <span>Macro Text</span>
+                        <textarea @bind="NewCodexMacroText" @bind:event="oninput" placeholder="Codex Prompt에 넣을 문구를 입력하세요." disabled="@ActiveTab.IsBusy"></textarea>
+                    </label>
+
+                    <label class="toggle">
+                        <input type="checkbox" @bind="NewCodexMacroAutoSend" disabled="@ActiveTab.IsBusy" />
+                        <span>실행 시 바로 전송</span>
+                    </label>
+
+                    <div class="button-row">
+                        <button type="button" class="ghost" @onclick="AddCodexPromptMacroAsync" disabled="@ActiveTab.IsBusy">Add Macro</button>
+                    </div>
+
+                    @if (CodexPromptMacros.Count > 0)
+                    {
+                        <div class="macro-list @((DraggingMacroIndex.HasValue || IsPointerMacroDragActive) ? "drag-active" : string.Empty)"
+                             tabindex="0"
+                             @onkeydown="HandleMacroPanelKeyDown"
+                             @onmouseup="EndPointerMacroDrag"
+                             @onmouseleave="EndPointerMacroDrag">
+                            @for (var i = 0; i < CodexPromptMacros.Count; i++)
+                            {
+                                var macroIndex = i;
+                                var macro = CodexPromptMacros[i];
+                                var isEditing = EditingMacroIndex == macroIndex;
+                                var isDragging = DraggingMacroIndex == macroIndex;
+                                var isDropTarget = DragOverMacroIndex == macroIndex && DraggingMacroIndex.HasValue && DraggingMacroIndex != macroIndex;
+                                <article class="macro-item @(isDragging ? "dragging" : "") @(isDropTarget ? "drop-target" : "") @((DraggingMacroIndex.HasValue || IsPointerMacroDragActive) && !isDragging ? "drag-neighbor" : "")"
+                                         draggable="@(!ActiveTab.IsBusy && !isEditing)"
+                                         @ondragstart="(args) => BeginMacroDrag(macroIndex, args)"
+                                         @ondragend="ClearMacroDragState"
+                                         @ondragover:preventDefault
+                                         @ondragover="(args) => SetMacroDragOver(macroIndex, args)"
+                                         @ondrop:preventDefault
+                                         @ondrop="() => CompleteMacroDropAsync(macroIndex)"
+                                         @onmousedown="(args) => BeginPointerMacroDrag(macroIndex, args)"
+                                         @onmouseenter="() => HoverPointerMacroDragAsync(macroIndex)"
+                                         @onmouseup="EndPointerMacroDrag">
+                                    <header>
+                                        <strong>@macro.Name</strong>
+                                        <span>
+                                            @(macro.AutoSend ? "Type + Send" : "Type only")
+                                            @if (!string.IsNullOrWhiteSpace(macro.Shortcut))
+                                            {
+                                                @($" · {macro.Shortcut}")
+                                            }
+                                        </span>
+                                    </header>
+
+                                    @if (isEditing)
+                                    {
+                                        <label class="field compact">
+                                            <span>Macro Name</span>
+                                            <input @bind="EditingCodexMacroName" @bind:event="oninput" disabled="@ActiveTab.IsBusy" />
+                                        </label>
+                                        <label class="field compact">
+                                            <span>Macro Text</span>
+                                            <textarea @bind="EditingCodexMacroText" @bind:event="oninput" disabled="@ActiveTab.IsBusy"></textarea>
+                                        </label>
+                                        <label class="toggle compact">
+                                            <input type="checkbox" @bind="EditingCodexMacroAutoSend" disabled="@ActiveTab.IsBusy" />
+                                            <span>실행 시 바로 전송</span>
+                                        </label>
+                                        <div class="button-row">
+                                            <button type="button" class="primary" @onclick="SaveEditedCodexPromptMacroAsync" disabled="@ActiveTab.IsBusy">저장</button>
+                                            <button type="button" class="ghost" @onclick="CancelEditCodexPromptMacro" disabled="@ActiveTab.IsBusy">취소</button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <pre>@macro.Text</pre>
+                                        <div class="button-row">
+                                            <button type="button" class="primary" @onclick="() => ApplyCodexPromptMacroAsync(macro)" disabled="@ActiveTab.IsBusy">Run</button>
+                                            <button type="button" class="ghost" @onclick="() => BeginEditCodexPromptMacro(macroIndex)" disabled="@ActiveTab.IsBusy">수정</button>
+                                            <button type="button" class="ghost" @onclick="() => RemoveCodexPromptMacroAsync(macroIndex)" disabled="@ActiveTab.IsBusy">Delete</button>
+                                        </div>
+                                    }
+                                </article>
+                            }
+                        </div>
+                    }
+                }
+
+                @if (SettingsTab == "naver")
+                {
+                    <label class="field">
+                        <span>Target Url</span>
+                        <input @bind="NaverTalkUrl" @bind:event="oninput" placeholder="@NaverTalkSettings.DefaultTargetUrl" />
+                    </label>
+
+                    <label class="field">
+                        <span>Naver Id</span>
+                        <input @bind="NaverLoginId" @bind:event="oninput" placeholder="아이디를 입력하세요." />
+                    </label>
+
+                    <label class="field">
+                        <span>Password</span>
+                        <input type="password" @bind="NaverLoginPassword" @bind:event="oninput" placeholder="새 비밀번호를 입력하면 저장됩니다." />
+                    </label>
+
+                    <label class="toggle">
+                        <input type="checkbox" @bind="AutoNaverLoginEnabled" />
+                        <span>로그인 페이지가 나오면 자동 로그인 시도</span>
+                    </label>
+
+                    <p class="hint">
+                        저장된 비밀번호: <strong>@(NaverTalkBrowser.HasStoredPassword ? "있음" : "없음")</strong>
+                        비밀번호 입력칸을 비워두고 저장하면 기존 저장값은 유지됩니다.
+                    </p>
+
+                    <div class="button-row">
+                        <button type="button" class="ghost" @onclick="SaveNaverTalkSettingsAsync">Save Login</button>
+                        <button type="button" class="primary" @onclick="OpenNaverTalkAsync">Open Naver Talk</button>
+                        <button type="button" class="ghost" @onclick="ReloadNaverTalkBrowserAsync">Reload WebView</button>
+                        <button type="button" class="ghost" @onclick="ClearNaverTalkPasswordAsync">Clear Saved Password</button>
+                        <button type="button" class="ghost" @onclick="StartCompletedChatsCollectionAsync" disabled="@NaverTalkBrowser.IsCollectingCompletedChats">채팅 수집하기</button>
+                    </div>
+
+                    <p class="hint">
+                        캡차, 추가 인증, 기기 등록 확인 같은 보안 단계가 나오면 그 부분은 수동으로 마무리해야 합니다.
+                    </p>
+
+                    <p class="hint">
+                        대화 수집은 기본적으로 <code>completed-chats.json</code> 안의 <code>exportedAt</code> 날짜를 기준으로 신규 route를 모읍니다. 저장된 대화내역이 없으면 최근 6개월 범위를 처음부터 수집합니다. 저장은 결과 모달의 <code>Save</code> 버튼에서 따로 반영합니다.
+                    </p>
+
+                    <div class="collection-status">
+                        <div class="status-row">
+                            <span>Collection Status</span>
+                            <strong>@NaverTalkBrowser.CompletedChatCollectionStatus</strong>
+                        </div>
+                        <div class="status-row">
+                            <span>Progress</span>
+                            <strong>@($"{NaverTalkBrowser.CompletedChatCollectionProcessedCount} / {NaverTalkBrowser.CompletedChatCollectionTotalCount}")</strong>
+                        </div>
+                        <div class="status-row">
+                            <span>completed-chats ExportedAt</span>
+                            <strong>@(NaverTalkBrowser.CompletedChatBaselineExportedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</strong>
+                        </div>
+                    </div>
+                }
+
+                @if (SettingsTab == "tools")
+                {
+                    <div class="button-row">
+                        <button type="button" class="ghost" @onclick="OpenCodexHelp">Open Codex Help</button>
+                        <button type="button" class="primary" @onclick="OpenCodexCli">Open Codex CLI</button>
+                        <button type="button" class="ghost" @onclick="OpenWorkspaceShell">Open Shell</button>
+                    </div>
+
+                    <p class="hint">
+                        먼저 외부 콘솔 창에서 <code>codex</code>가 정상 실행되는지 확인한 뒤, 그 다음에 이 앱 내부 대화 경로를 보는 편이 안전합니다.
+                    </p>
+                }
+
+                <div class="button-row">
+                    <button type="button" class="ghost" @onclick="OpenCodexCli">Show CLI</button>
+                    <button type="button" class="ghost" @onclick="StartFreshConversation" disabled="@ActiveTab.IsBusy">New Thread</button>
+                    <button type="button" class="ghost" @onclick="CancelRun" disabled="@(!ActiveTab.IsBusy)">Cancel</button>
+                    <button type="button" class="ghost" @onclick="CloseSessionModal">Close</button>
+                </div>
+
+                <p class="hint">
+                    이 앱은 로컬에 <code>codex</code> CLI가 로그인되어 있고 네트워크에 접근 가능해야 정상 응답합니다.
+                </p>
+            </section>
+        </div>
+    }
+
+    @if (IsCollectionResultModalOpen && NaverTalkBrowser.LastCompletedChatCollectionResult is not null)
+    {
+        var result = NaverTalkBrowser.LastCompletedChatCollectionResult;
+        <div class="collection-result-modal-backdrop" @onclick="CloseCollectionResultModal">
+            <section class="collection-result-modal panel" @onclick:stopPropagation="true">
+                <div class="panel-header">
+                    <h2>Collection Result</h2>
+                    <p>@result.Summary</p>
+                </div>
+
+                <div class="collection-status">
+                    <div class="status-row">
+                        <span>Status</span>
+                        <strong>@(result.Succeeded ? "Collected" : "Failed")</strong>
+                    </div>
+                    <div class="status-row">
+                        <span>From Date</span>
+                        <strong>@result.FromDate</strong>
+                    </div>
+                    <div class="status-row">
+                        <span>Baseline File</span>
+                        <strong>@result.BaselinePath</strong>
+                    </div>
+                    <div class="status-row">
+                        <span>Output File</span>
+                        <strong>@result.OutputPath</strong>
+                    </div>
+                    <div class="status-row">
+                        <span>Applied To Baseline</span>
+                        <strong>@(result.UpdatedBaseline ? "Yes" : "No")</strong>
+                    </div>
+                    <div class="status-row">
+                        <span>New Routes</span>
+                        <strong>@result.NewRouteCount</strong>
+                    </div>
+                    <div class="status-row">
+                        <span>Saved</span>
+                        <strong>@result.SavedCount</strong>
+                    </div>
+                    <div class="status-row">
+                        <span>Skipped</span>
+                        <strong>@result.SkippedCount</strong>
+                    </div>
+                </div>
+
+                @if (result.SampleItems.Count > 0)
+                {
+                    <div class="collection-result-samples">
+                        <h3>Sample</h3>
+                        <pre>@string.Join(Environment.NewLine, result.SampleItems)</pre>
+                    </div>
+                }
+
+                <div class="collection-result-data">
+                    <h3>Collected Data</h3>
+                    <pre>@result.CollectedDataJson</pre>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(CollectionResultActionStatus))
+                {
+                    <p class="hint">@CollectionResultActionStatus</p>
+                }
+
+                <div class="button-row">
+                    <button type="button" class="primary" @onclick="SaveCollectionResultToCompletedChatsAsync" disabled="@(!result.Succeeded || result.SavedCount == 0 || result.UpdatedBaseline)">Save To completed-chats.json</button>
+                    <button type="button" class="ghost" @onclick="CloseCollectionResultModal">Close</button>
+                </div>
+            </section>
+        </div>
+    }
+
+    @if (ActiveTab.IsApprovalModalOpen && ActiveTab.PendingApprovalRequest is not null)
+    {
+        <div class="approval-modal-backdrop" @onclick="RejectApprovalAsync">
+            <section class="approval-modal panel" @onclick:stopPropagation="true">
+                <div class="panel-header">
+                    <h2>Approval Required</h2>
+                    <p>@ActiveTab.PendingApprovalRequest.Prompt</p>
+                </div>
+
+                <div class="button-row">
+                    @foreach (var option in ActiveTab.PendingApprovalRequest.Options)
+                    {
+                        <button type="button" class="primary" @onclick="() => SelectApprovalOptionAsync(option.Value)">@option.Label</button>
+                    }
+                    <button type="button" class="ghost" @onclick="RejectApprovalAsync">Reject</button>
+                </div>
+            </section>
+        </div>
+    }
+</div>
+
+@code {
+    private int _tabCounter;
+    private List<ChatTab> _tabs = new();
+    private string _activeTabId = string.Empty;
+
+    private ChatTab ActiveTab => _tabs.FirstOrDefault(t => t.Id == _activeTabId) ?? _tabs[0];
+
+    private string WorkspacePath { get; set; } = string.Empty;
+
+    private string CommandPath { get; set; } = string.Empty;
+
+    private string Model { get; set; } = string.Empty;
+
+    private string NaverTalkUrl { get; set; } = NaverTalkSettings.DefaultTargetUrl;
+
+    private string NaverLoginId { get; set; } = string.Empty;
+
+    private string NaverLoginPassword { get; set; } = string.Empty;
+
+    private bool AutoNaverLoginEnabled { get; set; } = true;
+
+    private bool AllowWorkspaceWrite { get; set; } = true;
+
+    private bool IsSessionModalOpen { get; set; }
+    private string SettingsTab { get; set; } = "naver";
+    private bool IsHamburgerOpen { get; set; }
+    private bool IsCollectionResultModalOpen { get; set; }
+    private IList<CodexPromptMacroItem> CodexPromptMacros { get; set; } = new List<CodexPromptMacroItem>();
+    private string NewCodexMacroName { get; set; } = string.Empty;
+    private string NewCodexMacroText { get; set; } = string.Empty;
+    private bool NewCodexMacroAutoSend { get; set; }
+    private int? EditingMacroIndex { get; set; }
+    private string EditingCodexMacroName { get; set; } = string.Empty;
+    private string EditingCodexMacroText { get; set; } = string.Empty;
+    private bool EditingCodexMacroAutoSend { get; set; }
+    private int? DraggingMacroIndex { get; set; }
+    private int? DragOverMacroIndex { get; set; }
+    private bool IsPointerMacroDragActive { get; set; }
+    private int? PointerMacroDragIndex { get; set; }
+    private string MacroKeyDebug { get; set; } = "No key yet";
+    private const int MacroShortcutDebounceMilliseconds = 350;
+    private string _lastObservedShortcut = string.Empty;
+    private DateTime _lastObservedShortcutAt = DateTime.MinValue;
+    private DateTimeOffset? _lastSeenCollectionResultAt;
+    private string CollectionResultActionStatus { get; set; } = string.Empty;
+    private bool IsMacrosSettingsVisible => IsSessionModalOpen && SettingsTab == "macros";
+    private bool IsNaverSettingsVisible => IsSessionModalOpen && SettingsTab == "naver";
+    private string StatusLabel =>
+        ActiveTab.IsBusy
+            ? BusyIndicatorText
+            : string.IsNullOrWhiteSpace(ActiveTab.ThreadId)
+                ? "Ready for a new conversation"
+                : "Attached to an existing thread";
+
+    private string BusyIndicatorText => $"답변 생성중{new string('.', _loadingDotCount)}";
+
+    private System.Threading.Timer? _loadingIndicatorTimer;
+    private int _loadingDotCount = 1;
+
+    protected override void OnInitialized()
+    {
+        CommandPath = CodexCli.GetDefaultCommandPath();
+        WorkspacePath = CodexCli.GetDefaultWorkspacePath();
+        NaverTalkBrowser.StateChanged += OnNaverTalkBrowserStateChanged;
+        CodexPromptMacroService.KeyObserved += OnMacroKeyObserved;
+        CodexPromptMacroService.Load();
+        CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
+        AddNewTab();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await NaverTalkBrowser.EnsureInitializedAsync();
+        RefreshNaverTalkSettingsFromService(clearPasswordInput: true);
+    }
+
+    private async Task SendAsync()
+    {
+        var tab = ActiveTab;
+        if (tab.IsBusy || string.IsNullOrWhiteSpace(tab.DraftMessage))
+        {
+            return;
+        }
+
+        var prompt = tab.DraftMessage.Trim();
+        tab.DraftMessage = string.Empty;
+        await InvokeAsync(StateHasChanged);
+        await SendPromptAsync(prompt, addAsUserMessage: true, tab);
+    }
+
+    private async Task SendPromptAsync(string prompt, bool addAsUserMessage, ChatTab? targetTab = null)
+    {
+        var tab = targetTab ?? ActiveTab;
+        if (tab.IsBusy || string.IsNullOrWhiteSpace(prompt))
+        {
+            return;
+        }
+
+        if (addAsUserMessage)
+        {
+            tab.Messages.Add(ChatMessage.User(prompt));
+            UpdateTabTitle(tab);
+        }
+
+        tab.IsBusy = true;
+        tab.BusyStartedAt = DateTimeOffset.Now;
+        StartLoadingIndicator();
+        tab.RunCts = new CancellationTokenSource();
+
+        try
+        {
+            var result = await CodexCli.SendAsync(
+                new CodexChatRequest(
+                    prompt,
+                    WorkspacePath.Trim(),
+                    CommandPath.Trim(),
+                    string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
+                    tab.ThreadId,
+                    AllowWorkspaceWrite,
+                    IncludeCompletedChatsContext: addAsUserMessage),
+                tab.RunCts.Token);
+
+            tab.ThreadId = result.ThreadId ?? tab.ThreadId;
+            if (result.PendingApproval is not null)
+            {
+                tab.PendingApprovalRequest = result.PendingApproval;
+                tab.IsApprovalModalOpen = true;
+
+                if (!string.IsNullOrWhiteSpace(result.Message))
+                {
+                    tab.Messages.Add(ChatMessage.System($"Approval requested: {result.Message}"));
+                }
+
+                return;
+            }
+
+            tab.Messages.Add(result.Success ? ChatMessage.Assistant(result.Message) : ChatMessage.Error(result.Message));
+        }
+        finally
+        {
+            tab.IsBusy = false;
+            tab.BusyStartedAt = null;
+            StopLoadingIndicatorIfIdle();
+            tab.RunCts?.Dispose();
+            tab.RunCts = null;
+        }
+    }
+
+
+    private async Task HandlePromptKeyDown(KeyboardEventArgs e)
+    {
+        if (await TryApplyMacroByShortcutAsync(e))
+        {
+            return;
+        }
+
+        if (e.Key == "Enter" && !e.AltKey && !e.CtrlKey && !e.ShiftKey && !e.MetaKey)
+        {
+            await SendAsync();
+        }
+    }
+
+    private async Task HandleMacroPanelKeyDown(KeyboardEventArgs e)
+    {
+        var code = string.IsNullOrWhiteSpace(e.Code) ? "-" : e.Code;
+        var key = string.IsNullOrWhiteSpace(e.Key) ? "-" : e.Key;
+        MacroKeyDebug =
+            $"{DateTime.Now:HH:mm:ss} key={key}, code={code}, ctrl={e.CtrlKey}, shift={e.ShiftKey}, alt={e.AltKey}, meta={e.MetaKey}";
+
+        await TryApplyMacroByShortcutAsync(e);
+    }
+
+    private async Task<bool> TryApplyMacroByShortcutAsync(KeyboardEventArgs e)
+    {
+        if (e.Repeat)
+        {
+            return false;
+        }
+
+        if (!e.AltKey || e.CtrlKey || e.MetaKey)
+        {
+            return false;
+        }
+
+        var shortcut = BuildShortcutFromKeyEvent(e);
+        if (string.IsNullOrWhiteSpace(shortcut))
+        {
+            return false;
+        }
+
+        var matchedMacro = CodexPromptMacros.FirstOrDefault(m =>
+            string.Equals(m.Shortcut, shortcut, StringComparison.OrdinalIgnoreCase));
+
+        if (matchedMacro is null)
+        {
+            return false;
+        }
+
+        if (IsDuplicatedMacroShortcutTrigger(shortcut))
+        {
+            return true;
+        }
+
+        await ApplyCodexPromptMacroAsync(matchedMacro);
+        return true;
+    }
+
+    private async void OnMacroKeyObserved(string keyDebugMessage)
+    {
+        if (string.IsNullOrWhiteSpace(keyDebugMessage))
+        {
+            return;
+        }
+
+        var normalizedMessage = keyDebugMessage.Trim();
+        var shouldRefreshDebugPanel = IsMacrosSettingsVisible;
+        if (!shouldRefreshDebugPanel &&
+            !TryExtractShortcutFromDebugMessage(normalizedMessage, out _))
+        {
+            return;
+        }
+
+        await InvokeAsync(async () =>
+        {
+            if (shouldRefreshDebugPanel)
+            {
+                MacroKeyDebug = normalizedMessage;
+            }
+
+            var macroApplied = await TryApplyMacroByObservedMessageAsync(normalizedMessage);
+            if (shouldRefreshDebugPanel || macroApplied)
+            {
+                StateHasChanged();
+            }
+        });
+    }
+
+    private async Task<bool> TryApplyMacroByObservedMessageAsync(string keyDebugMessage)
+    {
+        var fromWebView =
+            keyDebugMessage.Contains("webview key=", StringComparison.OrdinalIgnoreCase) ||
+            keyDebugMessage.Contains("webviewFocused=True", StringComparison.OrdinalIgnoreCase);
+        if (!fromWebView)
+        {
+            // WebView 포커스가 아닐 때 들어온 전역 훅(vk=...) 이벤트는 매크로 실행 트리거로 사용하지 않습니다.
+            return false;
+        }
+
+        if (!TryExtractShortcutFromDebugMessage(keyDebugMessage, out var shortcut))
+        {
+            return false;
+        }
+
+        if (IsDuplicatedMacroShortcutTrigger(shortcut))
+        {
+            return false;
+        }
+
+        var matchedMacro = CodexPromptMacros.FirstOrDefault(m =>
+            string.Equals(m.Shortcut, shortcut, StringComparison.OrdinalIgnoreCase));
+
+        if (matchedMacro is null)
+        {
+            return false;
+        }
+
+        await ApplyCodexPromptMacroAsync(matchedMacro, fromWebView);
+        return true;
+    }
+
+    private bool IsDuplicatedMacroShortcutTrigger(string shortcut)
+    {
+        if (string.IsNullOrWhiteSpace(shortcut))
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        if (string.Equals(_lastObservedShortcut, shortcut, StringComparison.OrdinalIgnoreCase)
+            && (now - _lastObservedShortcutAt).TotalMilliseconds < MacroShortcutDebounceMilliseconds)
+        {
+            return true;
+        }
+
+        _lastObservedShortcut = shortcut;
+        _lastObservedShortcutAt = now;
+        return false;
+    }
+
+    private static bool TryExtractShortcutFromDebugMessage(string keyDebugMessage, out string shortcut)
+    {
+        shortcut = string.Empty;
+        if (string.IsNullOrWhiteSpace(keyDebugMessage))
+        {
+            return false;
+        }
+
+        var normalized = keyDebugMessage.Trim();
+        var lower = normalized.ToLowerInvariant();
+
+        if (!lower.Contains("alt=true"))
+        {
+            return false;
+        }
+
+        if (lower.Contains("ctrl=true") || lower.Contains("meta=true") || lower.Contains("lwin=true") || lower.Contains("rwin=true"))
+        {
+            return false;
+        }
+
+        var codeToken = "code=";
+        var codeIndex = lower.IndexOf(codeToken, StringComparison.Ordinal);
+        if (codeIndex >= 0)
+        {
+            var codeStart = codeIndex + codeToken.Length;
+            var codeEnd = normalized.IndexOf(',', codeStart);
+            var code = (codeEnd >= 0 ? normalized[codeStart..codeEnd] : normalized[codeStart..]).Trim();
+            if (code.StartsWith("Numpad", StringComparison.OrdinalIgnoreCase))
+            {
+                shortcut = $"Alt+{code}";
+                return true;
+            }
+        }
+
+        var vkToken = "vk=0x";
+        var vkIndex = lower.IndexOf(vkToken, StringComparison.Ordinal);
+        if (vkIndex < 0)
+        {
+            return false;
+        }
+
+        var openParen = normalized.IndexOf('(', vkIndex);
+        var closeParen = openParen >= 0 ? normalized.IndexOf(')', openParen + 1) : -1;
+        if (openParen < 0 || closeParen < 0 || closeParen <= openParen + 1)
+        {
+            return false;
+        }
+
+        if (!int.TryParse(normalized[(openParen + 1)..closeParen], out var vkCode))
+        {
+            return false;
+        }
+
+        int numpadNumber;
+        if (vkCode is >= 97 and <= 105)
+        {
+            numpadNumber = vkCode - 96;
+        }
+        else if (vkCode is >= 49 and <= 57)
+        {
+            numpadNumber = vkCode - 48;
+        }
+        else
+        {
+            return false;
+        }
+
+        shortcut = $"Alt+Numpad{numpadNumber}";
+        return true;
+    }
+
+    private static string BuildShortcutFromKeyEvent(KeyboardEventArgs e)
+    {
+        if (!string.IsNullOrWhiteSpace(e.Code) && e.Code.StartsWith("Numpad", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Alt+{e.Code}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(e.Key) && e.Key.Length == 1 && char.IsDigit(e.Key[0]))
+        {
+            return $"Alt+Numpad{e.Key}";
+        }
+
+        return string.Empty;
+    }
+
+    private void OpenCodexCli()
+    {
+        var tab = ActiveTab;
+        var error = CodexCli.LaunchInteractiveCli(
+            WorkspacePath.Trim(),
+            CommandPath.Trim(),
+            string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
+            AllowWorkspaceWrite);
+
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            tab.Messages.Add(ChatMessage.System("Opened an external Codex CLI window."));
+            return;
+        }
+
+        tab.Messages.Add(ChatMessage.Error(error));
+    }
+
+    private void ShowCurrentCodexCmd()
+    {
+        // Freeze the active tab at click time so resume target and preview stay in sync.
+        var activeTabId = _activeTabId;
+        var tab = _tabs.FirstOrDefault(t => t.Id == activeTabId) ?? ActiveTab;
+        var preview = BuildConversationPreview(tab);
+
+        var error = CodexCli.LaunchResumeWindow(
+            WorkspacePath.Trim(),
+            CommandPath.Trim(),
+            string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
+            AllowWorkspaceWrite,
+            tab.ThreadId,
+            preview);
+
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            var message = string.IsNullOrWhiteSpace(tab.ThreadId)
+                ? "Opened a visible Codex CLI window."
+                : $"Opened a visible Codex resume window for thread {tab.ThreadId}.";
+            tab.Messages.Add(ChatMessage.System(message));
+            return;
+        }
+
+        tab.Messages.Add(ChatMessage.Error(error));
+    }
+
+    private static string BuildConversationPreview(ChatTab tab)
+    {
+        var messages = tab.Messages;
+        if (messages.Count == 0)
+        {
+            return "No conversation yet.";
+        }
+
+        var previewMessages = messages.TakeLast(80);
+        var lines = new List<string>();
+
+        foreach (var message in previewMessages)
+        {
+            var role = message.RoleLabel;
+            lines.Add($"[{message.Timestamp:yyyy-MM-dd HH:mm:ss}] {role}");
+            lines.Add(message.Content);
+            lines.Add(string.Empty);
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private void OpenCodexHelp()
+    {
+        var tab = ActiveTab;
+        var error = CodexCli.LaunchHelpWindow(WorkspacePath.Trim(), CommandPath.Trim());
+
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            tab.Messages.Add(ChatMessage.System("Opened an external Codex --help window."));
+            return;
+        }
+
+        tab.Messages.Add(ChatMessage.Error(error));
+    }
+
+    private void OpenWorkspaceShell()
+    {
+        var tab = ActiveTab;
+        var error = CodexCli.LaunchWorkspaceShell(WorkspacePath.Trim());
+
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            tab.Messages.Add(ChatMessage.System("Opened an external PowerShell window."));
+            return;
+        }
+
+        tab.Messages.Add(ChatMessage.Error(error));
+    }
+
+    private void StartFreshConversation()
+    {
+        var tab = ActiveTab;
+        if (tab.IsBusy)
+        {
+            return;
+        }
+
+        tab.ThreadId = null;
+        tab.Messages.Clear();
+        tab.DraftMessage = string.Empty;
+        tab.Title = $"Chat {tab.TabNumber}";
+    }
+
+    private void OpenSessionModal()
+    {
+        SettingsTab = "naver";
+        IsSessionModalOpen = true;
+    }
+
+    private void CloseSessionModal()
+    {
+        IsSessionModalOpen = false;
+    }
+
+    private void ToggleHamburger()
+    {
+        IsHamburgerOpen = !IsHamburgerOpen;
+    }
+
+    private void CloseHamburger()
+    {
+        IsHamburgerOpen = false;
+    }
+
+    private void CloseCollectionResultModal()
+    {
+        IsCollectionResultModalOpen = false;
+    }
+
+    private async Task SaveCollectionResultToCompletedChatsAsync()
+    {
+        var result = NaverTalkBrowser.LastCompletedChatCollectionResult;
+        if (result is null)
+        {
+            CollectionResultActionStatus = "No collection result is available.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (result.SavedCount == 0)
+        {
+            CollectionResultActionStatus = "There is no collected chat data to save.";
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var targetPath = CompletedChatsSupport.ResolveProjectDataPath("completed-chats.json");
+        var sourcePath = result.OutputPath;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            {
+                CollectionResultActionStatus = $"Result file not found: {sourcePath}";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            if (string.Equals(
+                    Path.GetFullPath(sourcePath),
+                    Path.GetFullPath(targetPath),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                CollectionResultActionStatus = "Already saved directly to completed-chats.json.";
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+
+            await CompletedChatsSupport.MergeCompletedChatsFilesAsync(sourcePath, targetPath);
+
+            var targetDirectory = Path.GetDirectoryName(targetPath);
+            var threadsPath = Path.Combine(
+                string.IsNullOrWhiteSpace(targetDirectory) ? AppContext.BaseDirectory : targetDirectory,
+                ChatThreadsPromptTemplates.ChatThreadsFileName);
+            await CompletedChatThreadsJsonlConverter.ConvertFromCompletedChatsJsonAsync(targetPath, threadsPath);
+
+            CollectionResultActionStatus = $"Saved merged result to {targetPath}";
+            NaverTalkBrowser.MarkCompletedChatsSavedToBaseline(CollectionResultActionStatus, NaverTalkBrowser.CurrentUrl);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            CollectionResultActionStatus = $"Save failed: {ex.Message}";
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task SelectApprovalOptionAsync(string selectedValue)
+    {
+        var tab = ActiveTab;
+        tab.IsApprovalModalOpen = false;
+        tab.PendingApprovalRequest = null;
+        tab.Messages.Add(ChatMessage.System($"Approval selected: {selectedValue}"));
+        await SendPromptAsync(selectedValue, addAsUserMessage: false, tab);
+    }
+
+    private async Task RejectApprovalAsync()
+    {
+        var tab = ActiveTab;
+        if (!tab.IsApprovalModalOpen)
+        {
+            return;
+        }
+
+        tab.IsApprovalModalOpen = false;
+        tab.PendingApprovalRequest = null;
+        tab.Messages.Add(ChatMessage.System("Approval rejected."));
+        await SendPromptAsync("n", addAsUserMessage: false, tab);
+    }
+
+    private async Task AddCodexPromptMacroAsync()
+    {
+        if (!CodexPromptMacroService.TryAdd(
+                NewCodexMacroName,
+                NewCodexMacroText,
+                NewCodexMacroAutoSend,
+                out var errorMessage))
+        {
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                ActiveTab.Messages.Add(ChatMessage.System(errorMessage));
+            }
+
+            return;
+        }
+
+        CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
+        NewCodexMacroName = string.Empty;
+        NewCodexMacroText = string.Empty;
+        NewCodexMacroAutoSend = false;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RemoveCodexPromptMacroAsync(int index)
+    {
+        if (!CodexPromptMacroService.RemoveAt(index))
+        {
+            return;
+        }
+
+        if (EditingMacroIndex == index)
+        {
+            CancelEditCodexPromptMacro();
+        }
+        else if (EditingMacroIndex.HasValue && EditingMacroIndex > index)
+        {
+            EditingMacroIndex--;
+        }
+
+        CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void BeginEditCodexPromptMacro(int index)
+    {
+        if (index < 0 || index >= CodexPromptMacros.Count)
+        {
+            return;
+        }
+
+        var macro = CodexPromptMacros[index];
+        EditingMacroIndex = index;
+        EditingCodexMacroName = macro.Name;
+        EditingCodexMacroText = macro.Text;
+        EditingCodexMacroAutoSend = macro.AutoSend;
+    }
+
+    private void CancelEditCodexPromptMacro()
+    {
+        EditingMacroIndex = null;
+        EditingCodexMacroName = string.Empty;
+        EditingCodexMacroText = string.Empty;
+        EditingCodexMacroAutoSend = false;
+    }
+
+    private async Task SaveEditedCodexPromptMacroAsync()
+    {
+        if (!EditingMacroIndex.HasValue)
+        {
+            return;
+        }
+
+        if (!CodexPromptMacroService.TryUpdateAt(
+                EditingMacroIndex.Value,
+                EditingCodexMacroName,
+                EditingCodexMacroText,
+                EditingCodexMacroAutoSend,
+                out var errorMessage))
+        {
+            if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                ActiveTab.Messages.Add(ChatMessage.System(errorMessage));
+            }
+
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
+        CancelEditCodexPromptMacro();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void BeginMacroDrag(int index, DragEventArgs args)
+    {
+        if (ActiveTab.IsBusy || index < 0 || index >= CodexPromptMacros.Count)
+        {
+            return;
+        }
+
+        if (args.DataTransfer is not null)
+        {
+            args.DataTransfer.EffectAllowed = "move";
+            args.DataTransfer.DropEffect = "move";
+        }
+
+        DraggingMacroIndex = index;
+        DragOverMacroIndex = index;
+    }
+
+    private void SetMacroDragOver(int index, DragEventArgs args)
+    {
+        if (!DraggingMacroIndex.HasValue || index < 0 || index >= CodexPromptMacros.Count)
+        {
+            return;
+        }
+
+        if (args.DataTransfer is not null)
+        {
+            args.DataTransfer.DropEffect = "move";
+        }
+
+        DragOverMacroIndex = index;
+    }
+
+    private async Task CompleteMacroDropAsync(int targetIndex)
+    {
+        if (!DraggingMacroIndex.HasValue)
+        {
+            return;
+        }
+
+        var fromIndex = DraggingMacroIndex.Value;
+        if (targetIndex < 0 || targetIndex >= CodexPromptMacros.Count)
+        {
+            ClearMacroDragState();
+            return;
+        }
+
+        if (fromIndex != targetIndex && CodexPromptMacroService.Move(fromIndex, targetIndex))
+        {
+            CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
+            CancelEditCodexPromptMacro();
+        }
+
+        ClearMacroDragState();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void BeginPointerMacroDrag(int index, MouseEventArgs args)
+    {
+        if (ActiveTab.IsBusy || EditingMacroIndex.HasValue || args.Button != 0 || index < 0 || index >= CodexPromptMacros.Count)
+        {
+            return;
+        }
+
+        IsPointerMacroDragActive = true;
+        PointerMacroDragIndex = index;
+        DraggingMacroIndex = index;
+        DragOverMacroIndex = index;
+    }
+
+    private async Task HoverPointerMacroDragAsync(int index)
+    {
+        if (!IsPointerMacroDragActive || !PointerMacroDragIndex.HasValue || index < 0 || index >= CodexPromptMacros.Count)
+        {
+            return;
+        }
+
+        var fromIndex = PointerMacroDragIndex.Value;
+        if (fromIndex == index)
+        {
+            return;
+        }
+
+        if (!CodexPromptMacroService.Move(fromIndex, index))
+        {
+            return;
+        }
+
+        CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
+        PointerMacroDragIndex = index;
+        DraggingMacroIndex = index;
+        DragOverMacroIndex = index;
+        CancelEditCodexPromptMacro();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void EndPointerMacroDrag()
+    {
+        if (!IsPointerMacroDragActive)
+        {
+            return;
+        }
+
+        IsPointerMacroDragActive = false;
+        PointerMacroDragIndex = null;
+        ClearMacroDragState();
+    }
+
+    private void ClearMacroDragState()
+    {
+        DraggingMacroIndex = null;
+        DragOverMacroIndex = null;
+        IsPointerMacroDragActive = false;
+        PointerMacroDragIndex = null;
+    }
+
+    private async Task ApplyCodexPromptMacroAsync(CodexPromptMacroItem macro, bool fromWebView = false)
+    {
+        if (string.IsNullOrWhiteSpace(macro.Text))
+        {
+            return;
+        }
+
+        var tab = ActiveTab;
+
+        if (fromWebView)
+        {
+            await NaverTalkBrowser.RunTypingMacroAsync(macro.Text, macro.AutoSend);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var insertedAtFocusedInput = await TryInsertMacroIntoFocusedInputAsync(macro.Text);
+        if (!insertedAtFocusedInput)
+        {
+            tab.DraftMessage = string.IsNullOrWhiteSpace(tab.DraftMessage)
+                ? macro.Text
+                : $"{tab.DraftMessage}{Environment.NewLine}{macro.Text}";
+        }
+
+        if (macro.AutoSend && !tab.IsBusy)
+        {
+            await SendAsync();
+            return;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task<bool> TryInsertMacroIntoFocusedInputAsync(string macroText)
+    {
+        try
+        {
+            return await JS.InvokeAsync<bool>("codexDesk.insertTextIntoFocusedInput", macroText);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void CancelRun()
+    {
+        ActiveTab.RunCts?.Cancel();
+    }
+
+    // 설정만 저장하고 브라우저 이동은 하지 않습니다.
+    private async Task SaveNaverTalkSettingsAsync()
+    {
+        await SaveNaverTalkBrowserSettingsAsync(navigateAfterSave: false);
+    }
+
+    // 설정 저장 후 즉시 네이버 톡 화면으로 이동합니다.
+    private async Task OpenNaverTalkAsync()
+    {
+        await SaveNaverTalkBrowserSettingsAsync(navigateAfterSave: true);
+    }
+
+    // 현재 WebView를 다시 로드해 로그인 상태나 화면 갱신을 유도합니다.
+    private async Task ReloadNaverTalkBrowserAsync()
+    {
+        await NaverTalkBrowser.ReloadBrowserAsync();
+    }
+
+    // 수집 시작 전에 최신 설정을 먼저 저장해, 다른 URL이나 계정 정보로 수집하는 실수를 막습니다.
+    private async Task StartCompletedChatsCollectionAsync()
+    {
+        IsCollectionResultModalOpen = false;
+        CollectionResultActionStatus = string.Empty;
+        await SaveNaverTalkBrowserSettingsAsync(navigateAfterSave: false);
+        await PlaywrightCompletedChatsCollection.CollectAsync();
+    }
+
+    // 안전 저장소에 남아 있는 비밀번호를 지우고 입력칸도 함께 초기화합니다.
+    private async Task ClearNaverTalkPasswordAsync()
+    {
+        await NaverTalkBrowser.ClearSavedPasswordAsync();
+        RefreshNaverTalkSettingsFromService(clearPasswordInput: true);
+    }
+
+    // 화면 입력값을 설정 DTO로 묶어 서비스에 전달합니다.
+    // 호출자가 원하면 저장 직후 지정 URL로 이동까지 이어집니다.
+    private async Task SaveNaverTalkBrowserSettingsAsync(bool navigateAfterSave)
+    {
+        var passwordToStore = string.IsNullOrWhiteSpace(NaverLoginPassword) ? null : NaverLoginPassword;
+        await NaverTalkBrowser.SaveBrowserSettingsAsync(new NaverTalkSettingsUpdate(
+            NaverTalkUrl,
+            NaverLoginId,
+            passwordToStore,
+            AutoNaverLoginEnabled,
+            string.Empty,
+            false,
+            string.Empty));
+
+        RefreshNaverTalkSettingsFromService(clearPasswordInput: true);
+
+        if (navigateAfterSave)
+        {
+            await NaverTalkBrowser.NavigateAsync(NaverTalkUrl);
+        }
+    }
+
+    // 서비스가 보관 중인 최신 설정을 화면 상태로 다시 동기화합니다.
+    private void RefreshNaverTalkSettingsFromService(bool clearPasswordInput = false)
+    {
+        var settings = NaverTalkBrowser.Settings;
+        NaverTalkUrl = settings.TargetUrl;
+        NaverLoginId = settings.LoginId;
+        AutoNaverLoginEnabled = settings.AutoLoginEnabled;
+        if (clearPasswordInput)
+        {
+            NaverLoginPassword = string.Empty;
+        }
+    }
+
+    private void OnNaverTalkBrowserStateChanged()
+    {
+        var latestResult = NaverTalkBrowser.LastCompletedChatCollectionResult;
+        var shouldOpenCollectionResult =
+            latestResult is not null &&
+            (!_lastSeenCollectionResultAt.HasValue || latestResult.GeneratedAt > _lastSeenCollectionResultAt.Value);
+        if (!IsNaverSettingsVisible && !IsCollectionResultModalOpen && !shouldOpenCollectionResult)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            var shouldRender = false;
+
+            if (shouldOpenCollectionResult && latestResult is not null)
+            {
+                _lastSeenCollectionResultAt = latestResult.GeneratedAt;
+                IsCollectionResultModalOpen = true;
+                CollectionResultActionStatus = string.Empty;
+                shouldRender = true;
+            }
+
+            if (IsNaverSettingsVisible || IsCollectionResultModalOpen)
+            {
+                shouldRender = true;
+            }
+
+            if (shouldRender)
+            {
+                StateHasChanged();
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        NaverTalkBrowser.StateChanged -= OnNaverTalkBrowserStateChanged;
+        CodexPromptMacroService.KeyObserved -= OnMacroKeyObserved;
+        _loadingIndicatorTimer?.Dispose();
+        foreach (var tab in _tabs)
+        {
+            tab.RunCts?.Cancel();
+            tab.RunCts?.Dispose();
+        }
+    }
+
+    private void StartLoadingIndicator()
+    {
+        _loadingDotCount = 1;
+        _loadingIndicatorTimer ??= new System.Threading.Timer(
+            _ => _ = InvokeAsync(AdvanceLoadingIndicatorAsync),
+            null,
+            System.Threading.Timeout.Infinite,
+            System.Threading.Timeout.Infinite);
+        _loadingIndicatorTimer.Change(400, 400);
+    }
+
+    private void StopLoadingIndicatorIfIdle()
+    {
+        if (_tabs.Any(t => t.IsBusy))
+        {
+            return;
+        }
+
+        _loadingIndicatorTimer?.Change(System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
+        _loadingDotCount = 1;
+    }
+
+    private Task AdvanceLoadingIndicatorAsync()
+    {
+        if (!_tabs.Any(t => t.IsBusy))
+        {
+            return Task.CompletedTask;
+        }
+
+        _loadingDotCount = _loadingDotCount % 3 + 1;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void AddNewTab()
+    {
+        _tabCounter++;
+        var tab = new ChatTab(_tabCounter);
+        _tabs.Add(tab);
+        _activeTabId = tab.Id;
+    }
+
+    private void SwitchTab(string tabId)
+    {
+        if (_tabs.Any(t => t.Id == tabId))
+        {
+            _activeTabId = tabId;
+        }
+    }
+
+    private void CloseTab(string tabId)
+    {
+        if (_tabs.Count <= 1)
+        {
+            return;
+        }
+
+        var tab = _tabs.FirstOrDefault(t => t.Id == tabId);
+        if (tab is null)
+        {
+            return;
+        }
+
+        if (tab.IsBusy)
+        {
+            tab.RunCts?.Cancel();
+        }
+
+        tab.RunCts?.Dispose();
+        var index = _tabs.IndexOf(tab);
+        _tabs.Remove(tab);
+
+        if (_activeTabId == tabId)
+        {
+            _activeTabId = _tabs[Math.Max(0, Math.Min(index, _tabs.Count - 1))].Id;
+        }
+    }
+
+    private static void UpdateTabTitle(ChatTab tab)
+    {
+        var firstUserMsg = tab.Messages.FirstOrDefault(m => m.Role == "user");
+        if (firstUserMsg is not null)
+        {
+            tab.Title = firstUserMsg.Content.Length > 24
+                ? firstUserMsg.Content[..24] + "…"
+                : firstUserMsg.Content;
+        }
+    }
+
+    private sealed class ChatTab
+    {
+        public ChatTab(int tabNumber)
+        {
+            TabNumber = tabNumber;
+            Title = $"Chat {tabNumber}";
+        }
+
+        public string Id { get; } = Guid.NewGuid().ToString("N");
+        public int TabNumber { get; }
+        public string Title { get; set; } = string.Empty;
+        public string? ThreadId { get; set; }
+        public IList<ChatMessage> Messages { get; } = new List<ChatMessage>();
+        public string DraftMessage { get; set; } = string.Empty;
+        public bool IsBusy { get; set; }
+        public DateTimeOffset? BusyStartedAt { get; set; }
+        public CancellationTokenSource? RunCts { get; set; }
+        public bool IsApprovalModalOpen { get; set; }
+        public CodexApprovalRequest? PendingApprovalRequest { get; set; }
+    }
+}

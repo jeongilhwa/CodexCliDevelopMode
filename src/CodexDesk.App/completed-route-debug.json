@@ -1,0 +1,317 @@
+{
+  "title": "[NEW] \uB124\uC774\uBC84\uD1A1\uD1A1 \uD30C\uD2B8\uB108\uC13C\uD130",
+  "url": "https://partner.talk.naver.com/web/accounts/100268217/chat?state=end\u0026device=pc",
+  "readyState": "complete",
+  "anchorCount": 55,
+  "buttonCount": 5,
+  "bodyTextSample": "\uBCF8\uBB38 \uBC14\uB85C\uAC00\uAE30\n\uC8FC\uBA54\uB274 \uBC14\uB85C\uAC00\uAE30\n\uB124\uC774\uBC84\n\uD1A1\uD1A1 \uD30C\uD2B8\uB108\uC13C\uD130\n\uC8FC\uC694 \uAE30\uB2A5\uD504\uB85C\uD544\uC0C1\uB2F4\uB9C8\uCF00\uD305\n\uC2DC\uC791 \uAC00\uC774\uB4DC\uACE0\uAC1D \uC9C0\uC6D0\n\uACE0\uAC1D\uC13C\uD130\n\uACF5\uC2DD \uBE14\uB85C\uADF8\n\uACF5\uC9C0\uC0AC\uD56D\n\uBE44\uC988\uB2C8\uC2A4 \uAD00\uB9AC\n\uC2A4\uB9C8\uD2B8\uC2A4\uD1A0\uC5B4\uC13C\uD130\n\uC2A4\uB9C8\uD2B8\uD50C\uB808\uC774\uC2A4\n\uB124\uC774\uBC84 \uAD11\uACE0\uC8FC\uC13C\uD130\nghqnftk\uB2D8\n\uB0B4 \uC815\uBCF4\n\uACC4\uC815 \uB300\uD45C \uC815\uBCF4\n\uB85C\uADF8\uC544\uC6C3\n\uB0B4 \uACC4\uC815\n\uD310\uB9E4\uC790 \uC815\uBCF4\n\uD310\uB9E4\uCC98 \uC774\uB984\n\n\uC0F5\uB9C8\uC778\nwc5ymk\n\n\uD1A1\uD1A1 \uC0AC\uC6A9\uC911\n\uB0B4 \uACC4\uC815\n\uBA54\uC778\uBA54\uB274\n\uD504\uB85C\uD544 \uAD00\uB9AC\n\uC0C1\uB2F4\uAD00\uB9AC10\n\uC0C8\uB85C\uC6B4 \uC0C1\uB2F4\uC694\uCCAD 10\uAC74\uC774 \uC788\uC2B5\uB2C8\uB2E4.\n\uC694\uCCAD\uC11C \uAD00\uB9AC\n\uB9C8\uCF00\uD305\uAD00\uB9AC\n\uCC44\uD305\uBC29 \uBA54\uB274\uAD00\uB9AC\n\uC790\uB3D9\uC751\uB300\uAD00\uB9AC\n\uC124\uC815\n\uD1B5\uACC4\n\uC5F0\uB3D9 \uAD00\uB9AC\n\uBCF8\uBB38",
+  "anchors": [
+    {
+      "href": "#main",
+      "text": "\uBCF8\uBB38 \uBC14\uB85C\uAC00\uAE30",
+      "className": "skip_link"
+    },
+    {
+      "href": "#lnb",
+      "text": "\uC8FC\uBA54\uB274 \uBC14\uB85C\uAC00\uAE30",
+      "className": "skip_link"
+    },
+    {
+      "href": "https://naver.com",
+      "text": "\uB124\uC774\uBC84",
+      "className": "Gnb-module__logo_naver___2Vnq6"
+    },
+    {
+      "href": "https://partner.talk.naver.com",
+      "text": "\uD1A1\uD1A1 \uD30C\uD2B8\uB108\uC13C\uD130",
+      "className": "Gnb-module__home_link___2XJgz N=a:gnb.home"
+    },
+    {
+      "href": "/web/feature/profile",
+      "text": "\uD504\uB85C\uD544",
+      "className": "Gnb-module__menu___p4Hnn N=a:gnb.profile"
+    },
+    {
+      "href": "/web/feature/counsel",
+      "text": "\uC0C1\uB2F4",
+      "className": "Gnb-module__menu___p4Hnn N=a:gnb.counsel"
+    },
+    {
+      "href": "/web/feature/marketing",
+      "text": "\uB9C8\uCF00\uD305",
+      "className": "Gnb-module__menu___p4Hnn N=a:gnb.mkt"
+    },
+    {
+      "href": "/web/tutorial",
+      "text": "\uC2DC\uC791 \uAC00\uC774\uB4DC",
+      "className": "Gnb-module__menu___p4Hnn N=a:gnb.guide"
+    },
+    {
+      "href": "https://help.naver.com/service/11830/category/bookmark?lang=ko",
+      "text": "\uACE0\uAC1D\uC13C\uD130",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.supportto"
+    },
+    {
+      "href": "https://blog.naver.com/naver_talk",
+      "text": "\uACF5\uC2DD \uBE14\uB85C\uADF8",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.supportblog"
+    },
+    {
+      "href": "/web/notice",
+      "text": "\uACF5\uC9C0\uC0AC\uD56D",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.supportnotice"
+    },
+    {
+      "href": "https://smartstore.naver.com",
+      "text": "\uC2A4\uB9C8\uD2B8\uC2A4\uD1A0\uC5B4\uC13C\uD130",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.bizshopping"
+    },
+    {
+      "href": "https://smartplace.naver.com/",
+      "text": "\uC2A4\uB9C8\uD2B8\uD50C\uB808\uC774\uC2A4",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.bizplace"
+    },
+    {
+      "href": "https://ads.naver.com/",
+      "text": "\uB124\uC774\uBC84 \uAD11\uACE0\uC8FC\uC13C\uD130",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.bizad"
+    },
+    {
+      "href": "/web/member/info",
+      "text": "\uB0B4 \uC815\uBCF4",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.myinfo"
+    },
+    {
+      "href": "/web/represent/list",
+      "text": "\uACC4\uC815 \uB300\uD45C \uC815\uBCF4",
+      "className": "Gnb-module__layer_link___1-YvW N=a:gnb.accountinfo"
+    },
+    {
+      "href": "https://nid.naver.com/nidlogin.logout?svctype=262144\u0026returl=https%3A%2F%2Fpartner.talk.naver.com%2Flogout%3Furl%3Dhttps%253A%252F%252Fpartner.talk.naver.com",
+      "text": "\uB85C\uADF8\uC544\uC6C3",
+      "className": "Gnb-module__control___2x6RJ N=a:gnb.logout"
+    },
+    {
+      "href": "#",
+      "text": "\uB0B4 \uACC4\uC815",
+      "className": "Gnb-module__control___2x6RJ Gnb-module__-border___rUPCg N=a:gnb.mylist"
+    },
+    {
+      "href": "#;",
+      "text": "\uACC4\uC815\uC758 \uC2E0\uB8B0\uB3C4\uB97C \uB192\uC774\uB294\n\uD504\uB85C\uD544 \uC774\uBBF8\uC9C0 \uC124\uC815\uD558\uB7EC \uAC00\uAE30",
+      "className": "profile_tooltip_link"
+    },
+    {
+      "href": "/web/accounts/100268217/",
+      "text": "\uC0F5\uB9C8\uC778",
+      "className": "name ellipsis active"
+    },
+    {
+      "href": "/web/accounts/list",
+      "text": "\uB0B4 \uACC4\uC815\uAD00\uB9AC",
+      "className": "btn_add_account"
+    },
+    {
+      "href": "#;",
+      "text": "\uD504\uB85C\uD544 \uAD00\uB9AC",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/profile",
+      "text": "\uAE30\uBCF8 \uC815\uBCF4",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/talkhome",
+      "text": "\uD504\uB85C\uD544 \uD648",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/chat",
+      "text": "\uC0C1\uB2F4\uAD00\uB9AC10\n\uC0C8\uB85C\uC6B4 \uC0C1\uB2F4\uC694\uCCAD 10\uAC74\uC774 \uC788\uC2B5\uB2C8\uB2E4.",
+      "className": "item_lnb active"
+    },
+    {
+      "href": "#;",
+      "text": "\uC694\uCCAD\uC11C \uAD00\uB9AC",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/form/new",
+      "text": "\uC694\uCCAD\uC11C \uC0DD\uC131",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/form/list",
+      "text": "\uC694\uCCAD\uC11C \uBAA9\uB85D \uBC0F \uACB0\uACFC",
+      "className": "item_lnb"
+    },
+    {
+      "href": "#;",
+      "text": "\uB9C8\uCF00\uD305\uAD00\uB9AC",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/marketing/group",
+      "text": "\uB9C8\uCF00\uD305\uBA54\uC2DC\uC9C0",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/marketing/messages",
+      "text": "\uBA54\uC2DC\uC9C0\uBAA9\uB85D",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/custommenu",
+      "text": "\uCC44\uD305\uBC29 \uBA54\uB274\uAD00\uB9AC",
+      "className": "item_lnb"
+    },
+    {
+      "href": "#;",
+      "text": "\uC790\uB3D9\uC751\uB300\uAD00\uB9AC",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/auto/message",
+      "text": "\uC790\uB3D9 \uBA54\uC2DC\uC9C0 \uC124\uC815",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/auto/botbuilder",
+      "text": "\uCEE4\uC2A4\uD140\uCC57\uBD07\uC5D0\uB514\uD130",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/auto/shoppingbot",
+      "text": "\uC1FC\uD551\uCC57\uBD07\uC124\uC815",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/settings",
+      "text": "\uC124\uC815",
+      "className": "item_lnb"
+    },
+    {
+      "href": "#;",
+      "text": "\uD1B5\uACC4",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/stats/counsel",
+      "text": "\uC751\uB300\uBD84\uC11D",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/stats/friend",
+      "text": "\uC54C\uB9BC\uBC1B\uAE30",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/stats/message",
+      "text": "\uB9C8\uCF00\uD305",
+      "className": "item_lnb"
+    },
+    {
+      "href": "#;",
+      "text": "\uC5F0\uB3D9 \uAD00\uB9AC",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/devtools/webhook",
+      "text": "\uC54C\uB9BCAPI",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/devtools/chatbot-api",
+      "text": "\uCC57\uBD07API \uC124\uC815",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/devtools/chatbot-env",
+      "text": "\uCC57\uBD07\uD658\uACBD \uC124\uC815",
+      "className": "item_lnb"
+    },
+    {
+      "href": "/web/accounts/100268217/devtools/chatbot-guide",
+      "text": "\uCC57\uBD07API \uC18C\uAC1C",
+      "className": "item_lnb"
+    },
+    {
+      "href": "#",
+      "text": "\uC774\uC6A9\uC57D\uAD00",
+      "className": ""
+    },
+    {
+      "href": "https://policy.naver.com/rules/privacy.html",
+      "text": "\uAC1C\uC778\uC815\uBCF4\uCC98\uB9AC\uBC29\uCE68",
+      "className": ""
+    },
+    {
+      "href": "#;",
+      "text": "\uC6B4\uC601\uC815\uCC45",
+      "className": ""
+    },
+    {
+      "href": "https://safety.shopping.naver.com",
+      "text": "\uC548\uC804\uAC70\uB798\uC13C\uD130",
+      "className": ""
+    },
+    {
+      "href": "https://privacy.naver.com/knowledge/naver_business_operator?menu=knowledge_enterprise_buisness_operator",
+      "text": "\uD504\uB77C\uC774\uBC84\uC2DC\uC13C\uD130",
+      "className": ""
+    },
+    {
+      "href": "https://partner.talk.naver.com/web/notice",
+      "text": "\uACF5\uC9C0\uC0AC\uD56D",
+      "className": ""
+    },
+    {
+      "href": "https://help.naver.com/alias/naver.help/partner.talk.naver",
+      "text": "\uACE0\uAC1D\uC13C\uD130",
+      "className": ""
+    },
+    {
+      "href": "#;",
+      "text": "\uD1A1\uD1A1\uC0C1\uB2F4",
+      "className": "btn_go_councel"
+    },
+    {
+      "href": "http://www.navercorp.com/",
+      "text": "\u00A9 NAVER Corp.",
+      "className": ""
+    }
+  ],
+  "buttons": [
+    {
+      "text": "\uACE0\uAC1D \uC9C0\uC6D0",
+      "className": "Gnb-module__menu___p4Hnn N=a:gnb.support",
+      "dataHref": "",
+      "onclick": ""
+    },
+    {
+      "text": "\uBE44\uC988\uB2C8\uC2A4 \uAD00\uB9AC",
+      "className": "Gnb-module__menu___p4Hnn N=a:gnb.biz",
+      "dataHref": "",
+      "onclick": ""
+    },
+    {
+      "text": "ghqnftk\uB2D8",
+      "className": "Gnb-module__account_button___2o8Kw",
+      "dataHref": "",
+      "onclick": ""
+    },
+    {
+      "text": "",
+      "className": "btn_lnb_panel",
+      "dataHref": "",
+      "onclick": ""
+    },
+    {
+      "text": "\uB0B4 \uACC4\uC815",
+      "className": "btn_more_account",
+      "dataHref": "",
+      "onclick": ""
+    }
+  ]
+}

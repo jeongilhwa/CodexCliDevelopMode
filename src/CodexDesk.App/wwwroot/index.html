@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>CodexDesk</title>
+    <base href="/" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="CodexDesk.styles.css" />
+    <link rel="icon" href="data:,">
+</head>
+
+<body>
+
+    <div class="status-bar-safe-area"></div>
+
+    <div id="app">Loading...</div>
+
+    <div id="blazor-error-ui" data-nosnippet>
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
+    <script>
+        window.codexDesk = window.codexDesk || {};
+        window.codexDesk.insertTextIntoFocusedInput = (text) => {
+            const element = document.activeElement;
+            if (!element) {
+                return false;
+            }
+
+            const isInput = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement;
+            const isEditable = !!element.isContentEditable;
+            if (!isInput && !isEditable) {
+                return false;
+            }
+
+            if (isEditable) {
+                const insert = text ?? "";
+                const sel = window.getSelection?.();
+                if (!sel || sel.rangeCount === 0) {
+                    return false;
+                }
+
+                const range = sel.getRangeAt(0);
+                if (!element.contains(range.startContainer)) {
+                    return false;
+                }
+
+                range.deleteContents();
+                const node = document.createTextNode(insert);
+                range.insertNode(node);
+                range.setStartAfter(node);
+                range.setEndAfter(node);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                element.dispatchEvent(new Event("input", { bubbles: true }));
+                return true;
+            }
+
+            const value = element.value ?? "";
+            const start = typeof element.selectionStart === "number" ? element.selectionStart : value.length;
+            const end = typeof element.selectionEnd === "number" ? element.selectionEnd : value.length;
+            const insert = text ?? "";
+            const updated = value.slice(0, start) + insert + value.slice(end);
+
+            element.value = updated;
+            const nextCaret = start + insert.length;
+            if (typeof element.setSelectionRange === "function") {
+                element.setSelectionRange(nextCaret, nextCaret);
+            }
+
+            element.dispatchEvent(new Event("input", { bubbles: true }));
+            return true;
+        };
+    </script>
+
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+
+</body>
+
+</html>

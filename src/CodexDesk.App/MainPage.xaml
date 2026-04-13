@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:components="clr-namespace:CodexDesk.Components"
+             x:Class="CodexDesk.MainPage"
+             BackgroundColor="#FFFFFF">
+
+    <Grid x:Name="MainLayoutGrid"
+          Padding="0"
+          ColumnDefinitions="3*,16,7*"
+          ColumnSpacing="0">
+        <!-- WebView2 영역 (왼쪽) -->
+        <Grid Grid.Column="0"
+              x:Name="BrowserPane"
+              RowDefinitions="Auto,*"
+              RowSpacing="12">
+            <Border Padding="16"
+                    BackgroundColor="#E8F4F8"
+                    Stroke="#1D5C74"
+                    StrokeThickness="2"
+                    StrokeShape="Rectangle">
+                <VerticalStackLayout Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="12">
+                        <Label Grid.Column="0"
+                               Text="Naver Talk WebView2"
+                               FontAttributes="Bold"
+                               FontSize="18"
+                               TextColor="#142024"
+                               VerticalOptions="Center" />
+                        <Button Grid.Column="1"
+                                x:Name="WebViewInspectorToggleButton"
+                                Text="개발자 모드 OFF"
+                                FontSize="12"
+                                Padding="12,6"
+                                BackgroundColor="#1D5C74"
+                                TextColor="#FFFFFF"
+                                Clicked="OnWebViewInspectorToggleClicked"
+                                VerticalOptions="Center" />
+                    </Grid>
+                    <Label x:Name="BrowserStatusLabel"
+                           FontAttributes="Bold"
+                           FontSize="14"
+                           Text="Naver Talk WebView is idle."
+                           TextColor="#1D5C74" />
+                    <Label x:Name="BrowserUrlLabel"
+                           FontSize="12"
+                           LineBreakMode="TailTruncation"
+                           MaxLines="2"
+                           Text="about:blank"
+                           TextColor="#5B7079" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border Grid.Row="1"
+                    BackgroundColor="#FFFFFF"
+                    Stroke="#1D5C74"
+                    StrokeThickness="2"
+                    StrokeShape="Rectangle">
+                <WebView x:Name="NaverTalkWebView"
+                         Navigating="OnNaverTalkNavigating"
+                         Navigated="OnNaverTalkNavigated"
+                         Focused="OnNaverTalkWebViewFocused"
+                         Unfocused="OnNaverTalkWebViewUnfocused" />
+            </Border>
+        </Grid>
+
+        <!-- 리사이즈 핸들 -->
+        <ContentView Grid.Column="1"
+                     BackgroundColor="Transparent"
+                     SemanticProperties.Description="Drag to resize the browser and chat panels."
+                     x:Name="ResizeHandle">
+            <BoxView x:Name="ResizeHandleGrip"
+                     BackgroundColor="#B0BEC5"
+                     WidthRequest="6"
+                     HorizontalOptions="Center"
+                     VerticalOptions="Fill" />
+        </ContentView>
+
+        <!-- Codex Chat 영역 (오른쪽) -->
+        <Border Grid.Column="2"
+                x:Name="ChatPane"
+                BackgroundColor="#FFFCF5"
+                Stroke="#14202414"
+                StrokeThickness="1"
+                StrokeShape="Rectangle">
+            <BlazorWebView x:Name="blazorWebView"
+                           HostPage="wwwroot/index.html">
+                <BlazorWebView.RootComponents>
+                    <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
+                </BlazorWebView.RootComponents>
+            </BlazorWebView>
+        </Border>
+    </Grid>
+</ContentPage>

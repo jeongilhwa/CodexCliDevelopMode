@@ -1,0 +1,55 @@
+.shell-frame {
+    min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at top left, rgba(93, 157, 171, 0.22), transparent 34%),
+        radial-gradient(circle at 85% 18%, rgba(209, 146, 94, 0.20), transparent 22%),
+        linear-gradient(180deg, #f4efe4 0%, #dfe7e6 100%);
+}
+
+.shell-main {
+    position: relative;
+    z-index: 1;
+}
+
+.ambient {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(24px);
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.ambient-one {
+    width: 20rem;
+    height: 20rem;
+    top: -4rem;
+    right: -5rem;
+    background: rgba(46, 111, 124, 0.30);
+}
+
+.ambient-two {
+    width: 18rem;
+    height: 18rem;
+    left: -5rem;
+    bottom: 4rem;
+    background: rgba(199, 128, 72, 0.22);
+}
+
+@media (prefers-color-scheme: dark) {
+    .shell-frame {
+        background:
+            radial-gradient(circle at top left, rgba(101, 176, 191, 0.18), transparent 34%),
+            radial-gradient(circle at 88% 20%, rgba(225, 144, 84, 0.16), transparent 22%),
+            linear-gradient(180deg, #121a1d 0%, #0d1114 100%);
+    }
+
+    .ambient-one {
+        background: rgba(78, 147, 163, 0.28);
+    }
+
+    .ambient-two {
+        background: rgba(181, 109, 67, 0.20);
+    }
+}
