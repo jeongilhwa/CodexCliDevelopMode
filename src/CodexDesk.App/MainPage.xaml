@@ -43,7 +43,34 @@
                            FontSize="14"
                            Text="Naver Talk WebView is idle."
                            TextColor="#1D5C74" />
-                    <Label x:Name="BrowserUrlLabel"
+                    <Border Padding="8,6"
+                            BackgroundColor="#FFFFFF"
+                            Stroke="#A9C6D1"
+                            StrokeThickness="1"
+                            StrokeShape="RoundRectangle 10">
+                        <Grid ColumnDefinitions="*,Auto"
+                              ColumnSpacing="8">
+                            <Entry Grid.Column="0"
+                                   x:Name="BrowserAddressEntry"
+                                   Placeholder="https://partner.talk.naver.com/"
+                                   FontSize="13"
+                                   TextColor="#142024"
+                                   PlaceholderColor="#6B8793"
+                                   ClearButtonVisibility="WhileEditing"
+                                   ReturnType="Go"
+                                   Completed="OnBrowserAddressEntryCompleted"
+                                   VerticalOptions="Center" />
+                            <Button Grid.Column="1"
+                                    Text="이동"
+                                    FontSize="12"
+                                    Padding="12,6"
+                                    CornerRadius="8"
+                                    BackgroundColor="#1D5C74"
+                                    TextColor="#FFFFFF"
+                                    Clicked="OnBrowserAddressGoClicked"
+                                    VerticalOptions="Center" />
+                        </Grid>
+                    </Border>                    <Label x:Name="BrowserUrlLabel"
                            FontSize="12"
                            LineBreakMode="TailTruncation"
                            MaxLines="2"
@@ -93,3 +120,4 @@
         </Border>
     </Grid>
 </ContentPage>
+

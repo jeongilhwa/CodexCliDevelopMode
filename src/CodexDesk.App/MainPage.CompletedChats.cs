@@ -881,6 +881,12 @@ public partial class MainPage : ContentPage
     {
         BrowserStatusLabel.Text = _naverTalkBrowser.Status;
         BrowserUrlLabel.Text = _naverTalkBrowser.CurrentUrl;
+        if (BrowserAddressEntry is not null &&
+            !BrowserAddressEntry.IsFocused &&
+            !string.Equals(BrowserAddressEntry.Text, _naverTalkBrowser.CurrentUrl, StringComparison.Ordinal))
+        {
+            BrowserAddressEntry.Text = _naverTalkBrowser.CurrentUrl;
+        }
     }
 
     private bool WasRecentAutoLoginAttempt(string currentUrl)
@@ -1114,4 +1120,5 @@ public partial class MainPage : ContentPage
         List<ScrapedInfoRow> InfoRows,
         List<ScrapedMessage> Messages);
 }
+
 

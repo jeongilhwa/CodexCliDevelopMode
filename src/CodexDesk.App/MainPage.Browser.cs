@@ -429,6 +429,67 @@ public partial class MainPage : ContentPage
         });
     }
 
+    private async void OnBrowserAddressEntryCompleted(object? sender, EventArgs e)
+    {
+        await NavigateFromAddressBarAsync();
+    }
+
+    private async void OnBrowserAddressGoClicked(object? sender, EventArgs e)
+    {
+        await NavigateFromAddressBarAsync();
+    }
+
+    private async Task NavigateFromAddressBarAsync()
+    {
+        var input = BrowserAddressEntry?.Text;
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            _naverTalkBrowser.SetStatus("주소를 입력해 주세요.", _naverTalkBrowser.CurrentUrl);
+            return;
+        }
+
+        var normalizedUrl = NormalizeAddressInput(input);
+        if (string.IsNullOrWhiteSpace(normalizedUrl))
+        {
+            _naverTalkBrowser.SetStatus("유효한 주소를 입력해 주세요.", _naverTalkBrowser.CurrentUrl);
+            return;
+        }
+
+        if (BrowserAddressEntry is not null)
+        {
+            BrowserAddressEntry.Text = normalizedUrl;
+        }
+
+        await TryRestoreCookieLoginSessionAsync();
+        await _naverTalkBrowser.NavigateAsync(normalizedUrl);
+    }
+
+    private static string? NormalizeAddressInput(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        var trimmed = input.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
+        {
+            return absoluteUri.AbsoluteUri;
+        }
+
+        if (trimmed.StartsWith("//", StringComparison.Ordinal))
+        {
+            trimmed = $"https:{trimmed}";
+            return Uri.TryCreate(trimmed, UriKind.Absolute, out var protocolRelativeUri)
+                ? protocolRelativeUri.AbsoluteUri
+                : null;
+        }
+
+        var candidate = $"https://{trimmed}";
+        return Uri.TryCreate(candidate, UriKind.Absolute, out var httpsUri)
+            ? httpsUri.AbsoluteUri
+            : null;
+    }
     private async Task TypeTextIntoNaverTalkAsync(string? text, bool submit)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -1023,4 +1084,5 @@ public partial class MainPage : ContentPage
     }
 
 }
+
 
