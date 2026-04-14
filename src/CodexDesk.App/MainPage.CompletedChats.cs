@@ -881,6 +881,22 @@ public partial class MainPage : ContentPage
     {
         BrowserStatusLabel.Text = _naverTalkBrowser.Status;
         BrowserUrlLabel.Text = _naverTalkBrowser.CurrentUrl;
+        if (BrowserBackButton is not null)
+        {
+            BrowserBackButton.IsEnabled = NaverTalkWebView.CanGoBack;
+            BrowserBackButton.BackgroundColor = BrowserBackButton.IsEnabled
+                ? Color.FromArgb("#1D5C74")
+                : Color.FromArgb("#A9C6D1");
+        }
+
+        if (BrowserForwardButton is not null)
+        {
+            BrowserForwardButton.IsEnabled = NaverTalkWebView.CanGoForward;
+            BrowserForwardButton.BackgroundColor = BrowserForwardButton.IsEnabled
+                ? Color.FromArgb("#1D5C74")
+                : Color.FromArgb("#A9C6D1");
+        }
+
         if (BrowserAddressEntry is not null &&
             !BrowserAddressEntry.IsFocused &&
             !string.Equals(BrowserAddressEntry.Text, _naverTalkBrowser.CurrentUrl, StringComparison.Ordinal))

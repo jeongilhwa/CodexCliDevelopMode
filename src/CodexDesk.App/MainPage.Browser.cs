@@ -1,7 +1,11 @@
 ﻿namespace CodexDesk;
 
 using CodexDesk.Services;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -30,8 +34,11 @@ public partial class MainPage : ContentPage
                 webView2.CoreWebView2Initialized += OnCoreWebView2Initialized;
                 if (webView2.CoreWebView2 is not null)
                 {
+                    AttachWebViewNewWindowHandler(webView2.CoreWebView2);
                     AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
                     _ = EnsureWebViewInspectorScriptRegisteredAsync(webView2.CoreWebView2);
+                    _ = ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
+                    _ = ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
                 }
             }
         }
@@ -48,10 +55,42 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        _naverTalkBrowser.SetStatus("WebView2 cookies enabled.");
+        _naverTalkBrowser.SetStatus("WebView2 is ready.");
+        AttachWebViewNewWindowHandler(sender.CoreWebView2);
         AttachWebViewKeyboardDebugHandlers(sender.CoreWebView2);
         _ = EnsureWebViewInspectorScriptRegisteredAsync(sender.CoreWebView2);
         _ = ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
+        _ = ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
+    }
+
+    private void AttachWebViewNewWindowHandler(CoreWebView2 coreWebView2)
+    {
+        if (_webViewNewWindowHandlerAttached)
+        {
+            return;
+        }
+
+        _webViewNewWindowHandlerAttached = true;
+        coreWebView2.NewWindowRequested -= OnWebViewNewWindowRequested;
+        coreWebView2.NewWindowRequested += OnWebViewNewWindowRequested;
+    }
+
+    private void OnWebViewNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        try
+        {
+            var target = string.IsNullOrWhiteSpace(e.Uri) ? _naverTalkBrowser.CurrentUrl : e.Uri;
+            e.Handled = true;
+            _ = MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                await _naverTalkBrowser.NavigateAsync(target);
+                _naverTalkBrowser.SetStatus("New window request was opened in the current WebView.", target);
+            });
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Failed to handle new-window request: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
     }
 
     private void AttachWebViewKeyboardDebugHandlers(CoreWebView2 coreWebView2)
@@ -119,16 +158,189 @@ public partial class MainPage : ContentPage
             {
                 "enabled" => "Developer inspect mode enabled.",
                 "disabled" => "Developer inspect mode disabled.",
-                "selected" => $"Selected element: {details}",
-                "unlocked" => "Element selection unlocked.",
+                "selected" => BuildInspectorSelectedStatus(details),
+                "applied" => $"Applied click: {BuildInspectorSelectedStatus(details)}",
+                "unlocked" => string.Empty,
                 "escape" => "Inspector selection canceled (Esc).",
                 _ => $"Inspector event: {action}"
             };
+
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return;
+            }
 
             MainThread.BeginInvokeOnMainThread(() =>
             {
                 _naverTalkBrowser.SetStatus(status, _naverTalkBrowser.CurrentUrl);
             });
+            return;
+        }
+
+    }
+
+    private static string BuildInspectorSelectedStatus(string details)
+    {
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return "Selected element.";
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(details)?.AsObject();
+            if (node is null)
+            {
+                return $"Selected element: {TrimForLog(details, 160)}";
+            }
+
+            var selector = node["selector"]?.GetValue<string>() ?? "-";
+            var idRaw = node["id"]?.GetValue<string>();
+            var nameRaw = node["name"]?.GetValue<string>();
+            var classNameRaw = node["className"]?.GetValue<string>();
+            var tag = TrimForLog(node["tag"]?.GetValue<string>(), 40);
+            var role = TrimForLog(node["role"]?.GetValue<string>(), 40);
+            var type = TrimForLog(node["inputType"]?.GetValue<string>(), 40);
+            var href = TrimForLog(node["href"]?.GetValue<string>(), 80);
+            var ariaLabel = TrimForLog(node["ariaLabel"]?.GetValue<string>(), 60);
+            var placeholder = TrimForLog(node["placeholder"]?.GetValue<string>(), 50);
+            var valuePreview = TrimForLog(node["valuePreview"]?.GetValue<string>(), 70);
+            var rect = node["rect"]?.AsObject();
+            var left = rect?["left"]?.GetValue<double>() ?? 0;
+            var top = rect?["top"]?.GetValue<double>() ?? 0;
+            var width = rect?["width"]?.GetValue<double>() ?? 0;
+            var height = rect?["height"]?.GetValue<double>() ?? 0;
+            var text = TrimForLog(node["textPreview"]?.GetValue<string>(), 90);
+            var identityParts = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrWhiteSpace(idRaw))
+            {
+                identityParts.Add($"id={TrimForLog(idRaw, 60)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(nameRaw))
+            {
+                identityParts.Add($"name={TrimForLog(nameRaw, 60)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(classNameRaw))
+            {
+                identityParts.Add($"class={TrimForLog(classNameRaw, 60)}");
+            }
+
+            var metaParts = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrWhiteSpace(tag) && tag != "-")
+            {
+                metaParts.Add($"tag={tag}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(type) && type != "-")
+            {
+                metaParts.Add($"type={type}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(role) && role != "-")
+            {
+                metaParts.Add($"role={role}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(ariaLabel) && ariaLabel != "-")
+            {
+                metaParts.Add($"aria={ariaLabel}");
+            }
+
+            var lines = new System.Collections.Generic.List<string>
+            {
+                $"선택 요소: {selector}",
+                $"위치/크기: {width:0}x{height:0} @ ({left:0},{top:0})",
+                $"텍스트: {text}"
+            };
+
+            if (identityParts.Count > 0)
+            {
+                lines.Add($"식별자: {string.Join(", ", identityParts)}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(href) && href != "-")
+            {
+                lines.Add($"링크: {href}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(placeholder) && placeholder != "-")
+            {
+                lines.Add($"placeholder: {placeholder}");
+            }
+
+            if (!string.IsNullOrWhiteSpace(valuePreview) && valuePreview != "-")
+            {
+                lines.Add($"value: {valuePreview}");
+            }
+
+            if (metaParts.Count > 0)
+            {
+                lines.Add($"메타: {string.Join(", ", metaParts)}");
+            }
+
+            return string.Join("\n", lines);
+        }
+        catch
+        {
+            return $"Selected element: {TrimForLog(details, 160)}";
+        }
+    }
+
+    private static (string Summary, string RequestDetails, string ResponseDetails) BuildNetworkStatusLine(
+        string channel,
+        string method,
+        string url,
+        int? status,
+        double? durationMs,
+        string? requestHeadersPreview,
+        string? requestBodyPreview,
+        string? responseHeadersPreview,
+        string? responseBodyPreview,
+        string? statusText = null,
+        string? resourceType = null,
+        string? mimeType = null)
+    {
+        var statusCode = status.HasValue ? status.Value.ToString(CultureInfo.InvariantCulture) : "-";
+        var durationText = durationMs.HasValue ? $"{durationMs.Value:0.0}ms" : "-";
+        var shortUrl = TrimForLog(url, 180);
+        var reqHeaders = string.IsNullOrWhiteSpace(requestHeadersPreview) ? "-" : requestHeadersPreview.Trim();
+        var reqBody = TrimForLog(requestBodyPreview, 220);
+        var resHeaders = string.IsNullOrWhiteSpace(responseHeadersPreview) ? "-" : responseHeadersPreview.Trim();
+        var resBody = TrimForLog(responseBodyPreview, 220);
+        var normalizedStatus = NormalizeStatusMessage(status, statusText);
+        var statusMessage = TrimForLog(normalizedStatus, 60);
+        var resource = TrimForLog(resourceType, 32);
+        var mime = TrimForLog(mimeType, 48);
+        var timestamp = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+        var summary = $"[{timestamp}] [{channel}] {method} {statusCode} {durationText} {shortUrl}";
+        var request = $"URL: {shortUrl}\nTYPE: {resource}\nMIME: {mime}\nHEADERS:\n{reqHeaders}\nBODY: {reqBody}";
+        var response = $"STATUS: {statusCode} ({statusMessage})\nDURATION: {durationText}\nHEADERS:\n{resHeaders}\nBODY: {resBody}";
+        return (summary, request, response);
+    }
+
+    private static string NormalizeStatusMessage(int? status, string? statusText)
+    {
+        if (!string.IsNullOrWhiteSpace(statusText))
+        {
+            return statusText.Trim();
+        }
+
+        if (!status.HasValue)
+        {
+            return "-";
+        }
+
+        try
+        {
+            var code = (HttpStatusCode)status.Value;
+            return Enum.IsDefined(typeof(HttpStatusCode), code) ? code.ToString() : "-";
+        }
+        catch
+        {
+            return "-";
         }
     }
 
@@ -148,6 +360,25 @@ public partial class MainPage : ContentPage
         catch (Exception ex)
         {
             _naverTalkBrowser.SetStatus($"Developer inspect toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+
+    private async Task ToggleWebViewNetworkCaptureModeAsync()
+    {
+        try
+        {
+            _webViewNetworkCaptureEnabled = !_webViewNetworkCaptureEnabled;
+            UpdateWebViewNetworkCaptureToggleButton();
+            await ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
+            _naverTalkBrowser.SetStatus(
+                _webViewNetworkCaptureEnabled
+                    ? "WebView network capture turned on."
+                    : "WebView network capture turned off.",
+                _naverTalkBrowser.CurrentUrl);
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Network capture toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
         }
     }
 
@@ -182,21 +413,23 @@ public partial class MainPage : ContentPage
                 badge.style.zIndex = '2147483647';
                 badge.style.fontFamily = 'Consolas, monospace';
                 badge.style.fontSize = '12px';
-                badge.style.maxWidth = '42vw';
+                badge.style.maxWidth = '60vw';
                 badge.style.padding = '4px 8px';
                 badge.style.borderRadius = '4px';
                 badge.style.color = '#ffffff';
                 badge.style.background = '#0d8a65';
                 badge.style.boxShadow = '0 2px 8px rgba(0,0,0,.25)';
                 badge.style.display = 'none';
-                badge.style.whiteSpace = 'nowrap';
-                badge.style.textOverflow = 'ellipsis';
+                badge.style.whiteSpace = 'pre-wrap';
+                badge.style.lineHeight = '1.35';
+                badge.style.maxHeight = '45vh';
                 badge.style.overflow = 'hidden';
 
                 const state = {
                     enabled: false,
                     locked: false,
-                    current: null
+                    current: null,
+                    syntheticClickInProgress: false
                 };
 
                 const post = (kind, details = '') => {
@@ -204,7 +437,67 @@ public partial class MainPage : ContentPage
                         window.chrome.webview.postMessage(`codex-inspect:${kind}|${details}`);
                     } catch {}
                 };
+                const truncate = (value, max = 800) => {
+                    if (value == null) return '';
+                    const text = String(value).replace(/\s+/g, ' ').trim();
+                    return text.length <= max ? text : `${text.slice(0, max)}...`;
+                };
+                const safeSelector = (el) => {
+                    if (!el) return '';
+                    const tag = String(el.tagName || '').toLowerCase();
+                    const id = el.id ? `#${el.id}` : '';
+                    const classes = typeof el.className === 'string'
+                        ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 4).map(v => `.${v}`).join('')
+                        : '';
+                    return `${tag}${id}${classes}`;
+                };
+                const buildElementSummary = (el) => {
+                    if (!el) {
+                        return '';
+                    }
 
+                    const rect = el.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
+                    const textPreview = truncate(el.innerText || el.value || el.textContent || '', 120);
+                    const href = typeof el.getAttribute === 'function' ? (el.getAttribute('href') || '') : '';
+                    const name = typeof el.getAttribute === 'function' ? (el.getAttribute('name') || '') : '';
+                    const ariaLabel = typeof el.getAttribute === 'function' ? (el.getAttribute('aria-label') || '') : '';
+                    const role = typeof el.getAttribute === 'function' ? (el.getAttribute('role') || '') : '';
+                    const placeholder = typeof el.getAttribute === 'function' ? (el.getAttribute('placeholder') || '') : '';
+                    const inputType = typeof el.getAttribute === 'function' ? (el.getAttribute('type') || '') : '';
+                    const valuePreview = truncate(el.value || '', 100);
+                    const domPathParts = [];
+                    let node = el;
+                    for (let i = 0; i < 6 && node; i += 1) {
+                        const nodeTag = String(node.tagName || '').toLowerCase();
+                        if (!nodeTag) break;
+                        const nodeId = node.id ? `#${node.id}` : '';
+                        domPathParts.unshift(`${nodeTag}${nodeId}`);
+                        node = node.parentElement;
+                    }
+                    const domPath = domPathParts.join(' > ');
+
+                    return {
+                        selector: safeSelector(el),
+                        tag: String(el.tagName || '').toLowerCase(),
+                        id: el.id || '',
+                        className: typeof el.className === 'string' ? el.className : '',
+                        href: truncate(href, 180),
+                        name: truncate(name, 80),
+                        ariaLabel: truncate(ariaLabel, 80),
+                        role: truncate(role, 60),
+                        placeholder: truncate(placeholder, 80),
+                        inputType: truncate(inputType, 40),
+                        valuePreview,
+                        domPath: truncate(domPath, 220),
+                        textPreview,
+                        rect: {
+                            left: Number(rect.left || 0),
+                            top: Number(rect.top || 0),
+                            width: Number(rect.width || 0),
+                            height: Number(rect.height || 0)
+                        }
+                    };
+                };
                 const ensureUi = () => {
                     if (!overlay.isConnected) {
                         document.documentElement.appendChild(overlay);
@@ -212,19 +505,6 @@ public partial class MainPage : ContentPage
                     if (!badge.isConnected) {
                         document.documentElement.appendChild(badge);
                     }
-                };
-
-                const describe = (el) => {
-                    if (!el) {
-                        return '';
-                    }
-
-                    const tag = String(el.tagName || '').toLowerCase();
-                    const id = el.id ? `#${el.id}` : '';
-                    const classes = typeof el.className === 'string'
-                        ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, 3).map(v => `.${v}`).join('')
-                        : '';
-                    return `${tag}${id}${classes}`;
                 };
 
                 const clearUi = () => {
@@ -260,8 +540,22 @@ public partial class MainPage : ContentPage
                     overlay.style.width = `${rect.width}px`;
                     overlay.style.height = `${rect.height}px`;
 
+                    const summary = buildElementSummary(target);
+                    const idLine = summary.id ? `id: ${summary.id}` : '';
+                    const nameLine = summary.name ? `name: ${summary.name}` : '';
+                    const identityLine = idLine && nameLine
+                        ? `${idLine} | ${nameLine}`
+                        : (idLine || nameLine);
+                    const lines = [
+                        summary.selector,
+                        `${summary.rect.width.toFixed(0)}x${summary.rect.height.toFixed(0)} @ (${summary.rect.left.toFixed(0)},${summary.rect.top.toFixed(0)})`,
+                        `text: ${summary.textPreview || '-'}`
+                    ];
+                    if (identityLine) {
+                        lines.splice(1, 0, identityLine);
+                    }
                     badge.style.display = 'block';
-                    badge.textContent = describe(target);
+                    badge.textContent = lines.join('\n');
                     placeBadge(clientX, clientY);
                 };
 
@@ -280,19 +574,46 @@ public partial class MainPage : ContentPage
                         return;
                     }
 
-                    event.preventDefault();
-                    event.stopPropagation();
-                    event.stopImmediatePropagation();
+                    if (state.syntheticClickInProgress) {
+                        return;
+                    }
 
                     const target = state.current ?? document.elementFromPoint(event.clientX, event.clientY);
                     if (!target) {
                         return;
                     }
 
+                    if ((event.detail || 0) >= 2) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+
+                        const details = JSON.stringify(buildElementSummary(target));
+                        state.locked = false;
+                        clearUi();
+                        try {
+                            state.syntheticClickInProgress = true;
+                            if (typeof target.click === 'function') {
+                                target.click();
+                            } else {
+                                target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                            }
+                        } catch {}
+                        finally {
+                            state.syntheticClickInProgress = false;
+                        }
+                        post('applied', details);
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+
                     state.current = target;
-                    state.locked = !state.locked;
+                    state.locked = false;
                     renderTarget(target, event.clientX, event.clientY);
-                    post(state.locked ? 'selected' : 'unlocked', describe(target));
+                    post('selected', JSON.stringify(buildElementSummary(target)));
                 }, true);
 
                 document.addEventListener('keydown', (event) => {
@@ -321,6 +642,7 @@ public partial class MainPage : ContentPage
                     post('enabled', '');
                     return true;
                 };
+
             })();
             """);
     }
@@ -336,6 +658,562 @@ public partial class MainPage : ContentPage
         await EnsureWebViewInspectorScriptRegisteredAsync(coreWebView2);
         var script = $"window.__codexInspectorSetEnabled?.({enabled.ToString().ToLowerInvariant()});";
         await RunBrowserScriptAsync(script);
+    }
+
+    private async Task ApplyWebViewNetworkCaptureModeAsync(bool enabled)
+    {
+        var coreWebView2 = await TryEnsureCoreWebView2Async();
+        if (coreWebView2 is null)
+        {
+            return;
+        }
+
+        await EnsureWebViewNetworkDevToolsHookAsync(coreWebView2);
+        if (enabled)
+        {
+            if (!_webViewNetworkDomainEnabled)
+            {
+                await coreWebView2.CallDevToolsProtocolMethodAsync("Network.enable", "{}");
+                _webViewNetworkDomainEnabled = true;
+            }
+            return;
+        }
+
+        if (_webViewNetworkDomainEnabled)
+        {
+            await coreWebView2.CallDevToolsProtocolMethodAsync("Network.disable", "{}");
+            _webViewNetworkDomainEnabled = false;
+        }
+
+        lock (_webViewNetworkSync)
+        {
+            _pendingNetworkRequests.Clear();
+            _pendingRequestExtraHeaders.Clear();
+            _pendingResponseExtraHeaders.Clear();
+        }
+    }
+
+    private Task EnsureWebViewNetworkDevToolsHookAsync(CoreWebView2 coreWebView2)
+    {
+        if (ReferenceEquals(_networkReceiversAttachedCore, coreWebView2))
+        {
+            return Task.CompletedTask;
+        }
+
+        DetachWebViewNetworkDevToolsHook();
+
+        _networkRequestWillBeSentReceiver = coreWebView2.GetDevToolsProtocolEventReceiver("Network.requestWillBeSent");
+        _networkRequestWillBeSentExtraInfoReceiver = coreWebView2.GetDevToolsProtocolEventReceiver("Network.requestWillBeSentExtraInfo");
+        _networkResponseReceivedReceiver = coreWebView2.GetDevToolsProtocolEventReceiver("Network.responseReceived");
+        _networkResponseReceivedExtraInfoReceiver = coreWebView2.GetDevToolsProtocolEventReceiver("Network.responseReceivedExtraInfo");
+        _networkLoadingFinishedReceiver = coreWebView2.GetDevToolsProtocolEventReceiver("Network.loadingFinished");
+        _networkLoadingFailedReceiver = coreWebView2.GetDevToolsProtocolEventReceiver("Network.loadingFailed");
+
+        _networkRequestWillBeSentReceiver.DevToolsProtocolEventReceived += OnNetworkRequestWillBeSent;
+        _networkRequestWillBeSentExtraInfoReceiver.DevToolsProtocolEventReceived += OnNetworkRequestWillBeSentExtraInfo;
+        _networkResponseReceivedReceiver.DevToolsProtocolEventReceived += OnNetworkResponseReceived;
+        _networkResponseReceivedExtraInfoReceiver.DevToolsProtocolEventReceived += OnNetworkResponseReceivedExtraInfo;
+        _networkLoadingFinishedReceiver.DevToolsProtocolEventReceived += OnNetworkLoadingFinished;
+        _networkLoadingFailedReceiver.DevToolsProtocolEventReceived += OnNetworkLoadingFailed;
+
+        _networkReceiversAttachedCore = coreWebView2;
+        _webViewNetworkDomainEnabled = false;
+        return Task.CompletedTask;
+    }
+
+    private void DetachWebViewNetworkDevToolsHook()
+    {
+        if (_networkRequestWillBeSentReceiver is not null)
+        {
+            _networkRequestWillBeSentReceiver.DevToolsProtocolEventReceived -= OnNetworkRequestWillBeSent;
+            _networkRequestWillBeSentReceiver = null;
+        }
+
+        if (_networkRequestWillBeSentExtraInfoReceiver is not null)
+        {
+            _networkRequestWillBeSentExtraInfoReceiver.DevToolsProtocolEventReceived -= OnNetworkRequestWillBeSentExtraInfo;
+            _networkRequestWillBeSentExtraInfoReceiver = null;
+        }
+
+        if (_networkResponseReceivedReceiver is not null)
+        {
+            _networkResponseReceivedReceiver.DevToolsProtocolEventReceived -= OnNetworkResponseReceived;
+            _networkResponseReceivedReceiver = null;
+        }
+
+        if (_networkResponseReceivedExtraInfoReceiver is not null)
+        {
+            _networkResponseReceivedExtraInfoReceiver.DevToolsProtocolEventReceived -= OnNetworkResponseReceivedExtraInfo;
+            _networkResponseReceivedExtraInfoReceiver = null;
+        }
+
+        if (_networkLoadingFinishedReceiver is not null)
+        {
+            _networkLoadingFinishedReceiver.DevToolsProtocolEventReceived -= OnNetworkLoadingFinished;
+            _networkLoadingFinishedReceiver = null;
+        }
+
+        if (_networkLoadingFailedReceiver is not null)
+        {
+            _networkLoadingFailedReceiver.DevToolsProtocolEventReceived -= OnNetworkLoadingFailed;
+            _networkLoadingFailedReceiver = null;
+        }
+
+        _networkReceiversAttachedCore = null;
+        _webViewNetworkDomainEnabled = false;
+        lock (_webViewNetworkSync)
+        {
+            _pendingNetworkRequests.Clear();
+            _pendingRequestExtraHeaders.Clear();
+            _pendingResponseExtraHeaders.Clear();
+        }
+    }
+
+    private void OnNetworkRequestWillBeSent(object? sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+    {
+        if (!_webViewNetworkCaptureEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var payload = JsonNode.Parse(e.ParameterObjectAsJson)?.AsObject();
+            if (payload is null)
+            {
+                return;
+            }
+
+            var requestId = payload["requestId"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return;
+            }
+
+            var request = payload["request"]?.AsObject();
+            var method = request?["method"]?.GetValue<string>() ?? "GET";
+            var url = request?["url"]?.GetValue<string>() ?? string.Empty;
+            var requestHeadersPreview = ToHeaderLines(request?["headers"]);
+            var requestBodyPreview = request?["postData"]?.GetValue<string>() ?? string.Empty;
+            var resourceType = payload["type"]?.GetValue<string>() ?? "-";
+            var startedMonotonicSeconds = payload["timestamp"]?.GetValue<double?>() ?? 0d;
+            var startedAt = DateTimeOffset.Now;
+
+            var wallTimeSeconds = payload["wallTime"]?.GetValue<double?>();
+            if (wallTimeSeconds.HasValue)
+            {
+                try
+                {
+                    startedAt = DateTimeOffset.FromUnixTimeMilliseconds((long)(wallTimeSeconds.Value * 1000d));
+                }
+                catch
+                {
+                    startedAt = DateTimeOffset.Now;
+                }
+            }
+
+            var captured = new CapturedNetworkRequest
+            {
+                RequestId = requestId,
+                Method = method,
+                Url = url,
+                RequestHeadersPreview = requestHeadersPreview,
+                RequestBodyPreview = requestBodyPreview,
+                ResourceType = resourceType,
+                StartedMonotonicSeconds = startedMonotonicSeconds,
+                StartedAt = startedAt
+            };
+
+            lock (_webViewNetworkSync)
+            {
+                if (_pendingRequestExtraHeaders.Remove(requestId, out var requestExtraHeaders))
+                {
+                    captured.RequestHeadersPreview = MergeHeaderPreviews(captured.RequestHeadersPreview, requestExtraHeaders);
+                }
+
+                _pendingNetworkRequests[requestId] = captured;
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void OnNetworkRequestWillBeSentExtraInfo(object? sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+    {
+        if (!_webViewNetworkCaptureEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var payload = JsonNode.Parse(e.ParameterObjectAsJson)?.AsObject();
+            var requestId = payload?["requestId"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return;
+            }
+
+            var headersPreview = ToHeaderLines(payload?["headers"]);
+            if (string.IsNullOrWhiteSpace(headersPreview) || headersPreview == "-")
+            {
+                return;
+            }
+
+            lock (_webViewNetworkSync)
+            {
+                if (_pendingNetworkRequests.TryGetValue(requestId, out var captured))
+                {
+                    captured.RequestHeadersPreview = MergeHeaderPreviews(captured.RequestHeadersPreview, headersPreview);
+                }
+                else
+                {
+                    _pendingRequestExtraHeaders[requestId] = headersPreview;
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void OnNetworkResponseReceived(object? sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+    {
+        if (!_webViewNetworkCaptureEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var payload = JsonNode.Parse(e.ParameterObjectAsJson)?.AsObject();
+            var requestId = payload?["requestId"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return;
+            }
+
+            var response = payload?["response"]?.AsObject();
+            if (response is null)
+            {
+                return;
+            }
+
+            lock (_webViewNetworkSync)
+            {
+                if (!_pendingNetworkRequests.TryGetValue(requestId, out var captured))
+                {
+                    return;
+                }
+
+                var statusValue = response["status"]?.GetValue<double?>();
+                captured.Status = statusValue.HasValue ? (int)Math.Round(statusValue.Value) : null;
+                captured.StatusText = response["statusText"]?.GetValue<string>() ?? string.Empty;
+                captured.MimeType = response["mimeType"]?.GetValue<string>() ?? string.Empty;
+                captured.ResponseHeadersPreview = ToHeaderLines(response["headers"]);
+                if (_pendingResponseExtraHeaders.Remove(requestId, out var responseExtraHeaders))
+                {
+                    captured.ResponseHeadersPreview = MergeHeaderPreviews(captured.ResponseHeadersPreview, responseExtraHeaders);
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void OnNetworkResponseReceivedExtraInfo(object? sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+    {
+        if (!_webViewNetworkCaptureEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var payload = JsonNode.Parse(e.ParameterObjectAsJson)?.AsObject();
+            var requestId = payload?["requestId"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return;
+            }
+
+            var headersPreview = ToHeaderLines(payload?["headers"]);
+            if (string.IsNullOrWhiteSpace(headersPreview) || headersPreview == "-")
+            {
+                return;
+            }
+
+            lock (_webViewNetworkSync)
+            {
+                if (_pendingNetworkRequests.TryGetValue(requestId, out var captured))
+                {
+                    captured.ResponseHeadersPreview = MergeHeaderPreviews(captured.ResponseHeadersPreview, headersPreview);
+                }
+                else
+                {
+                    _pendingResponseExtraHeaders[requestId] = headersPreview;
+                }
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void OnNetworkLoadingFinished(object? sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+    {
+        _ = HandleNetworkLoadingFinishedAsync(e.ParameterObjectAsJson);
+    }
+
+    private async Task HandleNetworkLoadingFinishedAsync(string parameterJson)
+    {
+        if (!_webViewNetworkCaptureEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var payload = JsonNode.Parse(parameterJson)?.AsObject();
+            var requestId = payload?["requestId"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return;
+            }
+
+            CapturedNetworkRequest? captured = null;
+            var finishedMonotonicSeconds = payload?["timestamp"]?.GetValue<double?>();
+            var encodedDataLength = payload?["encodedDataLength"]?.GetValue<double?>() ?? 0d;
+            lock (_webViewNetworkSync)
+            {
+                if (_pendingNetworkRequests.TryGetValue(requestId, out captured))
+                {
+                    _pendingNetworkRequests.Remove(requestId);
+                }
+            }
+
+            if (captured is null)
+            {
+                return;
+            }
+
+            var durationMs = finishedMonotonicSeconds.HasValue && captured.StartedMonotonicSeconds > 0
+                ? Math.Max(0d, (finishedMonotonicSeconds.Value - captured.StartedMonotonicSeconds) * 1000d)
+                : (DateTimeOffset.Now - captured.StartedAt).TotalMilliseconds;
+
+            captured.EncodedDataLength = encodedDataLength;
+            var shouldReadBody = ShouldReadResponseBody(captured.ResourceType, captured.MimeType, captured.EncodedDataLength);
+            var responseBodyPreview = shouldReadBody
+                ? await TryGetResponseBodyPreviewAsync(captured.RequestId, captured.MimeType)
+                : $"[response body skipped: type={TrimForLog(captured.ResourceType, 20)}, size={captured.EncodedDataLength:0} bytes]";
+            if (string.IsNullOrWhiteSpace(responseBodyPreview))
+            {
+                var bytesText = captured.EncodedDataLength > 0
+                    ? $"{captured.EncodedDataLength:0} bytes"
+                    : "0 bytes";
+                responseBodyPreview = $"[response body unavailable: {bytesText}, mime={TrimForLog(captured.MimeType, 60)}]";
+            }
+            var line = BuildNetworkStatusLine(
+                "cdp",
+                captured.Method,
+                captured.Url,
+                captured.Status,
+                durationMs,
+                captured.RequestHeadersPreview,
+                captured.RequestBodyPreview,
+                captured.ResponseHeadersPreview,
+                responseBodyPreview,
+                captured.StatusText,
+                captured.ResourceType,
+                captured.MimeType);
+
+            MainThread.BeginInvokeOnMainThread(() => AppendWebViewNetworkEntry(line.Summary, line.RequestDetails, line.ResponseDetails));
+        }
+        catch
+        {
+        }
+    }
+
+    private static bool ShouldReadResponseBody(string? resourceType, string? mimeType, double encodedDataLength)
+    {
+        if (encodedDataLength > 512 * 1024)
+        {
+            return false;
+        }
+
+        var type = resourceType?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (type is "image" or "media" or "font" or "other")
+        {
+            return false;
+        }
+
+        if (type is "xhr" or "fetch" or "document")
+        {
+            return true;
+        }
+
+        return IsLikelyTextMimeType(mimeType);
+    }
+
+    private void OnNetworkLoadingFailed(object? sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+    {
+        if (!_webViewNetworkCaptureEnabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var payload = JsonNode.Parse(e.ParameterObjectAsJson)?.AsObject();
+            var requestId = payload?["requestId"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                return;
+            }
+
+            CapturedNetworkRequest? captured = null;
+            lock (_webViewNetworkSync)
+            {
+                if (_pendingNetworkRequests.TryGetValue(requestId, out captured))
+                {
+                    _pendingNetworkRequests.Remove(requestId);
+                }
+            }
+
+            var errorText = payload?["errorText"]?.GetValue<string>() ?? "network error";
+            var canceled = payload?["canceled"]?.GetValue<bool?>() ?? false;
+            var line = BuildNetworkStatusLine(
+                "cdp",
+                captured?.Method ?? "GET",
+                captured?.Url ?? "-",
+                0,
+                null,
+                captured?.RequestHeadersPreview,
+                captured?.RequestBodyPreview,
+                captured?.ResponseHeadersPreview,
+                canceled ? "request canceled" : errorText,
+                errorText,
+                captured?.ResourceType,
+                captured?.MimeType);
+
+            MainThread.BeginInvokeOnMainThread(() => AppendWebViewNetworkEntry(line.Summary, line.RequestDetails, line.ResponseDetails));
+        }
+        catch
+        {
+        }
+    }
+
+    private async Task<string> TryGetResponseBodyPreviewAsync(string requestId, string? mimeType)
+    {
+        var coreWebView2 = _networkReceiversAttachedCore;
+        if (coreWebView2 is null || string.IsNullOrWhiteSpace(requestId))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var requestIdJson = JsonSerializer.Serialize(requestId);
+            var args = $"{{\"requestId\":{requestIdJson}}}";
+            var raw = await coreWebView2.CallDevToolsProtocolMethodAsync("Network.getResponseBody", args);
+            var payload = JsonNode.Parse(raw)?.AsObject();
+            var body = payload?["body"]?.GetValue<string>();
+            var isBase64 = payload?["base64Encoded"]?.GetValue<bool?>() ?? false;
+            if (!isBase64)
+            {
+                return body ?? string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(body))
+            {
+                return string.Empty;
+            }
+
+            if (!IsLikelyTextMimeType(mimeType))
+            {
+                return $"[base64:{body.Length}]";
+            }
+
+            try
+            {
+                var bytes = Convert.FromBase64String(body);
+                return Encoding.UTF8.GetString(bytes);
+            }
+            catch
+            {
+                return $"[base64:{body.Length}]";
+            }
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static bool IsLikelyTextMimeType(string? mimeType)
+    {
+        if (string.IsNullOrWhiteSpace(mimeType))
+        {
+            return false;
+        }
+
+        var normalized = mimeType.Trim().ToLowerInvariant();
+        return normalized.StartsWith("text/", StringComparison.Ordinal) ||
+               normalized.Contains("json", StringComparison.Ordinal) ||
+               normalized.Contains("xml", StringComparison.Ordinal) ||
+               normalized.Contains("javascript", StringComparison.Ordinal) ||
+               normalized.Contains("x-www-form-urlencoded", StringComparison.Ordinal);
+    }
+
+    private static string ToHeaderLines(JsonNode? headersNode)
+    {
+        if (headersNode is not JsonObject headersObject || headersObject.Count == 0)
+        {
+            return "-";
+        }
+
+        var lines = new List<string>();
+        foreach (var pair in headersObject.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var value = pair.Value switch
+            {
+                JsonValue jsonValue => jsonValue.ToString(),
+                null => string.Empty,
+                _ => pair.Value.ToJsonString()
+            };
+
+            lines.Add($"{pair.Key}: {TrimForLog(value, 180)}");
+        }
+
+        return lines.Count == 0 ? "-" : string.Join("\n", lines);
+    }
+
+    private static string MergeHeaderPreviews(string? primary, string? secondary)
+    {
+        var lines = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static void AddLines(List<string> target, HashSet<string> dedupe, string? source)
+        {
+            if (string.IsNullOrWhiteSpace(source) || source.Trim() == "-")
+            {
+                return;
+            }
+
+            foreach (var line in source.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (dedupe.Add(line))
+                {
+                    target.Add(line);
+                }
+            }
+        }
+
+        AddLines(lines, seen, primary);
+        AddLines(lines, seen, secondary);
+        return lines.Count == 0 ? "-" : string.Join('\n', lines);
     }
 
 #endif
@@ -362,8 +1240,7 @@ public partial class MainPage : ContentPage
 
         await _naverTalkBrowser.EnsureInitializedAsync();
         UpdateBrowserChrome();
-        await TryRestoreCookieLoginSessionAsync();
-        await _naverTalkBrowser.NavigateAsync(_naverTalkBrowser.Settings.TargetUrl);
+        await _naverTalkBrowser.NavigateAsync("https://www.google.com");
     }
 
     private void OnUnloaded(object? sender, EventArgs e)
@@ -372,6 +1249,7 @@ public partial class MainPage : ContentPage
         _naverTalkBrowser.CommandRequested -= OnBrowserCommandRequested;
         BrowserPane.SizeChanged -= OnBrowserPaneSizeChanged;
 #if WINDOWS
+        DetachWebViewNetworkDevToolsHook();
         TeardownWindowKeyboardHook();
 #endif
         Unloaded -= OnUnloaded;
@@ -403,7 +1281,6 @@ public partial class MainPage : ContentPage
                         ? _naverTalkBrowser.Settings.TargetUrl
                         : command.Url;
 
-                    await TryRestoreCookieLoginSessionAsync();
                     NaverTalkWebView.Source = new UrlWebViewSource { Url = targetUrl };
                     break;
 
@@ -422,10 +1299,6 @@ public partial class MainPage : ContentPage
 
             UpdateBrowserChrome();
 
-            if (command.ForceLogin)
-            {
-                await AttemptAutoLoginAsync(command.Url ?? _naverTalkBrowser.CurrentUrl, force: true);
-            }
         });
     }
 
@@ -437,6 +1310,26 @@ public partial class MainPage : ContentPage
     private async void OnBrowserAddressGoClicked(object? sender, EventArgs e)
     {
         await NavigateFromAddressBarAsync();
+    }
+
+    private void OnBrowserBackClicked(object? sender, EventArgs e)
+    {
+        if (NaverTalkWebView.CanGoBack)
+        {
+            NaverTalkWebView.GoBack();
+        }
+
+        UpdateBrowserChrome();
+    }
+
+    private void OnBrowserForwardClicked(object? sender, EventArgs e)
+    {
+        if (NaverTalkWebView.CanGoForward)
+        {
+            NaverTalkWebView.GoForward();
+        }
+
+        UpdateBrowserChrome();
     }
 
     private async Task NavigateFromAddressBarAsync()
@@ -460,7 +1353,6 @@ public partial class MainPage : ContentPage
             BrowserAddressEntry.Text = normalizedUrl;
         }
 
-        await TryRestoreCookieLoginSessionAsync();
         await _naverTalkBrowser.NavigateAsync(normalizedUrl);
     }
 
@@ -954,7 +1846,7 @@ public partial class MainPage : ContentPage
     private void OnNaverTalkNavigating(object? sender, WebNavigatingEventArgs e)
     {
         var nextUrl = string.IsNullOrWhiteSpace(e.Url) ? _naverTalkBrowser.CurrentUrl : e.Url;
-        _naverTalkBrowser.SetStatus("Opening the Naver Talk page.", nextUrl);
+        _naverTalkBrowser.SetStatus("Opening page.", nextUrl);
     }
 
     private async void OnNaverTalkNavigated(object? sender, WebNavigatedEventArgs e)
@@ -967,27 +1859,10 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        if (IsLoginPage(currentUrl))
-        {
-            _naverTalkBrowser.SetStatus("Login page detected. Checking auto-login.", currentUrl);
-        }
-        else if (IsPartnerTalkPage(currentUrl))
-        {
-            _naverTalkBrowser.SetStatus("The Naver Talk page is open.", currentUrl);
-            await PersistCookieLoginSessionAsync();
-
-            // 네이버톡톡 페이지에서 로그아웃 팝업 자동 처리
-            await Task.Delay(1000);
-            await HandleLogoutPopupAsync(currentUrl);
-        }
-        else
-        {
-            _naverTalkBrowser.SetStatus("The WebView page is open.", currentUrl);
-        }
+        _naverTalkBrowser.SetStatus("The WebView page is open.", currentUrl);
 
         await RefreshWebViewLayoutMetricsAsync();
         await ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
-        await AttemptAutoLoginAsync(currentUrl);
     }
 
     private void OnBrowserPaneSizeChanged(object? sender, EventArgs e)

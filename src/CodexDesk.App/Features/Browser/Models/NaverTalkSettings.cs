@@ -8,7 +8,7 @@ public sealed record NaverTalkSettings(
     bool TypingMacroSendEnterEnabled,
     string TypingMacrosJson)
 {
-    public const string DefaultTargetUrl = "https://partner.talk.naver.com/chat/ct/wc5ymk?state=wait&device=pc";
+    public const string DefaultTargetUrl = "https://www.google.com";
 
-    public static NaverTalkSettings Default => new(DefaultTargetUrl, string.Empty, true, string.Empty, false, "[]");
+    public static NaverTalkSettings Default => new(DefaultTargetUrl, string.Empty, false, string.Empty, false, "[]");
 }

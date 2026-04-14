@@ -24,7 +24,7 @@ public sealed class NaverTalkBrowserService
 
     private bool _initialized;
     private NaverTalkSettings _settings = NaverTalkSettings.Default;
-    private string _status = "Naver Talk WebView is idle.";
+    private string _status = "WebView is idle.";
     private string _currentUrl = "about:blank";
     private bool _hasStoredPassword;
     private bool _hasStoredCookieJar;
@@ -104,7 +104,7 @@ public sealed class NaverTalkBrowserService
             _hasStoredPassword = await HasPasswordAsync();
             _hasStoredCookieJar = await HasCookieJarAsync();
             RefreshCompletedChatBaselineExportedAt();
-            _status = "Naver Talk WebView is ready.";
+            _status = "WebView is ready.";
             _initialized = true;
         }
         finally
@@ -168,7 +168,7 @@ public sealed class NaverTalkBrowserService
 
         _hasStoredPassword = await HasPasswordAsync();
         _currentUrl = _settings.TargetUrl;
-        _status = "Saved Naver Talk settings.";
+        _status = "Saved browser settings.";
         NotifyStateChanged();
     }
 
@@ -251,7 +251,7 @@ public sealed class NaverTalkBrowserService
 
         var resolvedUrl = NormalizeUrl(targetUrl ?? _settings.TargetUrl);
         _currentUrl = resolvedUrl;
-        _status = "Opening the Naver Talk page.";
+        _status = "Opening page.";
         NotifyStateChanged();
         CommandRequested?.Invoke(new BrowserCommand(BrowserCommandType.Navigate, resolvedUrl, forceLogin));
     }

@@ -16,6 +16,7 @@ public partial class MainPage : ContentPage
     private void SetupSplitterGesture()
     {
         ResizeHandle.GestureRecognizers.Clear();
+        RightResizeHandle.GestureRecognizers.Clear();
 
         var pointerGesture = new PointerGestureRecognizer();
         pointerGesture.PointerEntered += OnSplitterPointerEntered;
@@ -25,7 +26,16 @@ public partial class MainPage : ContentPage
         pointerGesture.PointerReleased += OnSplitterPointerReleased;
         ResizeHandle.GestureRecognizers.Add(pointerGesture);
 
+        var rightPointerGesture = new PointerGestureRecognizer();
+        rightPointerGesture.PointerEntered += OnRightSplitterPointerEntered;
+        rightPointerGesture.PointerExited += OnRightSplitterPointerExited;
+        rightPointerGesture.PointerPressed += OnRightSplitterPointerPressed;
+        rightPointerGesture.PointerMoved += OnRightSplitterPointerMoved;
+        rightPointerGesture.PointerReleased += OnRightSplitterPointerReleased;
+        RightResizeHandle.GestureRecognizers.Add(rightPointerGesture);
+
         UpdateSplitterVisual(isDragging: false, isHovering: false);
+        UpdateRightSplitterVisual(isDragging: false, isHovering: false);
     }
 
     private void OnSplitterPointerEntered(object? sender, PointerEventArgs e)
@@ -62,7 +72,7 @@ public partial class MainPage : ContentPage
         _splitterDragStartWebViewWidth = paneWidths.Value.WebViewWidth;
         _splitterDragStartChatWidth = paneWidths.Value.ChatWidth;
         UpdateSplitterVisual(isDragging: true, isHovering: true);
-        TryCaptureSplitterPointer(e);
+        TryCaptureSplitterPointer(e, isRightSplitter: false);
     }
 
     private void OnSplitterPointerMoved(object? sender, PointerEventArgs e)
@@ -98,13 +108,98 @@ public partial class MainPage : ContentPage
         _splitterDragStartPointerX = double.NaN;
         _splitterDragStartWebViewWidth = 0;
         _splitterDragStartChatWidth = 0;
-        ReleaseCapturedSplitterPointer();
+        ReleaseCapturedSplitterPointer(isRightSplitter: false);
         UpdateSplitterVisual(isDragging: false, isHovering: false);
+    }
+
+    private void OnRightSplitterPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (_isRightSplitterDragging)
+        {
+            return;
+        }
+
+        UpdateRightSplitterVisual(isDragging: false, isHovering: true);
+    }
+
+    private void OnRightSplitterPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (_isRightSplitterDragging)
+        {
+            return;
+        }
+
+        UpdateRightSplitterVisual(isDragging: false, isHovering: false);
+    }
+
+    private void OnRightSplitterPointerPressed(object? sender, PointerEventArgs e)
+    {
+        var pointerX = GetRightSplitterPointerX(e);
+        var paneWidths = TryGetCurrentRightPaneWidths();
+        if (pointerX is null || paneWidths is null)
+        {
+            return;
+        }
+
+        _isRightSplitterDragging = true;
+        _rightSplitterDragStartPointerX = pointerX.Value;
+        _rightSplitterDragStartNetworkWidth = paneWidths.Value.NetworkWidth;
+        _rightSplitterDragStartCodexWidth = paneWidths.Value.CodexWidth;
+        UpdateRightSplitterVisual(isDragging: true, isHovering: true);
+        TryCaptureSplitterPointer(e, isRightSplitter: true);
+    }
+
+    private void OnRightSplitterPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isRightSplitterDragging)
+        {
+            return;
+        }
+
+        var pointerX = GetRightSplitterPointerX(e);
+        if (pointerX is null)
+        {
+            return;
+        }
+
+        var delta = pointerX.Value - _rightSplitterDragStartPointerX;
+        if (Math.Abs(delta) <= double.Epsilon)
+        {
+            return;
+        }
+
+        ResizeRightPanelsByDelta(delta);
+    }
+
+    private void OnRightSplitterPointerReleased(object? sender, PointerEventArgs e)
+    {
+        if (!_isRightSplitterDragging)
+        {
+            return;
+        }
+
+        _isRightSplitterDragging = false;
+        _rightSplitterDragStartPointerX = double.NaN;
+        _rightSplitterDragStartNetworkWidth = 0;
+        _rightSplitterDragStartCodexWidth = 0;
+        ReleaseCapturedSplitterPointer(isRightSplitter: true);
+        UpdateRightSplitterVisual(isDragging: false, isHovering: false);
     }
 
     private double? GetSplitterPointerX(PointerEventArgs e)
     {
         var position = e.GetPosition(MainLayoutGrid);
+        if (position is null)
+        {
+            return null;
+        }
+
+        return position.Value.X;
+    }
+
+    private double? GetRightSplitterPointerX(PointerEventArgs e)
+    {
+        var position = e.GetPosition(ChatSplitGrid);
         if (position is null)
         {
             return null;
@@ -122,7 +217,16 @@ public partial class MainPage : ContentPage
                 : SplitterIdleColor;
     }
 
-    private void TryCaptureSplitterPointer(PointerEventArgs e)
+    private void UpdateRightSplitterVisual(bool isDragging, bool isHovering)
+    {
+        RightResizeHandleGrip.BackgroundColor = isDragging
+            ? SplitterActiveColor
+            : isHovering
+                ? SplitterHoverColor
+                : Color.FromArgb("#D0DEE5");
+    }
+
+    private void TryCaptureSplitterPointer(PointerEventArgs e, bool isRightSplitter)
     {
 #if WINDOWS
         var platformArgs = e.PlatformArgs;
@@ -140,22 +244,45 @@ public partial class MainPage : ContentPage
 
         if (sender.CapturePointer(pointer))
         {
-            _capturedSplitterPointer = pointer;
+            if (isRightSplitter)
+            {
+                _capturedRightSplitterPointer = pointer;
+            }
+            else
+            {
+                _capturedSplitterPointer = pointer;
+            }
         }
 #endif
     }
 
-    private void ReleaseCapturedSplitterPointer()
+    private void ReleaseCapturedSplitterPointer(bool isRightSplitter)
     {
 #if WINDOWS
+        if (isRightSplitter)
+        {
+            if (_capturedRightSplitterPointer is null)
+            {
+                return;
+            }
+
+            if (RightResizeHandle.Handler?.PlatformView is UI.FrameworkElement rightSender)
+            {
+                rightSender.ReleasePointerCapture(_capturedRightSplitterPointer);
+            }
+
+            _capturedRightSplitterPointer = null;
+            return;
+        }
+
         if (_capturedSplitterPointer is null)
         {
             return;
         }
 
-        if (ResizeHandle.Handler?.PlatformView is UI.FrameworkElement sender)
+        if (ResizeHandle.Handler?.PlatformView is UI.FrameworkElement leftSender)
         {
-            sender.ReleasePointerCapture(_capturedSplitterPointer);
+            leftSender.ReleasePointerCapture(_capturedSplitterPointer);
         }
 
         _capturedSplitterPointer = null;
@@ -205,6 +332,51 @@ public partial class MainPage : ContentPage
         }
 
         return (webViewWidth, usableWidth - webViewWidth);
+    }
+
+    private void ResizeRightPanelsByDelta(double delta)
+    {
+        var usableWidth = _rightSplitterDragStartNetworkWidth + _rightSplitterDragStartCodexWidth;
+        if (usableWidth <= 0)
+        {
+            return;
+        }
+
+        var effectiveMinPaneWidth = Math.Min(MinRightPaneWidth, usableWidth / 2.0);
+        if (effectiveMinPaneWidth <= 0)
+        {
+            return;
+        }
+
+        var newNetworkWidth = Math.Clamp(
+            _rightSplitterDragStartNetworkWidth + delta,
+            effectiveMinPaneWidth,
+            usableWidth - effectiveMinPaneWidth);
+        var newCodexWidth = usableWidth - newNetworkWidth;
+
+        ApplyRightPaneWidths(newNetworkWidth, newCodexWidth);
+    }
+
+    private (double NetworkWidth, double CodexWidth)? TryGetCurrentRightPaneWidths()
+    {
+        if (NetworkPane.Width > 0 && CodexPane.Width > 0)
+        {
+            return (NetworkPane.Width, CodexPane.Width);
+        }
+
+        var usableWidth = ChatSplitGrid.Width - RightSplitterColumnWidth;
+        if (usableWidth <= 0)
+        {
+            return null;
+        }
+
+        var networkWidth = ResolveColumnWidth(ChatSplitGrid.ColumnDefinitions[0].Width, ChatSplitGrid.ColumnDefinitions[2].Width, usableWidth);
+        if (networkWidth <= 0 || networkWidth >= usableWidth)
+        {
+            return null;
+        }
+
+        return (networkWidth, usableWidth - networkWidth);
     }
 
     private static double ResolveColumnWidth(GridLength targetWidth, GridLength otherWidth, double usableWidth)
@@ -269,6 +441,36 @@ public partial class MainPage : ContentPage
         }
 
         ApplyAdaptiveWebViewZoom();
+#endif
+    }
+
+    private void ApplyRightPaneWidths(double networkWidth, double codexWidth)
+    {
+        ChatSplitGrid.ColumnDefinitions[0].Width = new GridLength(networkWidth, GridUnitType.Absolute);
+        ChatSplitGrid.ColumnDefinitions[2].Width = new GridLength(1, GridUnitType.Star);
+
+        ChatSplitGrid.InvalidateMeasure();
+        NetworkPane.InvalidateMeasure();
+        CodexPane.InvalidateMeasure();
+
+#if WINDOWS
+        if (ChatSplitGrid.Handler?.PlatformView is UI.FrameworkElement splitGridElement)
+        {
+            splitGridElement.InvalidateMeasure();
+            splitGridElement.UpdateLayout();
+        }
+
+        if (NetworkPane.Handler?.PlatformView is UI.FrameworkElement networkPaneElement)
+        {
+            networkPaneElement.InvalidateMeasure();
+            networkPaneElement.UpdateLayout();
+        }
+
+        if (CodexPane.Handler?.PlatformView is UI.FrameworkElement codexPaneElement)
+        {
+            codexPaneElement.InvalidateMeasure();
+            codexPaneElement.UpdateLayout();
+        }
 #endif
     }
 

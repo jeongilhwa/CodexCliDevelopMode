@@ -20,10 +20,10 @@
                     StrokeThickness="2"
                     StrokeShape="Rectangle">
                 <VerticalStackLayout Spacing="6">
-                    <Grid ColumnDefinitions="*,Auto"
+                    <Grid ColumnDefinitions="*,Auto,Auto"
                           ColumnSpacing="12">
                         <Label Grid.Column="0"
-                               Text="Naver Talk WebView2"
+                               Text="WebView Browser"
                                FontAttributes="Bold"
                                FontSize="18"
                                TextColor="#142024"
@@ -37,22 +37,53 @@
                                 TextColor="#FFFFFF"
                                 Clicked="OnWebViewInspectorToggleClicked"
                                 VerticalOptions="Center" />
+                        <Button Grid.Column="2"
+                                x:Name="WebViewNetworkCaptureToggleButton"
+                                Text="네트워크 캡처 OFF"
+                                FontSize="12"
+                                Padding="12,6"
+                                BackgroundColor="#4E5D66"
+                                TextColor="#FFFFFF"
+                                Clicked="OnWebViewNetworkCaptureToggleClicked"
+                                VerticalOptions="Center" />
                     </Grid>
                     <Label x:Name="BrowserStatusLabel"
                            FontAttributes="Bold"
                            FontSize="14"
-                           Text="Naver Talk WebView is idle."
+                           Text="WebView is idle."
+                           LineBreakMode="WordWrap"
+                           MaxLines="4"
                            TextColor="#1D5C74" />
                     <Border Padding="8,6"
                             BackgroundColor="#FFFFFF"
                             Stroke="#A9C6D1"
                             StrokeThickness="1"
                             StrokeShape="RoundRectangle 10">
-                        <Grid ColumnDefinitions="*,Auto"
+                        <Grid ColumnDefinitions="Auto,Auto,*,Auto"
                               ColumnSpacing="8">
-                            <Entry Grid.Column="0"
+                            <Button Grid.Column="0"
+                                    x:Name="BrowserBackButton"
+                                    Text="←"
+                                    FontSize="12"
+                                    Padding="10,6"
+                                    CornerRadius="8"
+                                    BackgroundColor="#5B7079"
+                                    TextColor="#FFFFFF"
+                                    Clicked="OnBrowserBackClicked"
+                                    VerticalOptions="Center" />
+                            <Button Grid.Column="1"
+                                    x:Name="BrowserForwardButton"
+                                    Text="→"
+                                    FontSize="12"
+                                    Padding="10,6"
+                                    CornerRadius="8"
+                                    BackgroundColor="#5B7079"
+                                    TextColor="#FFFFFF"
+                                    Clicked="OnBrowserForwardClicked"
+                                    VerticalOptions="Center" />
+                            <Entry Grid.Column="2"
                                    x:Name="BrowserAddressEntry"
-                                   Placeholder="https://partner.talk.naver.com/"
+                                   Placeholder="https://www.google.com/"
                                    FontSize="13"
                                    TextColor="#142024"
                                    PlaceholderColor="#6B8793"
@@ -60,7 +91,7 @@
                                    ReturnType="Go"
                                    Completed="OnBrowserAddressEntryCompleted"
                                    VerticalOptions="Center" />
-                            <Button Grid.Column="1"
+                            <Button Grid.Column="3"
                                     Text="이동"
                                     FontSize="12"
                                     Padding="12,6"
@@ -111,12 +142,147 @@
                 Stroke="#14202414"
                 StrokeThickness="1"
                 StrokeShape="Rectangle">
-            <BlazorWebView x:Name="blazorWebView"
-                           HostPage="wwwroot/index.html">
-                <BlazorWebView.RootComponents>
-                    <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
-                </BlazorWebView.RootComponents>
-            </BlazorWebView>
+            <Grid x:Name="ChatSplitGrid"
+                  ColumnDefinitions="360,10,*"
+                  ColumnSpacing="0">
+                <Border Grid.Column="0"
+                        x:Name="NetworkPane"
+                        Padding="8,6"
+                        BackgroundColor="#F3FAFD"
+                        Stroke="#A9C6D1"
+                        StrokeThickness="1"
+                        StrokeShape="Rectangle">
+                    <Grid RowDefinitions="Auto,2*,Auto,1.2*,1.4*,Auto,1.2*,1.4*"
+                          RowSpacing="4">
+                        <Label Grid.Row="0"
+                               Text="Request / Response 로그 (최신순)"
+                               FontSize="12"
+                               FontAttributes="Bold"
+                               TextColor="#1D5C74" />
+                        <CollectionView Grid.Row="1"
+                                        x:Name="WebViewNetworkListView"
+                                        HeightRequest="160"
+                                        SelectionMode="Single"
+                                        SelectionChanged="OnWebViewNetworkSelectionChanged"
+                                        VerticalScrollBarVisibility="Always"
+                                        BackgroundColor="#FFFFFF">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Padding="6,4">
+                                        <Label Text="{Binding Summary}"
+                                               FontFamily="Consolas"
+                                               FontSize="11"
+                                               TextColor="#14313A"
+                                               LineBreakMode="TailTruncation"
+                                               MaxLines="2" />
+                                    </Grid>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                        <Label Grid.Row="2"
+                               Text="Request"
+                               FontSize="11"
+                               FontAttributes="Bold"
+                               TextColor="#1D5C74" />
+                        <Border Grid.Row="3"
+                                BackgroundColor="#FFFFFF"
+                                Stroke="#D8E8EF"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 8"
+                                HeightRequest="120">
+                            <ScrollView Orientation="Vertical"
+                                        VerticalScrollBarVisibility="Always">
+                                <Label x:Name="WebViewNetworkRequestHeadersLabel"
+                                       Margin="8,6"
+                                       FontFamily="Consolas"
+                                       FontSize="11"
+                                       TextColor="#14313A"
+                                       LineBreakMode="CharacterWrap"
+                                       Text="Request headers" />
+                            </ScrollView>
+                        </Border>
+                        <Border Grid.Row="4"
+                                BackgroundColor="#F9FCFE"
+                                Stroke="#D8E8EF"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 8"
+                                HeightRequest="130">
+                            <ScrollView Orientation="Vertical"
+                                        VerticalScrollBarVisibility="Always">
+                                <Label x:Name="WebViewNetworkRequestBodyLabel"
+                                       Margin="8,6"
+                                       FontFamily="Consolas"
+                                       FontSize="11"
+                                       TextColor="#14313A"
+                                       LineBreakMode="CharacterWrap"
+                                       Text="Request body" />
+                            </ScrollView>
+                        </Border>
+                        <Label Grid.Row="5"
+                               Text="Response"
+                               FontSize="11"
+                               FontAttributes="Bold"
+                               TextColor="#1D5C74" />
+                        <Border Grid.Row="6"
+                                BackgroundColor="#FFFFFF"
+                                Stroke="#D8E8EF"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 8"
+                                HeightRequest="120">
+                            <ScrollView Orientation="Vertical"
+                                        VerticalScrollBarVisibility="Always">
+                                <Label x:Name="WebViewNetworkResponseHeadersLabel"
+                                       Margin="8,6"
+                                       FontFamily="Consolas"
+                                       FontSize="11"
+                                       TextColor="#14313A"
+                                       LineBreakMode="CharacterWrap"
+                                       Text="Response headers" />
+                            </ScrollView>
+                        </Border>
+                        <Border Grid.Row="7"
+                                BackgroundColor="#F9FCFE"
+                                Stroke="#D8E8EF"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 8"
+                                HeightRequest="130">
+                            <ScrollView Orientation="Vertical"
+                                        VerticalScrollBarVisibility="Always">
+                                <Label x:Name="WebViewNetworkResponseBodyLabel"
+                                       Margin="8,6"
+                                       FontFamily="Consolas"
+                                       FontSize="11"
+                                       TextColor="#14313A"
+                                       LineBreakMode="CharacterWrap"
+                                       Text="Response body" />
+                            </ScrollView>
+                        </Border>
+                    </Grid>
+                </Border>
+                <ContentView Grid.Column="1"
+                             x:Name="RightResizeHandle"
+                             BackgroundColor="Transparent"
+                             SemanticProperties.Description="Drag to resize the network panel and chat panel.">
+                    <BoxView x:Name="RightResizeHandleGrip"
+                             BackgroundColor="#D0DEE5"
+                             WidthRequest="4"
+                             HorizontalOptions="Center"
+                             VerticalOptions="Fill" />
+                </ContentView>
+                <Border Grid.Column="2"
+                        x:Name="CodexPane"
+                        BackgroundColor="#FFFCF5"
+                        Stroke="#14202414"
+                        StrokeThickness="0"
+                        StrokeShape="Rectangle">
+                    <BlazorWebView x:Name="blazorWebView"
+                                   HostPage="wwwroot/index.html">
+                        <BlazorWebView.RootComponents>
+                            <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
+                        </BlazorWebView.RootComponents>
+                    </BlazorWebView>
+                </Border>
+            </Grid>
         </Border>
     </Grid>
 </ContentPage>
