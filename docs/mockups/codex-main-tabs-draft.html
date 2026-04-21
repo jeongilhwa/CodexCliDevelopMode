@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Codex Main Tabs Draft</title>
+  <style>
+    :root {
+      --bg-top: #edf1f0;
+      --bg-bottom: #d8e0e2;
+      --ink: #14232b;
+      --muted: #61757e;
+      --line: rgba(20, 35, 43, 0.11);
+      --glass: rgba(255, 250, 244, 0.54);
+      --glass-strong: rgba(255, 252, 248, 0.84);
+      --panel: rgba(255, 255, 255, 0.76);
+      --accent: #1f6780;
+      --accent-warm: #b97045;
+      --shadow: 0 28px 60px rgba(16, 29, 35, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Bahnschrift", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(78, 149, 173, 0.18), transparent 22%),
+        radial-gradient(circle at 88% 16%, rgba(195, 142, 95, 0.15), transparent 18%),
+        linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 18px;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .glass {
+      backdrop-filter: blur(18px);
+      background: var(--glass);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .main-tabs {
+      min-height: 70px;
+      padding: 12px 12px 0;
+      display: flex;
+      align-items: end;
+      gap: 6px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.18);
+      border-bottom: 1px solid rgba(20, 35, 43, 0.08);
+    }
+
+    .main-tab {
+      min-width: 180px;
+      height: 54px;
+      border-radius: 18px 18px 0 0;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(20, 35, 43, 0.05);
+      color: #637780;
+    }
+
+    .main-tab.active {
+      background: var(--glass-strong);
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .main-tab .name {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .mini-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: rgba(20, 35, 43, 0.07);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .count {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .workspace {
+      min-height: 0;
+      border-radius: 30px;
+      padding: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 0;
+    }
+
+    .transcript {
+      min-height: 0;
+      overflow: auto;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      padding: 18px 14px 6px;
+    }
+
+    .msg {
+      border-radius: 20px;
+      padding: 14px 16px;
+      border: 1px solid rgba(20, 35, 43, 0.06);
+      background: var(--panel);
+    }
+
+    .msg.user {
+      background: rgba(60, 119, 144, 0.12);
+    }
+
+    .msg.system {
+      background: rgba(185, 112, 69, 0.10);
+    }
+
+    .msg header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .msg p {
+      margin: 0;
+      line-height: 1.58;
+      font-size: 15px;
+    }
+
+    .composer {
+      border-radius: 24px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.70);
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      display: grid;
+      gap: 10px;
+      margin: 12px 12px 12px;
+    }
+
+    .input {
+      min-height: 92px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      padding: 14px 16px;
+      color: #73868f;
+      line-height: 1.55;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 9px 14px;
+      font: inherit;
+      background: rgba(20, 35, 43, 0.08);
+      color: var(--ink);
+      cursor: default;
+    }
+
+    .btn.primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-warm));
+    }
+
+    .caption {
+      position: fixed;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      border-radius: 18px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.54);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      color: #46616b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="workspace glass">
+      <nav class="main-tabs">
+        <div class="main-tab active">
+          <div class="name">
+            <span class="mini-icon">C</span>
+            <span>Codex</span>
+          </div>
+          <span class="count">default</span>
+        </div>
+        <div class="main-tab">
+          <div class="name">
+            <span class="mini-icon">W</span>
+            <span>WebBrowser</span>
+          </div>
+          <span class="count">tab</span>
+        </div>
+        <div class="main-tab">
+          <div class="name">
+            <span class="mini-icon">N</span>
+            <span>Network Capture</span>
+          </div>
+          <span class="count">tab</span>
+        </div>
+      </nav>
+
+      <div class="transcript">
+        <article class="msg user">
+          <header><strong>User</strong><span>15:41:12</span></header>
+          <p>디자인부터 하자. WebBrowser랑 Network Capture랑 Codex를 탭으로 전환되게 하고 제목부터 없애.</p>
+        </article>
+
+        <article class="msg">
+          <header><strong>Codex</strong><span>15:41:20</span></header>
+          <p>큰 제목 없이 바로 메인 탭이 보이게 정리했습니다. 기본 진입은 Codex이고, 나머지 화면은 같은 레벨에서 탭으로 전환됩니다.</p>
+        </article>
+
+        <article class="msg system">
+          <header><strong>Status</strong><span>15:41:21</span></header>
+          <p>우측 패널, 보조 서브탭, 의미 불명 상단 액션은 이번 초안에서 제외.</p>
+        </article>
+      </div>
+
+      <div class="composer">
+        <div class="input">질문만 입력하세요. 기본 화면은 Codex 본문만 크게 보이고, WebBrowser와 Network Capture는 메인 탭 전환으로만 접근하는 구조.</div>
+        <div class="actions">
+          <button class="btn primary">Send</button>
+          <button class="btn">Cancel</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="caption">
+    확정 초안: 제목 제거, 메인 탭 3개만 유지, 기본 진입은 Codex, 우측 패널과 내부 서브탭은 일단 제외.
+  </div>
+</body>
+</html>

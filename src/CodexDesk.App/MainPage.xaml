@@ -1,289 +1,947 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:components="clr-namespace:CodexDesk.Components"
              x:Class="CodexDesk.MainPage"
-             BackgroundColor="#FFFFFF">
+             BackgroundColor="Transparent">
 
     <Grid x:Name="MainLayoutGrid"
           Padding="0"
-          ColumnDefinitions="3*,16,7*"
-          ColumnSpacing="0">
-        <!-- WebView2 영역 (왼쪽) -->
-        <Grid Grid.Column="0"
-              x:Name="BrowserPane"
-              RowDefinitions="Auto,*"
-              RowSpacing="12">
-            <Border Padding="16"
-                    BackgroundColor="#E8F4F8"
-                    Stroke="#1D5C74"
-                    StrokeThickness="2"
-                    StrokeShape="Rectangle">
-                <VerticalStackLayout Spacing="6">
-                    <Grid ColumnDefinitions="*,Auto,Auto"
-                          ColumnSpacing="12">
-                        <Label Grid.Column="0"
-                               Text="WebView Browser"
-                               FontAttributes="Bold"
-                               FontSize="18"
-                               TextColor="#142024"
-                               VerticalOptions="Center" />
-                        <Button Grid.Column="1"
-                                x:Name="WebViewInspectorToggleButton"
-                                Text="개발자 모드 OFF"
-                                FontSize="12"
-                                Padding="12,6"
-                                BackgroundColor="#1D5C74"
-                                TextColor="#FFFFFF"
-                                Clicked="OnWebViewInspectorToggleClicked"
-                                VerticalOptions="Center" />
-                        <Button Grid.Column="2"
-                                x:Name="WebViewNetworkCaptureToggleButton"
-                                Text="네트워크 캡처 OFF"
-                                FontSize="12"
-                                Padding="12,6"
-                                BackgroundColor="#4E5D66"
-                                TextColor="#FFFFFF"
-                                Clicked="OnWebViewNetworkCaptureToggleClicked"
-                                VerticalOptions="Center" />
-                    </Grid>
-                    <Label x:Name="BrowserStatusLabel"
-                           FontAttributes="Bold"
-                           FontSize="14"
-                           Text="WebView is idle."
-                           LineBreakMode="WordWrap"
-                           MaxLines="4"
-                           TextColor="#1D5C74" />
-                    <Border Padding="8,6"
-                            BackgroundColor="#FFFFFF"
-                            Stroke="#A9C6D1"
-                            StrokeThickness="1"
-                            StrokeShape="RoundRectangle 10">
-                        <Grid ColumnDefinitions="Auto,Auto,*,Auto"
-                              ColumnSpacing="8">
-                            <Button Grid.Column="0"
-                                    x:Name="BrowserBackButton"
-                                    Text="←"
-                                    FontSize="12"
-                                    Padding="10,6"
-                                    CornerRadius="8"
-                                    BackgroundColor="#5B7079"
-                                    TextColor="#FFFFFF"
-                                    Clicked="OnBrowserBackClicked"
-                                    VerticalOptions="Center" />
-                            <Button Grid.Column="1"
-                                    x:Name="BrowserForwardButton"
-                                    Text="→"
-                                    FontSize="12"
-                                    Padding="10,6"
-                                    CornerRadius="8"
-                                    BackgroundColor="#5B7079"
-                                    TextColor="#FFFFFF"
-                                    Clicked="OnBrowserForwardClicked"
-                                    VerticalOptions="Center" />
-                            <Entry Grid.Column="2"
-                                   x:Name="BrowserAddressEntry"
-                                   Placeholder="https://www.google.com/"
-                                   FontSize="13"
-                                   TextColor="#142024"
-                                   PlaceholderColor="#6B8793"
-                                   ClearButtonVisibility="WhileEditing"
-                                   ReturnType="Go"
-                                   Completed="OnBrowserAddressEntryCompleted"
-                                   VerticalOptions="Center" />
-                            <Button Grid.Column="3"
-                                    Text="이동"
-                                    FontSize="12"
-                                    Padding="12,6"
-                                    CornerRadius="8"
-                                    BackgroundColor="#1D5C74"
-                                    TextColor="#FFFFFF"
-                                    Clicked="OnBrowserAddressGoClicked"
-                                    VerticalOptions="Center" />
-                        </Grid>
-                    </Border>                    <Label x:Name="BrowserUrlLabel"
-                           FontSize="12"
-                           LineBreakMode="TailTruncation"
-                           MaxLines="2"
-                           Text="about:blank"
-                           TextColor="#5B7079" />
-                </VerticalStackLayout>
-            </Border>
+          RowDefinitions="*">
+        <Border Margin="-80,-30,0,0"
+                WidthRequest="320"
+                HeightRequest="320"
+                HorizontalOptions="Start"
+                VerticalOptions="Start"
+                BackgroundColor="#2E4E95AD"
+                StrokeThickness="0"
+                StrokeShape="Ellipse" />
 
-            <Border Grid.Row="1"
-                    BackgroundColor="#FFFFFF"
-                    Stroke="#1D5C74"
-                    StrokeThickness="2"
-                    StrokeShape="Rectangle">
-                <WebView x:Name="NaverTalkWebView"
-                         Navigating="OnNaverTalkNavigating"
-                         Navigated="OnNaverTalkNavigated"
-                         Focused="OnNaverTalkWebViewFocused"
-                         Unfocused="OnNaverTalkWebViewUnfocused" />
-            </Border>
-        </Grid>
+        <Border Margin="0,-20,-70,0"
+                WidthRequest="260"
+                HeightRequest="260"
+                HorizontalOptions="End"
+                VerticalOptions="Start"
+                BackgroundColor="#26C38E5F"
+                StrokeThickness="0"
+                StrokeShape="Ellipse" />
 
-        <!-- 리사이즈 핸들 -->
-        <ContentView Grid.Column="1"
-                     BackgroundColor="Transparent"
-                     SemanticProperties.Description="Drag to resize the browser and chat panels."
-                     x:Name="ResizeHandle">
-            <BoxView x:Name="ResizeHandleGrip"
-                     BackgroundColor="#B0BEC5"
-                     WidthRequest="6"
-                     HorizontalOptions="Center"
-                     VerticalOptions="Fill" />
-        </ContentView>
-
-        <!-- Codex Chat 영역 (오른쪽) -->
-        <Border Grid.Column="2"
-                x:Name="ChatPane"
-                BackgroundColor="#FFFCF5"
-                Stroke="#14202414"
+        <Border x:Name="ChatPane"
+                BackgroundColor="#89FFFAF4"
+                Stroke="#1C14232B"
                 StrokeThickness="1"
-                StrokeShape="Rectangle">
-            <Grid x:Name="ChatSplitGrid"
-                  ColumnDefinitions="360,10,*"
-                  ColumnSpacing="0">
-                <Border Grid.Column="0"
-                        x:Name="NetworkPane"
-                        Padding="8,6"
-                        BackgroundColor="#F3FAFD"
-                        Stroke="#A9C6D1"
-                        StrokeThickness="1"
-                        StrokeShape="Rectangle">
-                    <Grid RowDefinitions="Auto,2*,Auto,1.2*,1.4*,Auto,1.2*,1.4*"
-                          RowSpacing="4">
-                        <Label Grid.Row="0"
-                               Text="Request / Response 로그 (최신순)"
-                               FontSize="12"
-                               FontAttributes="Bold"
-                               TextColor="#1D5C74" />
-                        <CollectionView Grid.Row="1"
-                                        x:Name="WebViewNetworkListView"
-                                        HeightRequest="160"
-                                        SelectionMode="Single"
-                                        SelectionChanged="OnWebViewNetworkSelectionChanged"
-                                        VerticalScrollBarVisibility="Always"
-                                        BackgroundColor="#FFFFFF">
-                            <CollectionView.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Padding="6,4">
-                                        <Label Text="{Binding Summary}"
-                                               FontFamily="Consolas"
-                                               FontSize="11"
-                                               TextColor="#14313A"
+                StrokeShape="RoundRectangle 30">
+            <Border.Shadow>
+                <Shadow Brush="#1A101D23"
+                        Offset="0,18"
+                        Radius="34"
+                        Opacity="1" />
+            </Border.Shadow>
+
+            <Grid RowDefinitions="72,*"
+                  RowSpacing="0">
+                <Border Grid.Row="0"
+                        BackgroundColor="#E8F1EFEB"
+                        StrokeThickness="0"
+                        StrokeShape="RoundRectangle 30,30,0,0">
+                    <Grid Padding="12,12,148,0"
+                          ColumnDefinitions="Auto,Auto,Auto,*"
+                          ColumnSpacing="6">
+                        <Border Grid.Column="0"
+                                x:Name="CodexTabBorder"
+                                ClassId="Codex"
+                                BackgroundColor="#F7FFFCF8"
+                                Stroke="#12000000"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 18,18,0,0">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnWorkspaceTabClicked" />
+                            </Border.GestureRecognizers>
+                            <Grid Padding="16,0"
+                                  ColumnDefinitions="Auto,Auto,Auto"
+                                  ColumnSpacing="10"
+                                  HeightRequest="54">
+                                <Border x:Name="CodexTabIcon"
+                                        WidthRequest="28"
+                                        HeightRequest="28"
+                                        HorizontalOptions="Center"
+                                        VerticalOptions="Center"
+                                        BackgroundColor="#1220252C"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Label Text="C"
+                                           FontFamily="Bahnschrift"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#14232B"
+                                           HorizontalTextAlignment="Center"
+                                           VerticalTextAlignment="Center" />
+                                </Border>
+                                <Label Grid.Column="1"
+                                       x:Name="CodexTabTitleLabel"
+                                       Text="Codex"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="15"
+                                       FontAttributes="Bold"
+                                       TextColor="#14232B"
+                                       VerticalTextAlignment="Center" />
+                                <Label Grid.Column="2"
+                                       x:Name="CodexTabCountLabel"
+                                       Text="default"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="12"
+                                       TextColor="#61757E"
+                                       VerticalTextAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="1"
+                                x:Name="WebBrowserTabBorder"
+                                ClassId="WebBrowser"
+                                BackgroundColor="#1120252C"
+                                Stroke="#10000000"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 18,18,0,0">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnWorkspaceTabClicked" />
+                            </Border.GestureRecognizers>
+                            <Grid Padding="16,0"
+                                  ColumnDefinitions="Auto,Auto,Auto"
+                                  ColumnSpacing="10"
+                                  HeightRequest="54">
+                                <Border x:Name="WebBrowserTabIcon"
+                                        WidthRequest="28"
+                                        HeightRequest="28"
+                                        HorizontalOptions="Center"
+                                        VerticalOptions="Center"
+                                        BackgroundColor="#1220252C"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Label Text="W"
+                                           FontFamily="Bahnschrift"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#637780"
+                                           HorizontalTextAlignment="Center"
+                                           VerticalTextAlignment="Center" />
+                                </Border>
+                                <Label Grid.Column="1"
+                                       x:Name="WebBrowserTabTitleLabel"
+                                       Text="WebBrowser"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="15"
+                                       FontAttributes="Bold"
+                                       TextColor="#637780"
+                                       VerticalTextAlignment="Center" />
+                                <Label Grid.Column="2"
+                                       x:Name="WebBrowserTabCountLabel"
+                                       Text="tab"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="12"
+                                       TextColor="#61757E"
+                                       VerticalTextAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="2"
+                                x:Name="NetworkCaptureTabBorder"
+                                ClassId="NetworkCapture"
+                                BackgroundColor="#1120252C"
+                                Stroke="#10000000"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 18,18,0,0">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnWorkspaceTabClicked" />
+                            </Border.GestureRecognizers>
+                            <Grid Padding="16,0"
+                                  ColumnDefinitions="Auto,Auto,Auto"
+                                  ColumnSpacing="10"
+                                  HeightRequest="54">
+                                <Border x:Name="NetworkCaptureTabIcon"
+                                        WidthRequest="28"
+                                        HeightRequest="28"
+                                        HorizontalOptions="Center"
+                                        VerticalOptions="Center"
+                                        BackgroundColor="#1220252C"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Label Text="N"
+                                           FontFamily="Bahnschrift"
+                                           FontSize="12"
+                                           FontAttributes="Bold"
+                                           TextColor="#637780"
+                                           HorizontalTextAlignment="Center"
+                                           VerticalTextAlignment="Center" />
+                                </Border>
+                                <Label Grid.Column="1"
+                                       x:Name="NetworkCaptureTabTitleLabel"
+                                       Text="Network Capture"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="15"
+                                       FontAttributes="Bold"
+                                       TextColor="#637780"
+                                       VerticalTextAlignment="Center" />
+                                <Label Grid.Column="2"
+                                       x:Name="NetworkCaptureTabCountLabel"
+                                       Text="tab"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="12"
+                                       TextColor="#61757E"
+                                       VerticalTextAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <ContentView Grid.Column="3"
+                                     x:Name="WindowDragRegion"
+                                     HeightRequest="54"
+                                     HorizontalOptions="Fill"
+                                     VerticalOptions="Start"
+                                     BackgroundColor="Transparent" />
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1"
+                      Padding="0"
+                      RowSpacing="0">
+                    <Grid x:Name="CodexWorkspacePanel"
+                          IsVisible="True"
+                          RowDefinitions="*">
+                        <Border x:Name="CodexPane"
+                                BackgroundColor="#B3FFFFFF"
+                                Stroke="#16142324"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 24">
+                            <BlazorWebView x:Name="blazorWebView"
+                                           HostPage="wwwroot/index.html">
+                                <BlazorWebView.RootComponents>
+                                    <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
+                                </BlazorWebView.RootComponents>
+                            </BlazorWebView>
+                        </Border>
+                    </Grid>
+
+                    <Grid x:Name="WebBrowserWorkspacePanel"
+                          IsVisible="False"
+                          RowDefinitions="Auto,*,Auto"
+                          RowSpacing="0">
+                        <Border Margin="12,0,12,12"
+                                Padding="10"
+                                BackgroundColor="#ADFFFFFF"
+                                Stroke="#14142324"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 0,0,22,22">
+                            <Grid ColumnDefinitions="Auto,*,Auto"
+                                  ColumnSpacing="10">
+                                <HorizontalStackLayout Spacing="8">
+                                    <Border WidthRequest="38"
+                                            HeightRequest="38"
+                                            BackgroundColor="#1220252C"
+                                            StrokeThickness="0"
+                                            StrokeShape="RoundRectangle 12">
+                                        <Button x:Name="BrowserBackButton"
+                                                Text="&#x2190;"
+                                                FontSize="14"
+                                                BackgroundColor="Transparent"
+                                                TextColor="#50656F"
+                                                Padding="0"
+                                                Clicked="OnBrowserBackClicked" />
+                                    </Border>
+                                    <Border WidthRequest="38"
+                                            HeightRequest="38"
+                                            BackgroundColor="#1220252C"
+                                            StrokeThickness="0"
+                                            StrokeShape="RoundRectangle 12">
+                                        <Button x:Name="BrowserForwardButton"
+                                                Text="&#x2192;"
+                                                FontSize="14"
+                                                BackgroundColor="Transparent"
+                                                TextColor="#50656F"
+                                                Padding="0"
+                                                Clicked="OnBrowserForwardClicked" />
+                                    </Border>
+                                </HorizontalStackLayout>
+
+                                <Border Grid.Column="1"
+                                        HeightRequest="42"
+                                        BackgroundColor="#D1FFFFFF"
+                                        Stroke="#1420252C"
+                                        StrokeThickness="1"
+                                        StrokeShape="RoundRectangle 14">
+                                    <Grid ColumnDefinitions="Auto,*,Auto"
+                                          ColumnSpacing="10"
+                                          Padding="14,0,6,0">
+                                        <Border WidthRequest="22"
+                                                HeightRequest="22"
+                                                VerticalOptions="Center"
+                                                BackgroundColor="#1F67801F"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 11">
+                                            <Label Text="•"
+                                                   FontSize="11"
+                                                   TextColor="#1F6780"
+                                                   HorizontalTextAlignment="Center"
+                                                   VerticalTextAlignment="Center" />
+                                        </Border>
+                                        <Entry Grid.Column="1"
+                                               x:Name="BrowserAddressEntry"
+                                               Placeholder="https://www.google.com/"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="14"
+                                               TextColor="#536972"
+                                               PlaceholderColor="#6B8793"
+                                               ClearButtonVisibility="WhileEditing"
+                                               ReturnType="Go"
+                                               Completed="OnBrowserAddressEntryCompleted"
+                                               VerticalOptions="Center" />
+                                        <Button Grid.Column="2"
+                                                x:Name="BrowserGoButton"
+                                                Text="Open"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="14,0"
+                                                HeightRequest="32"
+                                                CornerRadius="999"
+                                                BackgroundColor="#1F6780"
+                                                TextColor="#FFFFFF"
+                                                Clicked="OnBrowserAddressGoClicked"
+                                                VerticalOptions="Center" />
+                                    </Grid>
+                                </Border>
+
+                                <HorizontalStackLayout Grid.Column="2"
+                                                       Spacing="8">
+                                    <Button x:Name="WebViewNetworkCaptureToggleButton"
+                                            Text="Capture OFF"
+                                            FontFamily="Bahnschrift"
+                                            FontSize="12"
+                                            Padding="14,9"
+                                            CornerRadius="12"
+                                            BackgroundColor="#1220252C"
+                                            TextColor="#50656F"
+                                            Clicked="OnWebViewNetworkCaptureToggleClicked" />
+                                    <Button x:Name="BrowserFocusButton"
+                                            Text="Focus"
+                                            FontFamily="Bahnschrift"
+                                            FontSize="12"
+                                            Padding="14,9"
+                                            CornerRadius="12"
+                                            BackgroundColor="#1220252C"
+                                            TextColor="#50656F"
+                                            Clicked="OnBrowserFocusClicked" />
+                                    <Button x:Name="WebViewInspectorToggleButton"
+                                            Text="Inspect OFF"
+                                            FontFamily="Bahnschrift"
+                                            FontSize="12"
+                                            Padding="14,9"
+                                            CornerRadius="12"
+                                            BackgroundColor="#1220252C"
+                                            TextColor="#50656F"
+                                            Clicked="OnWebViewInspectorToggleClicked" />
+                                </HorizontalStackLayout>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="1"
+                                x:Name="BrowserPane"
+                                Margin="12,0,12,0"
+                                BackgroundColor="#96FFFFFF"
+                                Stroke="#14142324"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 24">
+                            <Grid>
+                                <Border Margin="0"
+                                        BackgroundColor="#BFFFFFFF"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 24">
+                                    <Grid>
+                                        <WebView x:Name="NaverTalkWebView"
+                                                 Navigating="OnNaverTalkNavigating"
+                                                 Navigated="OnNaverTalkNavigated"
+                                                 Focused="OnNaverTalkWebViewFocused"
+                                                 Unfocused="OnNaverTalkWebViewUnfocused" />
+                                        <Grid IsVisible="False"
+                                              HeightRequest="0">
+                                            <Label x:Name="BrowserStatusLabel"
+                                                   Text="WebView is idle." />
+                                            <Label x:Name="BrowserUrlLabel"
+                                                   Text="about:blank" />
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Row="2"
+                                Margin="12,12,12,12"
+                                Padding="14,10"
+                                BackgroundColor="#8FFFFFFF"
+                                Stroke="#14142324"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 18">
+                            <HorizontalStackLayout Spacing="12">
+                                <Label Text="Viewport synced"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="13"
+                                       TextColor="#50656F" />
+                                <Label Text="Desktop view"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="13"
+                                       TextColor="#50656F" />
+                                <Label Text="Live navigation"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="13"
+                                       TextColor="#50656F" />
+                            </HorizontalStackLayout>
+                        </Border>
+
+                        <Grid x:Name="InspectDetailsModal"
+                              Grid.RowSpan="3"
+                              IsVisible="False"
+                              BackgroundColor="#660E171B"
+                              Padding="36">
+                            <Border BackgroundColor="#F4FBFCFC"
+                                    Stroke="#1A18252C"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 22"
+                                    MaximumWidthRequest="820"
+                                    HorizontalOptions="Center"
+                                    VerticalOptions="Center">
+                                <Grid RowDefinitions="Auto,Auto,*"
+                                      RowSpacing="0">
+                                    <Grid Padding="18,16"
+                                          ColumnDefinitions="*,Auto"
+                                          BackgroundColor="#F8FFFFFF">
+                                        <VerticalStackLayout Spacing="4">
+                                            <Label Text="Inspect Details"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="18"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#18252C" />
+                                            <Label x:Name="InspectModalSelectorLabel"
+                                                   Text="선택된 요소 없음"
+                                                   FontFamily="Consolas"
+                                                   FontSize="12"
+                                                   TextColor="#637780"
+                                                   LineBreakMode="TailTruncation"
+                                                   MaxLines="2" />
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="1"
+                                                Text="Close"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="14,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#1220252C"
+                                                TextColor="#50656F"
+                                                Clicked="OnCloseInspectorModalClicked" />
+                                    </Grid>
+
+                                    <Grid Grid.Row="1"
+                                          Padding="18,0,18,14"
+                                          ColumnDefinitions="*,*"
+                                          ColumnSpacing="8"
+                                          RowDefinitions="Auto,Auto"
+                                          RowSpacing="8"
+                                          BackgroundColor="#F8FFFFFF">
+                                        <Border BackgroundColor="#1220252C" StrokeThickness="0" StrokeShape="RoundRectangle 14" Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="TAG / TYPE" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                                <Label x:Name="InspectModalTagLabel" Text="-" FontFamily="Consolas" FontSize="13" TextColor="#18252C" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                        <Border Grid.Column="1" BackgroundColor="#1220252C" StrokeThickness="0" StrokeShape="RoundRectangle 14" Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="POSITION" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                                <Label x:Name="InspectModalRectLabel" Text="-" FontFamily="Consolas" FontSize="13" TextColor="#18252C" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                        <Border Grid.Row="1" BackgroundColor="#1220252C" StrokeThickness="0" StrokeShape="RoundRectangle 14" Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="IDENTITY" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                                <Label x:Name="InspectModalIdentityLabel" Text="-" FontFamily="Consolas" FontSize="13" TextColor="#18252C" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                        <Border Grid.Row="1" Grid.Column="1" BackgroundColor="#1220252C" StrokeThickness="0" StrokeShape="RoundRectangle 14" Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="LINK / ROLE" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                                <Label x:Name="InspectModalMetaLabel" Text="-" FontFamily="Consolas" FontSize="13" TextColor="#18252C" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </Grid>
+
+                                    <ScrollView Grid.Row="2"
+                                                Orientation="Vertical">
+                                        <VerticalStackLayout Spacing="12"
+                                                             Padding="18,16,18,18">
+                                            <Label Text="Preview"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="12"
+                                                   TextColor="#667882" />
+                                            <Border BackgroundColor="#EFFFFFFF"
+                                                    Stroke="#12142324"
+                                                    StrokeThickness="1"
+                                                    StrokeShape="RoundRectangle 14"
+                                                    Padding="12">
+                                                <Label x:Name="InspectModalPreviewLabel"
+                                                       Text="-"
+                                                       FontFamily="Consolas"
+                                                       FontSize="12"
+                                                       TextColor="#30464F"
+                                                       LineBreakMode="WordWrap" />
+                                            </Border>
+
+                                            <Label Text="DOM Path"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="12"
+                                                   TextColor="#667882" />
+                                            <Border BackgroundColor="#EFFFFFFF"
+                                                    Stroke="#12142324"
+                                                    StrokeThickness="1"
+                                                    StrokeShape="RoundRectangle 14"
+                                                    Padding="12">
+                                                <Label x:Name="InspectModalDomPathLabel"
+                                                       Text="-"
+                                                       FontFamily="Consolas"
+                                                       FontSize="12"
+                                                       TextColor="#30464F"
+                                                       LineBreakMode="WordWrap" />
+                                            </Border>
+                                        </VerticalStackLayout>
+                                    </ScrollView>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Grid>
+
+                    <Grid x:Name="NetworkWorkspacePanel"
+                          IsVisible="False"
+                          RowDefinitions="Auto,*"
+                          RowSpacing="0">
+                        <Border Margin="12,0,12,0"
+                                Padding="12"
+                                BackgroundColor="#ADFFFFFF"
+                                Stroke="#14142324"
+                                StrokeThickness="1"
+                                StrokeShape="RoundRectangle 0,0,0,0">
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto"
+                                  ColumnSpacing="8">
+                                <Button Grid.Column="0"
+                                        x:Name="NetworkCaptureToolbarToggleButton"
+                                        Text="Capture OFF"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="12"
+                                        Padding="14,9"
+                                        CornerRadius="12"
+                                        BackgroundColor="#1220252C"
+                                        TextColor="#50656F"
+                                        Clicked="OnWebViewNetworkCaptureToggleClicked" />
+                                <Button Grid.Column="1"
+                                        x:Name="NetworkClearButton"
+                                        Text="Clear"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="12"
+                                        Padding="14,9"
+                                        CornerRadius="12"
+                                        BackgroundColor="#1220252C"
+                                        TextColor="#50656F"
+                                        Clicked="OnNetworkClearClicked" />
+                                <Label Grid.Column="2"
+                                       Text="Request / Response"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="13"
+                                       FontAttributes="Bold"
+                                       TextColor="#18252C"
+                                       VerticalOptions="Center" />
+                                <Button Grid.Column="3"
+                                        x:Name="NetworkAnalysisScopeButton"
+                                        Text="범위: 선택"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="12"
+                                        Padding="12,9"
+                                        CornerRadius="12"
+                                        BackgroundColor="#EEF3F6"
+                                        TextColor="#31474F"
+                                        Clicked="OnNetworkAnalysisScopeClicked" />
+                                <Button Grid.Column="4"
+                                        x:Name="NetworkAnalysisDetailButton"
+                                        Text="상세: 요약"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="12"
+                                        Padding="12,9"
+                                        CornerRadius="12"
+                                        BackgroundColor="#EEF3F6"
+                                        TextColor="#31474F"
+                                        Clicked="OnNetworkAnalysisDetailClicked" />
+                                <Button Grid.Column="5"
+                                        x:Name="NetworkAnalyzeWithCodexButton"
+                                        Text="Codex 분석"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="12"
+                                        Padding="14,9"
+                                        CornerRadius="12"
+                                        BackgroundColor="#1F6780"
+                                        TextColor="#FFFFFF"
+                                        Clicked="OnNetworkAnalyzeWithCodexClicked" />
+                                <Border Grid.Column="6"
+                                        HeightRequest="40"
+                                        BackgroundColor="#D1FFFFFF"
+                                        Stroke="#1420252C"
+                                        StrokeThickness="1"
+                                        StrokeShape="RoundRectangle 12">
+                                    <Label Margin="12,0"
+                                           Text="all sessions"
+                                           FontFamily="Bahnschrift"
+                                           FontSize="14"
+                                           TextColor="#6D8088"
+                                           VerticalOptions="Center" />
+                                </Border>
+                                <Label Grid.Column="7"
+                                       x:Name="NetworkCountLabel"
+                                       Text="0 items"
+                                       FontFamily="Bahnschrift"
+                                       FontSize="12"
+                                       TextColor="#667882"
+                                       VerticalOptions="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Grid Grid.Row="1"
+                              Margin="12,12,12,12"
+                              x:Name="ChatSplitGrid"
+                              ColumnDefinitions="1.15*,0.85*"
+                              ColumnSpacing="12">
+                            <Border x:Name="NetworkPane"
+                                    BackgroundColor="#9FFFFFFF"
+                                    Stroke="#1418252C"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 24">
+                                <Grid RowDefinitions="Auto,Auto,*"
+                                      RowSpacing="0">
+                                    <Grid Padding="14,12"
+                                          ColumnDefinitions="*,Auto"
+                                          BackgroundColor="#B8FFFFFF">
+                                        <Label Text="Sessions"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="14"
+                                               FontAttributes="Bold"
+                                               TextColor="#18252C" />
+                                        <Label Grid.Column="1"
+                                               Text="latest first"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="12"
+                                               TextColor="#667882"
+                                               VerticalOptions="Center" />
+                                    </Grid>
+
+                                    <Grid Grid.Row="1"
+                                          Padding="14,0"
+                                          HeightRequest="38"
+                                          ColumnDefinitions="52,74,72,*,68,68"
+                                          ColumnSpacing="10"
+                                          BackgroundColor="#0A18252C">
+                                        <Label Grid.Column="0" Text="#" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" />
+                                        <Label Grid.Column="1" Text="Status" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" />
+                                        <Label Grid.Column="2" Text="Method" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" />
+                                        <Label Grid.Column="3" Text="Host / Path" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" VerticalTextAlignment="Center" />
+                                        <Label Grid.Column="4" Text="Size" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" HorizontalTextAlignment="End" VerticalTextAlignment="Center" />
+                                        <Label Grid.Column="5" Text="Time" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" HorizontalTextAlignment="End" VerticalTextAlignment="Center" />
+                                    </Grid>
+
+                                    <CollectionView Grid.Row="2"
+                                                    x:Name="WebViewNetworkListView"
+                                                    SelectionMode="Single"
+                                                    SelectionChanged="OnWebViewNetworkSelectionChanged"
+                                                    Focused="OnWebViewNetworkListFocused"
+                                                    Unfocused="OnWebViewNetworkListUnfocused"
+                                                    VerticalScrollBarVisibility="Default"
+                                                    BackgroundColor="#70FFFFFF">
+                                        <CollectionView.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Padding="14,0"
+                                                      HeightRequest="46"
+                                                      ColumnDefinitions="52,74,72,*,68,68"
+                                                      ColumnSpacing="10">
+                                                    <Label Grid.Column="0"
+                                                           Text="{Binding IndexDisplay}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           TextColor="#60717A"
+                                                           HorizontalTextAlignment="Center"
+                                                           VerticalTextAlignment="Center" />
+                                                    <Label Grid.Column="1"
+                                                           Text="{Binding StatusDisplay}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           TextColor="{Binding StatusColor}"
+                                                           HorizontalTextAlignment="Center"
+                                                           VerticalTextAlignment="Center" />
+                                                    <Label Grid.Column="2"
+                                                           Text="{Binding MethodDisplay}"
+                                                           FontFamily="Bahnschrift"
+                                                           FontAttributes="Bold"
+                                                           FontSize="12"
+                                                           TextColor="#1C6780"
+                                                           HorizontalTextAlignment="Center"
+                                                           VerticalTextAlignment="Center" />
+                                                    <Grid Grid.Column="3"
+                                                          RowDefinitions="Auto,Auto"
+                                                          RowSpacing="1"
+                                                          VerticalOptions="Center">
+                                                        <Label Grid.Row="0"
+                                                               Text="{Binding HostDisplay}"
+                                                               FontFamily="Bahnschrift"
+                                                               FontSize="12"
+                                                               TextColor="#18252C"
+                                                               LineBreakMode="TailTruncation"
+                                                               MaxLines="1" />
+                                                        <Label Grid.Row="1"
+                                                               Text="{Binding PathDisplay}"
+                                                               FontFamily="Consolas"
+                                                               FontSize="10"
+                                                               TextColor="#71858E"
+                                                               LineBreakMode="TailTruncation"
+                                                               MaxLines="1" />
+                                                    </Grid>
+                                                    <Label Grid.Column="4"
+                                                           Text="{Binding SizeDisplay}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           TextColor="#60717A"
+                                                           HorizontalTextAlignment="End"
+                                                           VerticalTextAlignment="Center" />
+                                                    <Label Grid.Column="5"
+                                                           Text="{Binding TimeDisplay}"
+                                                           FontFamily="Consolas"
+                                                           FontSize="11"
+                                                           TextColor="#60717A"
+                                                           HorizontalTextAlignment="End"
+                                                           VerticalTextAlignment="Center" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </CollectionView.ItemTemplate>
+                                    </CollectionView>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="1"
+                                    BackgroundColor="#9FFFFFFF"
+                                    Stroke="#1418252C"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 24">
+                                <Grid RowDefinitions="Auto,Auto,Auto,*"
+                                      RowSpacing="0">
+                                    <Grid Padding="14,12"
+                                          ColumnDefinitions="*,Auto"
+                                          BackgroundColor="#B8FFFFFF">
+                                        <Label x:Name="SelectedNetworkSummaryLabel"
+                                               Text="선택된 요청 없음"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="13"
+                                               FontAttributes="Bold"
+                                               TextColor="#1D3440"
                                                LineBreakMode="TailTruncation"
                                                MaxLines="2" />
                                     </Grid>
-                                </DataTemplate>
-                            </CollectionView.ItemTemplate>
-                        </CollectionView>
-                        <Label Grid.Row="2"
-                               Text="Request"
-                               FontSize="11"
-                               FontAttributes="Bold"
-                               TextColor="#1D5C74" />
-                        <Border Grid.Row="3"
-                                BackgroundColor="#FFFFFF"
-                                Stroke="#D8E8EF"
-                                StrokeThickness="1"
-                                StrokeShape="RoundRectangle 8"
-                                HeightRequest="120">
-                            <ScrollView Orientation="Vertical"
-                                        VerticalScrollBarVisibility="Always">
-                                <Label x:Name="WebViewNetworkRequestHeadersLabel"
-                                       Margin="8,6"
-                                       FontFamily="Consolas"
-                                       FontSize="11"
-                                       TextColor="#14313A"
-                                       LineBreakMode="CharacterWrap"
-                                       Text="Request headers" />
-                            </ScrollView>
-                        </Border>
-                        <Border Grid.Row="4"
-                                BackgroundColor="#F9FCFE"
-                                Stroke="#D8E8EF"
-                                StrokeThickness="1"
-                                StrokeShape="RoundRectangle 8"
-                                HeightRequest="130">
-                            <ScrollView Orientation="Vertical"
-                                        VerticalScrollBarVisibility="Always">
-                                <Label x:Name="WebViewNetworkRequestBodyLabel"
-                                       Margin="8,6"
-                                       FontFamily="Consolas"
-                                       FontSize="11"
-                                       TextColor="#14313A"
-                                       LineBreakMode="CharacterWrap"
-                                       Text="Request body" />
-                            </ScrollView>
-                        </Border>
-                        <Label Grid.Row="5"
-                               Text="Response"
-                               FontSize="11"
-                               FontAttributes="Bold"
-                               TextColor="#1D5C74" />
-                        <Border Grid.Row="6"
-                                BackgroundColor="#FFFFFF"
-                                Stroke="#D8E8EF"
-                                StrokeThickness="1"
-                                StrokeShape="RoundRectangle 8"
-                                HeightRequest="120">
-                            <ScrollView Orientation="Vertical"
-                                        VerticalScrollBarVisibility="Always">
-                                <Label x:Name="WebViewNetworkResponseHeadersLabel"
-                                       Margin="8,6"
-                                       FontFamily="Consolas"
-                                       FontSize="11"
-                                       TextColor="#14313A"
-                                       LineBreakMode="CharacterWrap"
-                                       Text="Response headers" />
-                            </ScrollView>
-                        </Border>
-                        <Border Grid.Row="7"
-                                BackgroundColor="#F9FCFE"
-                                Stroke="#D8E8EF"
-                                StrokeThickness="1"
-                                StrokeShape="RoundRectangle 8"
-                                HeightRequest="130">
-                            <ScrollView Orientation="Vertical"
-                                        VerticalScrollBarVisibility="Always">
-                                <Label x:Name="WebViewNetworkResponseBodyLabel"
-                                       Margin="8,6"
-                                       FontFamily="Consolas"
-                                       FontSize="11"
-                                       TextColor="#14313A"
-                                       LineBreakMode="CharacterWrap"
-                                       Text="Response body" />
-                            </ScrollView>
-                        </Border>
+
+                                    <Grid Grid.Row="1"
+                                          Padding="12"
+                                          ColumnDefinitions="*,*"
+                                          ColumnSpacing="8"
+                                          RowDefinitions="Auto,Auto"
+                                          RowSpacing="8"
+                                          BackgroundColor="#AAFFFFFF">
+                                        <Border BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 14"
+                                                Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="METHOD"
+                                                       FontFamily="Bahnschrift"
+                                                       FontSize="11"
+                                                       TextColor="#667882" />
+                                                <Label x:Name="SelectedNetworkMethodLabel"
+                                                       Text="-"
+                                                       FontFamily="Consolas"
+                                                       FontSize="13"
+                                                       TextColor="#18252C" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                        <Border Grid.Column="1"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 14"
+                                                Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="STATUS"
+                                                       FontFamily="Bahnschrift"
+                                                       FontSize="11"
+                                                       TextColor="#667882" />
+                                                <Label x:Name="SelectedNetworkStatusLabel"
+                                                       Text="-"
+                                                       FontFamily="Consolas"
+                                                       FontSize="13"
+                                                       TextColor="#1C6780" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                        <Border Grid.Row="1"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 14"
+                                                Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="SIZE"
+                                                       FontFamily="Bahnschrift"
+                                                       FontSize="11"
+                                                       TextColor="#667882" />
+                                                <Label x:Name="SelectedNetworkSizeLabel"
+                                                       Text="-"
+                                                       FontFamily="Consolas"
+                                                       FontSize="13"
+                                                       TextColor="#18252C" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                        <Border Grid.Row="1"
+                                                Grid.Column="1"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 14"
+                                                Padding="10,9">
+                                            <VerticalStackLayout Spacing="4">
+                                                <Label Text="TIME"
+                                                       FontFamily="Bahnschrift"
+                                                       FontSize="11"
+                                                       TextColor="#667882" />
+                                                <Label x:Name="SelectedNetworkTimeLabel"
+                                                       Text="-"
+                                                       FontFamily="Consolas"
+                                                       FontSize="13"
+                                                       TextColor="#18252C" />
+                                            </VerticalStackLayout>
+                                        </Border>
+                                    </Grid>
+
+                                    <Grid Grid.Row="2"
+                                          Padding="10,10,10,0"
+                                          ColumnDefinitions="Auto,Auto,Auto,Auto"
+                                          ColumnSpacing="4"
+                                          BackgroundColor="#84FFFFFF">
+                                        <Border BackgroundColor="#D6FFFFFF"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 12,12,0,0"
+                                                Padding="12,9">
+                                            <Label Text="Headers"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#18252C" />
+                                        </Border>
+                                        <Border Grid.Column="1"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 12,12,0,0"
+                                                Padding="12,9">
+                                            <Label Text="Raw"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   TextColor="#667882" />
+                                        </Border>
+                                        <Border Grid.Column="2"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 12,12,0,0"
+                                                Padding="12,9">
+                                            <Label Text="JSON"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   TextColor="#667882" />
+                                        </Border>
+                                        <Border Grid.Column="3"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 12,12,0,0"
+                                                Padding="12,9">
+                                            <Label Text="Timeline"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   TextColor="#667882" />
+                                        </Border>
+                                    </Grid>
+
+                                    <ScrollView Grid.Row="3"
+                                                Orientation="Vertical">
+                                        <VerticalStackLayout Spacing="12"
+                                                             Padding="12">
+                                            <Label Text="Request Headers" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="120">
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Tapped="OnRequestHeadersPanelTapped" />
+                                                </Border.GestureRecognizers>
+                                                <ScrollView Orientation="Vertical" x:Name="WebViewNetworkRequestHeadersScrollView" VerticalScrollBarVisibility="Default">
+                                                    <Label x:Name="WebViewNetworkRequestHeadersLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Request headers" />
+                                                </ScrollView>
+                                            </Border>
+
+                                            <Label Text="Request Body" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="120">
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Tapped="OnRequestBodyPanelTapped" />
+                                                </Border.GestureRecognizers>
+                                                <ScrollView Orientation="Vertical" x:Name="WebViewNetworkRequestBodyScrollView" VerticalScrollBarVisibility="Default">
+                                                    <Label x:Name="WebViewNetworkRequestBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Request body" />
+                                                </ScrollView>
+                                            </Border>
+
+                                            <Label Text="Response Headers" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="120">
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Tapped="OnResponseHeadersPanelTapped" />
+                                                </Border.GestureRecognizers>
+                                                <ScrollView Orientation="Vertical" x:Name="WebViewNetworkResponseHeadersScrollView" VerticalScrollBarVisibility="Default">
+                                                    <Label x:Name="WebViewNetworkResponseHeadersLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response headers" />
+                                                </ScrollView>
+                                            </Border>
+
+                                            <Label Text="Response Body" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="140">
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Tapped="OnResponseBodyPanelTapped" />
+                                                </Border.GestureRecognizers>
+                                                <ScrollView Orientation="Vertical" x:Name="WebViewNetworkResponseBodyScrollView" VerticalScrollBarVisibility="Default">
+                                                    <Label x:Name="WebViewNetworkResponseBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response body" />
+                                                </ScrollView>
+                                            </Border>
+                                        </VerticalStackLayout>
+                                    </ScrollView>
+                                </Grid>
+                            </Border>
+                        </Grid>
                     </Grid>
-                </Border>
-                <ContentView Grid.Column="1"
-                             x:Name="RightResizeHandle"
-                             BackgroundColor="Transparent"
-                             SemanticProperties.Description="Drag to resize the network panel and chat panel.">
-                    <BoxView x:Name="RightResizeHandleGrip"
-                             BackgroundColor="#D0DEE5"
-                             WidthRequest="4"
-                             HorizontalOptions="Center"
-                             VerticalOptions="Fill" />
-                </ContentView>
-                <Border Grid.Column="2"
-                        x:Name="CodexPane"
-                        BackgroundColor="#FFFCF5"
-                        Stroke="#14202414"
-                        StrokeThickness="0"
-                        StrokeShape="Rectangle">
-                    <BlazorWebView x:Name="blazorWebView"
-                                   HostPage="wwwroot/index.html">
-                        <BlazorWebView.RootComponents>
-                            <RootComponent Selector="#app" ComponentType="{x:Type components:Routes}" />
-                        </BlazorWebView.RootComponents>
-                    </BlazorWebView>
-                </Border>
+                </Grid>
             </Grid>
         </Border>
+
+        <Grid IsVisible="False"
+              HeightRequest="0"
+              ColumnDefinitions="Auto,Auto"
+              ColumnSpacing="0">
+            <ContentView Grid.Column="0"
+                         x:Name="ResizeHandle"
+                         BackgroundColor="Transparent">
+                <BoxView x:Name="ResizeHandleGrip"
+                         BackgroundColor="#B0BEC5"
+                         WidthRequest="6"
+                         HorizontalOptions="Center"
+                         VerticalOptions="Fill" />
+            </ContentView>
+            <ContentView Grid.Column="1"
+                         x:Name="RightResizeHandle"
+                         BackgroundColor="Transparent">
+                <BoxView x:Name="RightResizeHandleGrip"
+                         BackgroundColor="#D0DEE5"
+                         WidthRequest="4"
+                         HorizontalOptions="Center"
+                         VerticalOptions="Fill" />
+            </ContentView>
+        </Grid>
     </Grid>
 </ContentPage>
-

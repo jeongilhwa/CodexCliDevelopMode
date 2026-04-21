@@ -6,5 +6,4 @@ public sealed record CodexChatRequest(
     string CommandPath,
     string? Model,
     string? ThreadId,
-    bool AllowWorkspaceWrite,
-    bool IncludeCompletedChatsContext = true);
+    bool AllowWorkspaceWrite);

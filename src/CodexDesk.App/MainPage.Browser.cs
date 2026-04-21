@@ -154,14 +154,19 @@ public partial class MainPage : ContentPage
             var separatorIndex = payload.IndexOf('|');
             var action = separatorIndex < 0 ? payload : payload[..separatorIndex];
             var details = separatorIndex < 0 ? string.Empty : payload[(separatorIndex + 1)..];
+            if (action is "selected" or "applied")
+            {
+                _lastInspectorSelection = ParseInspectorSelection(details);
+            }
+
             var status = action switch
             {
-                "enabled" => "Developer inspect mode enabled.",
-                "disabled" => "Developer inspect mode disabled.",
-                "selected" => BuildInspectorSelectedStatus(details),
-                "applied" => $"Applied click: {BuildInspectorSelectedStatus(details)}",
+                "enabled" => "Focus mode enabled.",
+                "disabled" => "Focus mode disabled.",
+                "selected" => "Element locked. Press Inspect to view details.",
+                "applied" => "Element action applied.",
                 "unlocked" => string.Empty,
-                "escape" => "Inspector selection canceled (Esc).",
+                "escape" => "Focus selection cleared (Esc).",
                 _ => $"Inspector event: {action}"
             };
 
@@ -288,7 +293,7 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private static (string Summary, string RequestDetails, string ResponseDetails) BuildNetworkStatusLine(
+    private WebViewNetworkLogEntry BuildNetworkStatusLine(
         string channel,
         string method,
         string url,
@@ -300,7 +305,8 @@ public partial class MainPage : ContentPage
         string? responseBodyPreview,
         string? statusText = null,
         string? resourceType = null,
-        string? mimeType = null)
+        string? mimeType = null,
+        double encodedDataLength = 0d)
     {
         var statusCode = status.HasValue ? status.Value.ToString(CultureInfo.InvariantCulture) : "-";
         var durationText = durationMs.HasValue ? $"{durationMs.Value:0.0}ms" : "-";
@@ -318,7 +324,16 @@ public partial class MainPage : ContentPage
         var summary = $"[{timestamp}] [{channel}] {method} {statusCode} {durationText} {shortUrl}";
         var request = $"URL: {shortUrl}\nTYPE: {resource}\nMIME: {mime}\nHEADERS:\n{reqHeaders}\nBODY: {reqBody}";
         var response = $"STATUS: {statusCode} ({statusMessage})\nDURATION: {durationText}\nHEADERS:\n{resHeaders}\nBODY: {resBody}";
-        return (summary, request, response);
+        return BuildWebViewNetworkEntry(
+            _webViewNetworkEntries.Count + 1,
+            summary,
+            request,
+            response,
+            method,
+            url,
+            status,
+            durationMs,
+            encodedDataLength);
     }
 
     private static string NormalizeStatusMessage(int? status, string? statusText)
@@ -349,17 +364,18 @@ public partial class MainPage : ContentPage
         try
         {
             _webViewInspectorModeEnabled = !_webViewInspectorModeEnabled;
+            UpdateBrowserFocusButton();
             UpdateWebViewInspectorToggleButton();
             await ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
             _naverTalkBrowser.SetStatus(
                 _webViewInspectorModeEnabled
-                    ? "Developer inspect mode turned on."
-                    : "Developer inspect mode turned off.",
+                    ? "Focus mode turned on."
+                    : "Focus mode turned off.",
                 _naverTalkBrowser.CurrentUrl);
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Developer inspect toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _naverTalkBrowser.SetStatus($"Focus mode toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
         }
     }
 
@@ -583,6 +599,17 @@ public partial class MainPage : ContentPage
                         return;
                     }
 
+                    if (state.locked) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        event.stopImmediatePropagation();
+                        state.locked = false;
+                        state.current = null;
+                        clearUi();
+                        post('unlocked', '');
+                        return;
+                    }
+
                     if ((event.detail || 0) >= 2) {
                         event.preventDefault();
                         event.stopPropagation();
@@ -611,7 +638,7 @@ public partial class MainPage : ContentPage
                     event.stopImmediatePropagation();
 
                     state.current = target;
-                    state.locked = false;
+                    state.locked = true;
                     renderTarget(target, event.clientX, event.clientY);
                     post('selected', JSON.stringify(buildElementSummary(target)));
                 }, true);
@@ -1027,9 +1054,10 @@ public partial class MainPage : ContentPage
                 responseBodyPreview,
                 captured.StatusText,
                 captured.ResourceType,
-                captured.MimeType);
+                captured.MimeType,
+                captured.EncodedDataLength);
 
-            MainThread.BeginInvokeOnMainThread(() => AppendWebViewNetworkEntry(line.Summary, line.RequestDetails, line.ResponseDetails));
+            MainThread.BeginInvokeOnMainThread(() => AppendWebViewNetworkEntry(line));
         }
         catch
         {
@@ -1096,9 +1124,10 @@ public partial class MainPage : ContentPage
                 canceled ? "request canceled" : errorText,
                 errorText,
                 captured?.ResourceType,
-                captured?.MimeType);
+                captured?.MimeType,
+                captured?.EncodedDataLength ?? 0d);
 
-            MainThread.BeginInvokeOnMainThread(() => AppendWebViewNetworkEntry(line.Summary, line.RequestDetails, line.ResponseDetails));
+            MainThread.BeginInvokeOnMainThread(() => AppendWebViewNetworkEntry(line));
         }
         catch
         {
@@ -1223,6 +1252,7 @@ public partial class MainPage : ContentPage
         Loaded -= OnLoaded;
 
         SetupSplitterGesture();
+        ConfigureWindowChrome();
 
 #if WINDOWS
         try

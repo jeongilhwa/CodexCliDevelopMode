@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace Shell Draft</title>
+  <style>
+    :root {
+      --bg-1: #e7eceb;
+      --bg-2: #d8e0e2;
+      --ink: #15242d;
+      --muted: #5a6f79;
+      --line: rgba(21, 36, 45, 0.10);
+      --glass: rgba(255, 250, 245, 0.56);
+      --glass-strong: rgba(255, 252, 248, 0.78);
+      --accent: #1d637b;
+      --accent-warm: #b66c43;
+      --shadow: 0 24px 60px rgba(19, 34, 40, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Bahnschrift", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 12%, rgba(86, 154, 176, 0.18), transparent 26%),
+        radial-gradient(circle at 88% 18%, rgba(194, 139, 94, 0.16), transparent 22%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      overflow: hidden;
+    }
+
+    .canvas {
+      padding: 20px;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 84px minmax(0, 1fr) 340px;
+      gap: 16px;
+    }
+
+    .glass {
+      background: var(--glass);
+      backdrop-filter: blur(18px);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .dock {
+      border-radius: 28px;
+      padding: 14px 10px;
+      display: grid;
+      align-content: start;
+      gap: 10px;
+    }
+
+    .brand {
+      padding: 10px 6px 12px;
+      display: grid;
+      gap: 2px;
+      justify-items: center;
+    }
+
+    .brand .mini {
+      font-size: 11px;
+      letter-spacing: .22em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .brand strong {
+      font-size: 22px;
+      letter-spacing: .1em;
+    }
+
+    .dock-item {
+      padding: 10px 4px;
+      border-radius: 18px;
+      text-align: center;
+      background: transparent;
+      border: 0;
+      color: inherit;
+      display: grid;
+      gap: 6px;
+      cursor: default;
+    }
+
+    .dock-item.active {
+      background: rgba(255,255,255,0.45);
+    }
+
+    .dock-icon {
+      width: 38px;
+      height: 38px;
+      margin: 0 auto;
+      border-radius: 14px;
+      background: rgba(21, 36, 45, 0.08);
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+    }
+
+    .dock-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .main {
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .topbar {
+      border-radius: 26px;
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .meta {
+      display: grid;
+      gap: 3px;
+    }
+
+    .kicker {
+      font-size: 11px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .meta strong {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .pill-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(21, 36, 45, 0.07);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      padding: 9px 14px;
+      border-radius: 999px;
+      border: 0;
+      background: rgba(21, 36, 45, 0.08);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    .chip.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-warm));
+      color: #fff;
+    }
+
+    .workspace {
+      border-radius: 30px;
+      padding: 12px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .tabs {
+      display: flex;
+      align-items: end;
+      gap: 4px;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+      padding: 2px 4px 0;
+    }
+
+    .tab {
+      height: 42px;
+      padding: 0 14px;
+      border-radius: 16px 16px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(21, 36, 45, 0.05);
+      color: #5f747d;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .tab.active {
+      background: var(--glass-strong);
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .busy {
+      color: var(--accent-warm);
+      font-size: 10px;
+    }
+
+    .thread {
+      min-height: 0;
+      overflow: auto;
+      padding: 8px 6px 4px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .msg {
+      border-radius: 20px;
+      padding: 14px 16px;
+      border: 1px solid rgba(21, 36, 45, 0.06);
+      background: rgba(255,255,255,0.74);
+    }
+
+    .msg.user {
+      background: rgba(55, 117, 141, 0.12);
+    }
+
+    .msg.system {
+      background: rgba(182, 108, 67, 0.10);
+    }
+
+    .msg header {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .msg p {
+      margin: 0;
+      line-height: 1.55;
+      font-size: 15px;
+    }
+
+    .macro-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 0 4px;
+    }
+
+    .macro {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(21, 36, 45, 0.08);
+      color: #35505b;
+      font-size: 12px;
+    }
+
+    .composer {
+      border-radius: 24px;
+      background: rgba(255,255,255,0.70);
+      border: 1px solid rgba(21, 36, 45, 0.08);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .input {
+      min-height: 86px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.80);
+      border: 1px solid rgba(21, 36, 45, 0.08);
+      padding: 14px 16px;
+      color: #70838a;
+      line-height: 1.5;
+    }
+
+    .side {
+      border-radius: 30px;
+      padding: 16px;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .side-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+    }
+
+    .close {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      background: rgba(21, 36, 45, 0.08);
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+    }
+
+    .side-note {
+      border-radius: 20px;
+      padding: 12px 14px;
+      background: rgba(21, 36, 45, 0.05);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .form {
+      overflow: auto;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field span {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .box {
+      border-radius: 16px;
+      min-height: 46px;
+      padding: 12px 14px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(21, 36, 45, 0.08);
+      color: #4e656f;
+      font-size: 14px;
+    }
+
+    .caption {
+      position: fixed;
+      left: 20px;
+      right: 20px;
+      bottom: 18px;
+      padding: 12px 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.58);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(21, 36, 45, 0.08);
+      color: #45606b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 1100px) {
+      .canvas {
+        grid-template-columns: 72px minmax(0, 1fr);
+      }
+
+      .side {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        bottom: 72px;
+        width: min(320px, calc(100vw - 110px));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <aside class="dock glass">
+      <div class="brand">
+        <span class="mini">desk</span>
+        <strong>CDX</strong>
+      </div>
+      <button class="dock-item active">
+        <span class="dock-icon">S</span>
+        <span class="dock-label">Session</span>
+      </button>
+      <button class="dock-item">
+        <span class="dock-icon">M</span>
+        <span class="dock-label">Macros</span>
+      </button>
+      <button class="dock-item">
+        <span class="dock-icon">N</span>
+        <span class="dock-label">Naver</span>
+      </button>
+      <button class="dock-item">
+        <span class="dock-icon">T</span>
+        <span class="dock-label">Tools</span>
+      </button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar glass">
+        <div class="meta">
+          <span class="kicker">Workspace</span>
+          <strong>Attached to an existing thread</strong>
+        </div>
+        <div class="pill-row">
+          <span class="pill">3 tabs</span>
+          <span class="pill">blur medium</span>
+        </div>
+        <div class="actions">
+          <button class="chip">Show CMD</button>
+          <button class="chip">New Thread</button>
+          <button class="chip primary">Tools</button>
+        </div>
+      </header>
+
+      <section class="workspace glass">
+        <div class="tabs">
+          <div class="tab active">Prompt optimization <span class="busy">●</span></div>
+          <div class="tab">Naver import flow</div>
+          <div class="tab">Macro clean-up</div>
+          <div class="tab">+</div>
+        </div>
+
+        <div class="thread">
+          <article class="msg user">
+            <header><strong>User</strong><span>15:04:11</span></header>
+            <p>이제는 화면 전체가 작업용 툴처럼 보였으면 좋겠어. 제목은 줄이고 탭이 메인처럼 보이게.</p>
+          </article>
+          <article class="msg">
+            <header><strong>Codex</strong><span>15:04:26</span></header>
+            <p>중앙은 문서 탭처럼 두고, 좌우 기능은 접이식 패널로 이동시키겠습니다. 대화창은 더 불투명하게 두고 주변은 유리층으로 처리합니다.</p>
+          </article>
+          <article class="msg system">
+            <header><strong>Status</strong><span>15:04:27</span></header>
+            <p>Background blur stays visible, but transcript readability remains stable.</p>
+          </article>
+        </div>
+
+        <div class="macro-row">
+          <span class="macro">Bug Analysis Alt+1</span>
+          <span class="macro">Summarize Alt+2</span>
+          <span class="macro">Translate Alt+3</span>
+        </div>
+
+        <div class="composer">
+          <div class="input">질문만 입력하세요. 이 구역은 더 불투명해서 읽기 피로를 줄이는 방향.</div>
+          <div class="actions">
+            <button class="chip primary">Send</button>
+            <button class="chip">Cancel</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="side glass">
+      <div class="side-head">
+        <div class="meta">
+          <span class="kicker">Panel</span>
+          <strong>Session</strong>
+        </div>
+        <div class="close">×</div>
+      </div>
+
+      <div class="side-note">
+        구현 전 초안 기준: 메인 화면은 탭과 대화가 중심이고, 설정은 우측 패널 안으로 정리합니다.
+      </div>
+
+      <div class="form">
+        <label class="field">
+          <span>Workspace Path</span>
+          <div class="box">D:\Users\ss1\Desktop\CodexCliDevelopMode</div>
+        </label>
+        <label class="field">
+          <span>Model</span>
+          <div class="box">gpt-5.x / codex</div>
+        </label>
+        <label class="field">
+          <span>Run Mode</span>
+          <div class="box">workspace-write enabled</div>
+        </label>
+        <label class="field">
+          <span>Collection Status</span>
+          <div class="box">74 / 120 synced</div>
+        </label>
+      </div>
+    </aside>
+  </div>
+
+  <div class="caption">
+    초안 목적: 구현 전에 “어디를 빼고, 어디를 옆으로 보내고, 탭을 얼마나 중심에 둘지”를 한 화면에서 보는 용도.
+  </div>
+</body>
+</html>

@@ -113,8 +113,6 @@ public sealed class CompletedChatsCollectorTests
         var savedPayload = JsonNode.Parse(await File.ReadAllTextAsync(result.OutputPath))!.AsObject();
         savedPayload["exportedChats"]!.GetValue<int>().Should().Be(1);
         savedPayload["chats"]!.AsArray().Should().HaveCount(1);
-        var threadProjectionPath = Path.Combine(tempDirectory.Path, "completed-chat-threads.jsonl");
-        File.Exists(threadProjectionPath).Should().BeTrue();
         session.LoadDetailCalls.Should().Be(1);
     }
 

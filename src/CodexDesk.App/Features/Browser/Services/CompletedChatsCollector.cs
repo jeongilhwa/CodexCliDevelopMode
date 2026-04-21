@@ -304,7 +304,6 @@ public sealed class CompletedChatsCollector
             existing.Root["errors"] ??= new JsonArray();
 
             await File.WriteAllTextAsync(exportPath, existing.Root.ToJsonString(CollectionJsonOptions), cancellationToken);
-            await TryConvertToCompletedChatThreadsJsonlAsync(exportPath, debugInfo, cancellationToken);
 
             var completedStatus = $"Collected {insertedCount} new chats. Review the result and press Save to apply it.";
             _naverTalkBrowser.CompleteCompletedChatsCollection(
@@ -555,38 +554,6 @@ public sealed class CompletedChatsCollector
                    (detail.InfoRows?.Count ?? 0) > 0 ||
                    !string.IsNullOrWhiteSpace(detail.HeaderText) ||
                    !string.IsNullOrWhiteSpace(detail.PageTitle));
-    }
-
-    /// <summary>
-    /// 방금 저장한 completed-chats 계열 JSON을 같은 폴더의 completed-chat-threads.jsonl로 투영합니다.
-    /// 변환 실패는 수집 전체 실패로 보지 않고 debug payload에만 남겨 후속 점검이 가능하게 합니다.
-    /// </summary>
-    private static async Task TryConvertToCompletedChatThreadsJsonlAsync(
-        string completedChatsPath,
-        JsonObject debugInfo,
-        CancellationToken cancellationToken)
-    {
-        var outputDirectory = Path.GetDirectoryName(completedChatsPath);
-        var threadsPath = Path.Combine(
-            string.IsNullOrWhiteSpace(outputDirectory) ? AppContext.BaseDirectory : outputDirectory,
-            "completed-chat-threads.jsonl");
-
-        try
-        {
-            await CompletedChatThreadsJsonlConverter.ConvertFromCompletedChatsJsonAsync(
-                completedChatsPath,
-                threadsPath,
-                cancellationToken);
-
-            debugInfo["threadProjectionPath"] = threadsPath;
-            debugInfo["threadProjectionSucceeded"] = true;
-        }
-        catch (Exception ex)
-        {
-            debugInfo["threadProjectionPath"] = threadsPath;
-            debugInfo["threadProjectionSucceeded"] = false;
-            debugInfo["threadProjectionError"] = ex.Message;
-        }
     }
 
     /// <summary>

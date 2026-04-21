@@ -213,14 +213,6 @@ public sealed class CodexInteractiveChatService
         CodexApprovalRequest? pendingApproval = null;
 
         var actualPrompt = request.Prompt;
-        if (request.IncludeCompletedChatsContext)
-        {
-            var contextPrompt = TryBuildContextPrompt(request.Prompt);
-            if (!string.IsNullOrWhiteSpace(contextPrompt))
-            {
-                actualPrompt = contextPrompt;
-            }
-        }
 
         try
         {
@@ -575,10 +567,6 @@ public sealed class CodexInteractiveChatService
         return null;
     }
 
-    private static string? TryBuildContextPrompt(string userPrompt)
-    {
-        return ChatThreadsContextPromptBuilder.TryBuildPrompt(userPrompt);
-    }
 }
 
 

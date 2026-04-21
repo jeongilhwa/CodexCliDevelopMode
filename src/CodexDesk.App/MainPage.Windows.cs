@@ -9,10 +9,176 @@ using System.Runtime.InteropServices;
 #if WINDOWS
 using Microsoft.Web.WebView2.Core;
 using UI = Microsoft.UI.Xaml;
+using Microsoft.UI.Windowing;
+using WinColor = Windows.UI.Color;
 #endif
 
 public partial class MainPage : ContentPage
 {
+#if WINDOWS
+    private void ConfigureWindowChrome()
+    {
+        if (_windowChromeConfigured)
+        {
+            return;
+        }
+
+        if (!TryGetNativeWindow(out var nativeWindow))
+        {
+            return;
+        }
+
+        if (WindowDragRegion?.Handler?.PlatformView is not UI.FrameworkElement dragRegion)
+        {
+            WindowDragRegion?.HandlerChanged += OnWindowDragRegionHandlerChanged;
+            return;
+        }
+
+        _windowChromeConfigured = true;
+        WindowDragRegion.HandlerChanged -= OnWindowDragRegionHandlerChanged;
+
+        nativeWindow.ExtendsContentIntoTitleBar = true;
+        nativeWindow.SetTitleBar(dragRegion);
+        nativeWindow.Title = string.Empty;
+
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
+        TryApplyRoundedWindowCorners(hwnd);
+
+        if (!TryGetAppWindow(nativeWindow, out var appWindow))
+        {
+            return;
+        }
+
+        if (AppWindowTitleBar.IsCustomizationSupported())
+        {
+            appWindow.TitleBar.ExtendsContentIntoTitleBar = true;
+            ApplyTitleBarButtonColors(appWindow.TitleBar);
+        }
+    }
+
+    private void OnWindowMinimizeClicked(object? sender, EventArgs e)
+    {
+        if (!TryGetCurrentAppWindow(out var appWindow) ||
+            appWindow.Presenter is not OverlappedPresenter presenter)
+        {
+            return;
+        }
+
+        presenter.Minimize();
+    }
+
+    private void OnWindowMaximizeRestoreClicked(object? sender, EventArgs e)
+    {
+        if (!TryGetCurrentAppWindow(out var appWindow) ||
+            appWindow.Presenter is not OverlappedPresenter presenter)
+        {
+            return;
+        }
+
+        if (presenter.State == OverlappedPresenterState.Maximized)
+        {
+            presenter.Restore();
+            return;
+        }
+
+        presenter.Maximize();
+    }
+
+    private void OnWindowCloseClicked(object? sender, EventArgs e)
+    {
+        Application.Current?.Quit();
+    }
+
+    private void OnWindowDragRegionHandlerChanged(object? sender, EventArgs e)
+    {
+        ConfigureWindowChrome();
+    }
+
+    private static bool TryGetNativeWindow(out UI.Window nativeWindow)
+    {
+        if (Application.Current?.Windows.FirstOrDefault()?.Handler?.PlatformView is UI.Window window)
+        {
+            nativeWindow = window;
+            return true;
+        }
+
+        nativeWindow = null!;
+        return false;
+    }
+
+    private static bool TryGetCurrentAppWindow(out AppWindow appWindow)
+    {
+        if (TryGetNativeWindow(out var nativeWindow) &&
+            TryGetAppWindow(nativeWindow, out appWindow))
+        {
+            return true;
+        }
+
+        appWindow = null!;
+        return false;
+    }
+
+    private static bool TryGetAppWindow(UI.Window nativeWindow, out AppWindow appWindow)
+    {
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
+        if (hwnd == IntPtr.Zero)
+        {
+            appWindow = null!;
+            return false;
+        }
+
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
+        appWindow = AppWindow.GetFromWindowId(windowId);
+        return appWindow is not null;
+    }
+
+    private static void ApplyTitleBarButtonColors(AppWindowTitleBar titleBar)
+    {
+        var transparent = WinColor.FromArgb(0, 0, 0, 0);
+        var text = WinColor.FromArgb(255, 49, 66, 74);
+        var hover = WinColor.FromArgb(28, 20, 35, 43);
+        var pressed = WinColor.FromArgb(44, 20, 35, 43);
+
+        titleBar.BackgroundColor = transparent;
+        titleBar.ForegroundColor = text;
+        titleBar.InactiveBackgroundColor = transparent;
+        titleBar.InactiveForegroundColor = WinColor.FromArgb(255, 92, 112, 120);
+        titleBar.ButtonBackgroundColor = transparent;
+        titleBar.ButtonForegroundColor = text;
+        titleBar.ButtonHoverBackgroundColor = hover;
+        titleBar.ButtonHoverForegroundColor = text;
+        titleBar.ButtonPressedBackgroundColor = pressed;
+        titleBar.ButtonPressedForegroundColor = text;
+        titleBar.ButtonInactiveBackgroundColor = transparent;
+        titleBar.ButtonInactiveForegroundColor = WinColor.FromArgb(255, 120, 136, 142);
+    }
+
+    private static void TryApplyRoundedWindowCorners(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000))
+        {
+            return;
+        }
+
+        var cornerPreference = DwmWindowCornerPreferenceRound;
+        _ = DwmSetWindowAttribute(
+            hwnd,
+            DwmWindowAttributeWindowCornerPreference,
+            ref cornerPreference,
+            sizeof(int));
+    }
+
+    private const int DwmWindowAttributeWindowCornerPreference = 33;
+    private const int DwmWindowCornerPreferenceRound = 2;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int dwAttribute,
+        ref int pvAttribute,
+        int cbAttribute);
+#endif
+
     private async Task PersistCookieLoginSessionAsync()
     {
 #if WINDOWS

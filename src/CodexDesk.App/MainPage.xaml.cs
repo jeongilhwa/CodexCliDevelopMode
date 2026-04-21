@@ -47,11 +47,82 @@ public partial class MainPage : ContentPage
     private static readonly Color SplitterActiveColor = Color.FromArgb("#1D5C74");
     private readonly ObservableCollection<WebViewNetworkLogEntry> _webViewNetworkEntries = [];
     private const int MaxWebViewNetworkEntries = 120;
-    private sealed record WebViewNetworkLogEntry(string Summary, string RequestDetails, string ResponseDetails);
+    private const int MaxNetworkAnalysisPromptLength = 52000;
+    private NetworkAnalysisScope _networkAnalysisScope = NetworkAnalysisScope.Selected;
+    private NetworkAnalysisDetailMode _networkAnalysisDetailMode = NetworkAnalysisDetailMode.Summary;
+    private WorkspaceTab _activeWorkspaceTab = WorkspaceTab.Codex;
+    private InspectorSelectionSnapshot? _lastInspectorSelection;
+
+    private enum WorkspaceTab
+    {
+        Codex,
+        WebBrowser,
+        NetworkCapture
+    }
+
+    private enum NetworkScrollTarget
+    {
+        None,
+        LogList,
+        RequestHeaders,
+        RequestBody,
+        ResponseHeaders,
+        ResponseBody
+    }
+
+    private enum NetworkAnalysisScope
+    {
+        Selected,
+        All
+    }
+
+    private enum NetworkAnalysisDetailMode
+    {
+        Summary,
+        ErrorsDetailed,
+        FullDetailed
+    }
+
+    private sealed record WebViewNetworkLogEntry(
+        int Sequence,
+        string Summary,
+        string RequestDetails,
+        string ResponseDetails,
+        string StatusDisplay,
+        Color StatusColor,
+        string MethodDisplay,
+        string HostDisplay,
+        string PathDisplay,
+        string SizeDisplay,
+        string TimeDisplay)
+    {
+        public string IndexDisplay => Sequence.ToString("D3", CultureInfo.InvariantCulture);
+    }
+
+    private sealed record InspectorSelectionSnapshot(
+        string Selector,
+        string Tag,
+        string ElementId,
+        string Name,
+        string ClassName,
+        string Role,
+        string InputType,
+        string AriaLabel,
+        string Placeholder,
+        string ValuePreview,
+        string TextPreview,
+        string Href,
+        string DomPath,
+        double Left,
+        double Top,
+        double Width,
+        double Height,
+        string RawJson);
 #if WINDOWS
     private IntPtr _keyboardHookHandle;
     private IntPtr _mainWindowHandle;
     private KeyboardHookProc? _keyboardHookProc;
+    private bool _windowChromeConfigured;
     private bool _webViewKeyboardBridgeAttached;
     private bool _webViewInspectorModeEnabled;
     private bool _webViewNetworkCaptureEnabled;
@@ -148,6 +219,114 @@ public partial class MainPage : ContentPage
         {
             WebViewNetworkListView.ItemsSource = _webViewNetworkEntries;
         }
+
+        InitializeWorkspaceShell();
+        UpdateNetworkCount();
+        UpdateNetworkAnalysisButtons();
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
+    }
+
+    private void InitializeWorkspaceShell()
+    {
+        ApplyWorkspaceTab(WorkspaceTab.Codex);
+    }
+
+    private void OnWorkspaceTabClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Element target || string.IsNullOrWhiteSpace(target.ClassId))
+        {
+            return;
+        }
+
+        if (!Enum.TryParse<WorkspaceTab>(target.ClassId, ignoreCase: true, out var tab))
+        {
+            return;
+        }
+
+        ApplyWorkspaceTab(tab);
+    }
+
+    private void ApplyWorkspaceTab(WorkspaceTab tab)
+    {
+        _activeWorkspaceTab = tab;
+
+        if (CodexWorkspacePanel is not null)
+        {
+            CodexWorkspacePanel.IsVisible = tab == WorkspaceTab.Codex;
+        }
+
+        if (WebBrowserWorkspacePanel is not null)
+        {
+            WebBrowserWorkspacePanel.IsVisible = tab == WorkspaceTab.WebBrowser;
+        }
+
+        if (NetworkWorkspacePanel is not null)
+        {
+            NetworkWorkspacePanel.IsVisible = tab == WorkspaceTab.NetworkCapture;
+        }
+
+        ApplyTabStyle(
+            CodexTabBorder,
+            CodexTabIcon,
+            CodexTabTitleLabel,
+            CodexTabCountLabel,
+            tab == WorkspaceTab.Codex,
+            activeCount: "default",
+            inactiveCount: "tab");
+        ApplyTabStyle(
+            WebBrowserTabBorder,
+            WebBrowserTabIcon,
+            WebBrowserTabTitleLabel,
+            WebBrowserTabCountLabel,
+            tab == WorkspaceTab.WebBrowser,
+            activeCount: "active",
+            inactiveCount: "tab");
+        ApplyTabStyle(
+            NetworkCaptureTabBorder,
+            NetworkCaptureTabIcon,
+            NetworkCaptureTabTitleLabel,
+            NetworkCaptureTabCountLabel,
+            tab == WorkspaceTab.NetworkCapture,
+            activeCount: "active",
+            inactiveCount: "tab");
+    }
+
+    private static void ApplyTabStyle(
+        Border? border,
+        Border? iconBorder,
+        Label? titleLabel,
+        Label? countLabel,
+        bool isActive,
+        string activeCount,
+        string inactiveCount)
+    {
+        if (border is not null)
+        {
+            border.BackgroundColor = isActive
+                ? Color.FromArgb("#F7FFFCF8")
+                : Color.FromArgb("#1120252C");
+            border.Stroke = isActive
+                ? Color.FromArgb("#12000000")
+                : Color.FromArgb("#10000000");
+        }
+
+        if (iconBorder is not null)
+        {
+            iconBorder.BackgroundColor = Color.FromArgb("#1220252C");
+        }
+
+        if (titleLabel is not null)
+        {
+            titleLabel.TextColor = isActive
+                ? Color.FromArgb("#14232B")
+                : Color.FromArgb("#637780");
+        }
+
+        if (countLabel is not null)
+        {
+            countLabel.Text = isActive ? activeCount : inactiveCount;
+            countLabel.TextColor = Color.FromArgb("#61757E");
+        }
     }
 
     private void UpdateWebViewInspectorToggleButton()
@@ -157,41 +336,90 @@ public partial class MainPage : ContentPage
             return;
         }
 
-#if WINDOWS
-        WebViewInspectorToggleButton.Text = _webViewInspectorModeEnabled ? "개발자 모드 ON" : "개발자 모드 OFF";
-        WebViewInspectorToggleButton.BackgroundColor = _webViewInspectorModeEnabled
-            ? Color.FromArgb("#0D8A65")
-            : Color.FromArgb("#1D5C74");
-#else
-        WebViewInspectorToggleButton.Text = "Windows 전용";
+        WebViewInspectorToggleButton.Text = "Inspect";
+        WebViewInspectorToggleButton.BackgroundColor = Color.FromArgb("#1220252C");
+        WebViewInspectorToggleButton.TextColor = Color.FromArgb("#50656F");
+#if !WINDOWS
         WebViewInspectorToggleButton.IsEnabled = false;
 #endif
     }
 
-    private async void OnWebViewInspectorToggleClicked(object? sender, EventArgs e)
+    private void UpdateBrowserFocusButton()
     {
-#if WINDOWS
-        await ToggleWebViewInspectorModeAsync();
-#else
-        _naverTalkBrowser.SetStatus("Developer inspect mode is only available on Windows WebView2.");
-#endif
-    }
-
-    private void UpdateWebViewNetworkCaptureToggleButton()
-    {
-        if (WebViewNetworkCaptureToggleButton is null)
+        if (BrowserFocusButton is null)
         {
             return;
         }
 
 #if WINDOWS
-        WebViewNetworkCaptureToggleButton.Text = _webViewNetworkCaptureEnabled ? "네트워크 캡처 ON" : "네트워크 캡처 OFF";
-        WebViewNetworkCaptureToggleButton.BackgroundColor = _webViewNetworkCaptureEnabled
-            ? Color.FromArgb("#A95C00")
-            : Color.FromArgb("#4E5D66");
+        BrowserFocusButton.Text = _webViewInspectorModeEnabled ? "Focus ON" : "Focus OFF";
+        BrowserFocusButton.BackgroundColor = _webViewInspectorModeEnabled
+            ? Color.FromArgb("#1F6780")
+            : Color.FromArgb("#1220252C");
+        BrowserFocusButton.TextColor = _webViewInspectorModeEnabled
+            ? Colors.White
+            : Color.FromArgb("#50656F");
 #else
-        WebViewNetworkCaptureToggleButton.Text = "Windows 전용";
-        WebViewNetworkCaptureToggleButton.IsEnabled = false;
+        BrowserFocusButton.Text = "Windows 전용";
+        BrowserFocusButton.IsEnabled = false;
+#endif
+    }
+
+    private async void OnBrowserFocusClicked(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        await ToggleWebViewInspectorModeAsync();
+#else
+        _naverTalkBrowser.SetStatus("Focus mode is only available on Windows WebView2.");
+#endif
+    }
+
+    private void OnWebViewInspectorToggleClicked(object? sender, EventArgs e)
+    {
+        OpenInspectorDetailsModal();
+    }
+
+    private void UpdateWebViewNetworkCaptureToggleButton()
+    {
+        if (WebViewNetworkCaptureToggleButton is null &&
+            NetworkCaptureToolbarToggleButton is null)
+        {
+            return;
+        }
+
+#if WINDOWS
+        var buttonText = _webViewNetworkCaptureEnabled ? "Capture ON" : "Capture OFF";
+        var background = _webViewNetworkCaptureEnabled
+            ? Color.FromArgb("#A95C00")
+            : Color.FromArgb("#EEF3F6");
+        var textColor = _webViewNetworkCaptureEnabled
+            ? Colors.White
+            : Color.FromArgb("#31474F");
+        if (WebViewNetworkCaptureToggleButton is not null)
+        {
+            WebViewNetworkCaptureToggleButton.Text = buttonText;
+            WebViewNetworkCaptureToggleButton.BackgroundColor = background;
+            WebViewNetworkCaptureToggleButton.TextColor = textColor;
+        }
+
+        if (NetworkCaptureToolbarToggleButton is not null)
+        {
+            NetworkCaptureToolbarToggleButton.Text = buttonText;
+            NetworkCaptureToolbarToggleButton.BackgroundColor = background;
+            NetworkCaptureToolbarToggleButton.TextColor = textColor;
+        }
+#else
+        if (WebViewNetworkCaptureToggleButton is not null)
+        {
+            WebViewNetworkCaptureToggleButton.Text = "Windows 전용";
+            WebViewNetworkCaptureToggleButton.IsEnabled = false;
+        }
+
+        if (NetworkCaptureToolbarToggleButton is not null)
+        {
+            NetworkCaptureToolbarToggleButton.Text = "Windows 전용";
+            NetworkCaptureToolbarToggleButton.IsEnabled = false;
+        }
 #endif
     }
 
@@ -204,10 +432,7 @@ public partial class MainPage : ContentPage
 #endif
     }
 
-    private void AppendWebViewNetworkEntry(
-        string summary,
-        string requestDetails,
-        string responseDetails)
+    private void AppendWebViewNetworkEntry(WebViewNetworkLogEntry entry)
     {
         if (WebViewNetworkListView is null ||
             WebViewNetworkRequestHeadersLabel is null ||
@@ -218,11 +443,7 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        var normalizedSummary = string.IsNullOrWhiteSpace(summary) ? "[network]" : summary.Trim();
-        var normalizedRequest = string.IsNullOrWhiteSpace(requestDetails) ? "-" : requestDetails.Trim();
-        var normalizedResponse = string.IsNullOrWhiteSpace(responseDetails) ? "-" : responseDetails.Trim();
-
-        _webViewNetworkEntries.Insert(0, new WebViewNetworkLogEntry(normalizedSummary, normalizedRequest, normalizedResponse));
+        _webViewNetworkEntries.Insert(0, entry);
         while (_webViewNetworkEntries.Count > MaxWebViewNetworkEntries)
         {
             _webViewNetworkEntries.RemoveAt(_webViewNetworkEntries.Count - 1);
@@ -233,6 +454,9 @@ public partial class MainPage : ContentPage
             WebViewNetworkListView.SelectedItem = _webViewNetworkEntries[0];
             ApplyNetworkDetails(_webViewNetworkEntries[0]);
         }
+
+        UpdateNetworkCount();
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.LogList);
     }
 
     private void OnWebViewNetworkSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -247,6 +471,7 @@ public partial class MainPage : ContentPage
 
         if (e.CurrentSelection.FirstOrDefault() is WebViewNetworkLogEntry selected)
         {
+            UpdateNetworkPanelScrollbars(NetworkScrollTarget.LogList);
             ApplyNetworkDetails(selected);
             return;
         }
@@ -255,6 +480,292 @@ public partial class MainPage : ContentPage
         WebViewNetworkRequestBodyLabel.Text = string.Empty;
         WebViewNetworkResponseHeadersLabel.Text = string.Empty;
         WebViewNetworkResponseBodyLabel.Text = string.Empty;
+        if (SelectedNetworkSummaryLabel is not null)
+        {
+            SelectedNetworkSummaryLabel.Text = "선택된 요청 없음";
+        }
+
+        if (SelectedNetworkMethodLabel is not null)
+        {
+            SelectedNetworkMethodLabel.Text = "-";
+        }
+
+        if (SelectedNetworkStatusLabel is not null)
+        {
+            SelectedNetworkStatusLabel.Text = "-";
+            SelectedNetworkStatusLabel.TextColor = Color.FromArgb("#60717A");
+        }
+
+        if (SelectedNetworkSizeLabel is not null)
+        {
+            SelectedNetworkSizeLabel.Text = "-";
+        }
+
+        if (SelectedNetworkTimeLabel is not null)
+        {
+            SelectedNetworkTimeLabel.Text = "-";
+        }
+
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
+    }
+
+    private void OnNetworkClearClicked(object? sender, EventArgs e)
+    {
+        _webViewNetworkEntries.Clear();
+        if (WebViewNetworkListView is not null)
+        {
+            WebViewNetworkListView.SelectedItem = null;
+        }
+
+        if (WebViewNetworkRequestHeadersLabel is not null)
+        {
+            WebViewNetworkRequestHeadersLabel.Text = "Request headers";
+        }
+
+        if (WebViewNetworkRequestBodyLabel is not null)
+        {
+            WebViewNetworkRequestBodyLabel.Text = "Request body";
+        }
+
+        if (WebViewNetworkResponseHeadersLabel is not null)
+        {
+            WebViewNetworkResponseHeadersLabel.Text = "Response headers";
+        }
+
+        if (WebViewNetworkResponseBodyLabel is not null)
+        {
+            WebViewNetworkResponseBodyLabel.Text = "Response body";
+        }
+
+        if (SelectedNetworkSummaryLabel is not null)
+        {
+            SelectedNetworkSummaryLabel.Text = "선택된 요청 없음";
+        }
+
+        if (SelectedNetworkMethodLabel is not null)
+        {
+            SelectedNetworkMethodLabel.Text = "-";
+        }
+
+        if (SelectedNetworkStatusLabel is not null)
+        {
+            SelectedNetworkStatusLabel.Text = "-";
+            SelectedNetworkStatusLabel.TextColor = Color.FromArgb("#60717A");
+        }
+
+        if (SelectedNetworkSizeLabel is not null)
+        {
+            SelectedNetworkSizeLabel.Text = "-";
+        }
+
+        if (SelectedNetworkTimeLabel is not null)
+        {
+            SelectedNetworkTimeLabel.Text = "-";
+        }
+
+        UpdateNetworkCount();
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
+    }
+
+    private void OnNetworkAnalysisScopeClicked(object? sender, EventArgs e)
+    {
+        _networkAnalysisScope = _networkAnalysisScope == NetworkAnalysisScope.Selected
+            ? NetworkAnalysisScope.All
+            : NetworkAnalysisScope.Selected;
+        UpdateNetworkAnalysisButtons();
+    }
+
+    private void OnNetworkAnalysisDetailClicked(object? sender, EventArgs e)
+    {
+        _networkAnalysisDetailMode = _networkAnalysisDetailMode switch
+        {
+            NetworkAnalysisDetailMode.Summary => NetworkAnalysisDetailMode.ErrorsDetailed,
+            NetworkAnalysisDetailMode.ErrorsDetailed => NetworkAnalysisDetailMode.FullDetailed,
+            _ => NetworkAnalysisDetailMode.Summary
+        };
+        UpdateNetworkAnalysisButtons();
+    }
+
+    private void OnNetworkAnalyzeWithCodexClicked(object? sender, EventArgs e)
+    {
+        var entries = ResolveNetworkAnalysisEntries();
+        if (entries.Count == 0)
+        {
+            _naverTalkBrowser.SetStatus(_networkAnalysisScope == NetworkAnalysisScope.Selected
+                ? "분석할 네트워크 요청을 먼저 선택하세요."
+                : "분석할 네트워크 캡쳐 목록이 없습니다.");
+            return;
+        }
+
+        var prompt = BuildNetworkAnalysisPrompt(entries, _networkAnalysisScope, _networkAnalysisDetailMode);
+        ApplyWorkspaceTab(WorkspaceTab.Codex);
+        _codexPromptMacroService.PublishPromptRequested(prompt);
+        _naverTalkBrowser.SetStatus($"Codex 분석 프롬프트 생성 완료: {entries.Count} request(s).");
+    }
+
+    private void UpdateNetworkAnalysisButtons()
+    {
+        if (NetworkAnalysisScopeButton is not null)
+        {
+            NetworkAnalysisScopeButton.Text = _networkAnalysisScope == NetworkAnalysisScope.Selected
+                ? "범위: 선택"
+                : "범위: 전체";
+        }
+
+        if (NetworkAnalysisDetailButton is not null)
+        {
+            NetworkAnalysisDetailButton.Text = _networkAnalysisDetailMode switch
+            {
+                NetworkAnalysisDetailMode.Summary => "상세: 요약",
+                NetworkAnalysisDetailMode.ErrorsDetailed => "상세: 실패만",
+                _ => "상세: 전체"
+            };
+        }
+    }
+
+    private List<WebViewNetworkLogEntry> ResolveNetworkAnalysisEntries()
+    {
+        if (_networkAnalysisScope == NetworkAnalysisScope.Selected)
+        {
+            return WebViewNetworkListView?.SelectedItem is WebViewNetworkLogEntry selected
+                ? [selected]
+                : [];
+        }
+
+        return _webViewNetworkEntries.ToList();
+    }
+
+    private static string BuildNetworkAnalysisPrompt(
+        IReadOnlyList<WebViewNetworkLogEntry> entries,
+        NetworkAnalysisScope scope,
+        NetworkAnalysisDetailMode detailMode)
+    {
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine("아래 WebView 네트워크 캡쳐를 분석해줘.");
+        builder.AppendLine("- 실패/지연/중복 호출/인증 또는 CORS 의심 지점을 먼저 찾아줘.");
+        builder.AppendLine("- 원인 후보, 확인 방법, 수정 방향을 한국어로 정리해줘.");
+        builder.AppendLine("- 민감정보가 있어 보이면 노출 위험도 같이 표시해줘.");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- 분석 범위: {(scope == NetworkAnalysisScope.Selected ? "선택 요청" : "전체 캡쳐 리스트")}");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- 상세 포함: {FormatNetworkAnalysisDetailMode(detailMode)}");
+        builder.AppendLine();
+        builder.AppendLine("## Capture Summary");
+
+        foreach (var entry in entries)
+        {
+            builder.AppendLine(CultureInfo.InvariantCulture,
+                $"- #{entry.IndexDisplay} {entry.MethodDisplay} {entry.StatusDisplay} {entry.TimeDisplay} {entry.SizeDisplay} {entry.HostDisplay}{entry.PathDisplay}");
+        }
+
+        var detailedEntries = ResolveDetailedNetworkAnalysisEntries(entries, detailMode);
+        if (detailedEntries.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("## Request Details");
+            foreach (var entry in detailedEntries)
+            {
+                AppendNetworkAnalysisEntry(builder, entry);
+                if (builder.Length >= MaxNetworkAnalysisPromptLength)
+                {
+                    builder.AppendLine();
+                    builder.AppendLine("[잘림] 프롬프트 길이 제한 때문에 이후 요청 상세는 생략됨.");
+                    break;
+                }
+            }
+        }
+
+        return builder.Length <= MaxNetworkAnalysisPromptLength
+            ? builder.ToString().Trim()
+            : builder.ToString(0, MaxNetworkAnalysisPromptLength).Trim() + Environment.NewLine + "[잘림]";
+    }
+
+    private static List<WebViewNetworkLogEntry> ResolveDetailedNetworkAnalysisEntries(
+        IReadOnlyList<WebViewNetworkLogEntry> entries,
+        NetworkAnalysisDetailMode detailMode)
+    {
+        return detailMode switch
+        {
+            NetworkAnalysisDetailMode.Summary => [],
+            NetworkAnalysisDetailMode.ErrorsDetailed => entries.Where(IsNetworkErrorOrSuspicious).ToList(),
+            _ => entries.ToList()
+        };
+    }
+
+    private static bool IsNetworkErrorOrSuspicious(WebViewNetworkLogEntry entry)
+    {
+        if (!int.TryParse(entry.StatusDisplay, NumberStyles.Integer, CultureInfo.InvariantCulture, out var status))
+        {
+            return true;
+        }
+
+        return status >= 400;
+    }
+
+    private static string FormatNetworkAnalysisDetailMode(NetworkAnalysisDetailMode detailMode)
+    {
+        return detailMode switch
+        {
+            NetworkAnalysisDetailMode.Summary => "목록 요약만",
+            NetworkAnalysisDetailMode.ErrorsDetailed => "실패/의심 요청 상세 포함",
+            _ => "전체 요청 상세 포함"
+        };
+    }
+
+    private static void AppendNetworkAnalysisEntry(System.Text.StringBuilder builder, WebViewNetworkLogEntry entry)
+    {
+        builder.AppendLine();
+        builder.AppendLine(CultureInfo.InvariantCulture, $"### #{entry.IndexDisplay} {entry.MethodDisplay} {entry.StatusDisplay} {entry.HostDisplay}{entry.PathDisplay}");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- Summary: {entry.Summary}");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- Time: {entry.TimeDisplay}");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- Size: {entry.SizeDisplay}");
+        builder.AppendLine();
+        builder.AppendLine("Request:");
+        builder.AppendLine(LimitNetworkPromptText(entry.RequestDetails, 2500));
+        builder.AppendLine();
+        builder.AppendLine("Response:");
+        builder.AppendLine(LimitNetworkPromptText(entry.ResponseDetails, 2500));
+    }
+
+    private static string LimitNetworkPromptText(string? text, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "-";
+        }
+
+        var normalized = text.Trim();
+        return normalized.Length <= maxLength
+            ? normalized
+            : normalized[..maxLength] + Environment.NewLine + "[이 항목 내용 일부 생략]";
+    }
+
+    private void OnWebViewNetworkListFocused(object? sender, FocusEventArgs e)
+    {
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.LogList);
+    }
+
+    private void OnWebViewNetworkListUnfocused(object? sender, FocusEventArgs e)
+    {
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
+    }
+
+    private void OnRequestHeadersPanelTapped(object? sender, TappedEventArgs e)
+    {
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.RequestHeaders);
+    }
+
+    private void OnRequestBodyPanelTapped(object? sender, TappedEventArgs e)
+    {
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.RequestBody);
+    }
+
+    private void OnResponseHeadersPanelTapped(object? sender, TappedEventArgs e)
+    {
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.ResponseHeaders);
+    }
+
+    private void OnResponseBodyPanelTapped(object? sender, TappedEventArgs e)
+    {
+        UpdateNetworkPanelScrollbars(NetworkScrollTarget.ResponseBody);
     }
 
     private void ApplyNetworkDetails(WebViewNetworkLogEntry entry)
@@ -270,6 +781,39 @@ public partial class MainPage : ContentPage
         WebViewNetworkRequestBodyLabel!.Text = requestBody;
         WebViewNetworkResponseHeadersLabel!.Text = responseHeaders;
         WebViewNetworkResponseBodyLabel!.Text = responseBody;
+        if (SelectedNetworkSummaryLabel is not null)
+        {
+            SelectedNetworkSummaryLabel.Text = entry.Summary;
+        }
+
+        if (SelectedNetworkMethodLabel is not null)
+        {
+            SelectedNetworkMethodLabel.Text = entry.MethodDisplay;
+        }
+
+        if (SelectedNetworkStatusLabel is not null)
+        {
+            SelectedNetworkStatusLabel.Text = entry.StatusDisplay;
+            SelectedNetworkStatusLabel.TextColor = entry.StatusColor;
+        }
+
+        if (SelectedNetworkSizeLabel is not null)
+        {
+            SelectedNetworkSizeLabel.Text = entry.SizeDisplay;
+        }
+
+        if (SelectedNetworkTimeLabel is not null)
+        {
+            SelectedNetworkTimeLabel.Text = entry.TimeDisplay;
+        }
+    }
+
+    private void UpdateNetworkCount()
+    {
+        if (NetworkCountLabel is not null)
+        {
+            NetworkCountLabel.Text = $"{_webViewNetworkEntries.Count} items";
+        }
     }
 
     private static string ExtractSection(string source, string startMarker, string? endMarker)
@@ -303,6 +847,91 @@ public partial class MainPage : ContentPage
         return string.IsNullOrWhiteSpace(trimmed) ? "-" : trimmed;
     }
 
+    private static WebViewNetworkLogEntry BuildWebViewNetworkEntry(
+        int sequence,
+        string summary,
+        string requestDetails,
+        string responseDetails,
+        string method,
+        string url,
+        int? status,
+        double? durationMs,
+        double encodedDataLength)
+    {
+        var normalizedSummary = string.IsNullOrWhiteSpace(summary) ? "[network]" : summary.Trim();
+        var normalizedRequest = string.IsNullOrWhiteSpace(requestDetails) ? "-" : requestDetails.Trim();
+        var normalizedResponse = string.IsNullOrWhiteSpace(responseDetails) ? "-" : responseDetails.Trim();
+        var statusDisplay = status.HasValue
+            ? status.Value.ToString(CultureInfo.InvariantCulture)
+            : "-";
+        var statusColor = ResolveStatusColor(status);
+        var methodDisplay = string.IsNullOrWhiteSpace(method) ? "-" : method.Trim().ToUpperInvariant();
+        var timeDisplay = durationMs.HasValue ? $"{durationMs.Value:0.0}ms" : "-";
+        var sizeDisplay = FormatNetworkSize(encodedDataLength);
+        var hostDisplay = "-";
+        var pathDisplay = normalizedSummary;
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            hostDisplay = uri.Host;
+            pathDisplay = string.IsNullOrWhiteSpace(uri.PathAndQuery) ? "/" : uri.PathAndQuery;
+        }
+        else if (!string.IsNullOrWhiteSpace(url))
+        {
+            pathDisplay = url.Trim();
+        }
+
+        return new WebViewNetworkLogEntry(
+            sequence,
+            normalizedSummary,
+            normalizedRequest,
+            normalizedResponse,
+            statusDisplay,
+            statusColor,
+            methodDisplay,
+            hostDisplay,
+            pathDisplay,
+            sizeDisplay,
+            timeDisplay);
+    }
+
+    private static Color ResolveStatusColor(int? status)
+    {
+        if (!status.HasValue)
+        {
+            return Color.FromArgb("#60717A");
+        }
+
+        return status.Value switch
+        {
+            >= 200 and < 300 => Color.FromArgb("#2D8A63"),
+            >= 300 and < 400 => Color.FromArgb("#1C6780"),
+            >= 400 and < 500 => Color.FromArgb("#C07A2F"),
+            >= 500 => Color.FromArgb("#B35A4A"),
+            _ => Color.FromArgb("#60717A")
+        };
+    }
+
+    private static string FormatNetworkSize(double encodedDataLength)
+    {
+        if (encodedDataLength <= 0)
+        {
+            return "-";
+        }
+
+        if (encodedDataLength >= 1024 * 1024)
+        {
+            return $"{encodedDataLength / (1024 * 1024):0.0} MB";
+        }
+
+        if (encodedDataLength >= 1024)
+        {
+            return $"{encodedDataLength / 1024:0.0} KB";
+        }
+
+        return $"{encodedDataLength:0} B";
+    }
+
     private static string TrimForLog(string? text, int maxLength = 300)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -318,6 +947,134 @@ public partial class MainPage : ContentPage
         return flattened.Length <= maxLength
             ? flattened
             : $"{flattened[..maxLength]}...";
+    }
+
+    private void UpdateNetworkPanelScrollbars(NetworkScrollTarget target)
+    {
+        if (WebViewNetworkListView is not null)
+        {
+            WebViewNetworkListView.VerticalScrollBarVisibility =
+                target == NetworkScrollTarget.LogList ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
+        }
+
+        if (WebViewNetworkRequestHeadersScrollView is not null)
+        {
+            WebViewNetworkRequestHeadersScrollView.VerticalScrollBarVisibility =
+                target == NetworkScrollTarget.RequestHeaders ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
+        }
+
+        if (WebViewNetworkRequestBodyScrollView is not null)
+        {
+            WebViewNetworkRequestBodyScrollView.VerticalScrollBarVisibility =
+                target == NetworkScrollTarget.RequestBody ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
+        }
+
+        if (WebViewNetworkResponseHeadersScrollView is not null)
+        {
+            WebViewNetworkResponseHeadersScrollView.VerticalScrollBarVisibility =
+                target == NetworkScrollTarget.ResponseHeaders ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
+        }
+
+        if (WebViewNetworkResponseBodyScrollView is not null)
+        {
+            WebViewNetworkResponseBodyScrollView.VerticalScrollBarVisibility =
+                target == NetworkScrollTarget.ResponseBody ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
+        }
+    }
+
+    private static InspectorSelectionSnapshot? ParseInspectorSelection(string details)
+    {
+        if (string.IsNullOrWhiteSpace(details))
+        {
+            return null;
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(details)?.AsObject();
+            if (node is null)
+            {
+                return null;
+            }
+
+            var rect = node["rect"]?.AsObject();
+            return new InspectorSelectionSnapshot(
+                node["selector"]?.GetValue<string>() ?? "-",
+                node["tag"]?.GetValue<string>() ?? "-",
+                node["id"]?.GetValue<string>() ?? string.Empty,
+                node["name"]?.GetValue<string>() ?? string.Empty,
+                node["className"]?.GetValue<string>() ?? string.Empty,
+                node["role"]?.GetValue<string>() ?? string.Empty,
+                node["inputType"]?.GetValue<string>() ?? string.Empty,
+                node["ariaLabel"]?.GetValue<string>() ?? string.Empty,
+                node["placeholder"]?.GetValue<string>() ?? string.Empty,
+                node["valuePreview"]?.GetValue<string>() ?? string.Empty,
+                node["textPreview"]?.GetValue<string>() ?? string.Empty,
+                node["href"]?.GetValue<string>() ?? string.Empty,
+                node["domPath"]?.GetValue<string>() ?? string.Empty,
+                rect?["left"]?.GetValue<double>() ?? 0,
+                rect?["top"]?.GetValue<double>() ?? 0,
+                rect?["width"]?.GetValue<double>() ?? 0,
+                rect?["height"]?.GetValue<double>() ?? 0,
+                details);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void OpenInspectorDetailsModal()
+    {
+        if (InspectDetailsModal is null)
+        {
+            return;
+        }
+
+        var snapshot = _lastInspectorSelection;
+        InspectModalSelectorLabel.Text = snapshot?.Selector ?? "선택된 요소 없음";
+        InspectModalTagLabel.Text = snapshot is null
+            ? "-"
+            : string.IsNullOrWhiteSpace(snapshot.InputType)
+                ? snapshot.Tag
+                : $"{snapshot.Tag} / {snapshot.InputType}";
+        InspectModalRectLabel.Text = snapshot is null
+            ? "-"
+            : $"{snapshot.Width:0}x{snapshot.Height:0} @ ({snapshot.Left:0}, {snapshot.Top:0})";
+        InspectModalIdentityLabel.Text = snapshot is null
+            ? "-"
+            : string.Join(" | ", new[]
+            {
+                string.IsNullOrWhiteSpace(snapshot.ElementId) ? null : $"id={snapshot.ElementId}",
+                string.IsNullOrWhiteSpace(snapshot.Name) ? null : $"name={snapshot.Name}",
+                string.IsNullOrWhiteSpace(snapshot.ClassName) ? null : $"class={snapshot.ClassName}"
+            }.Where(static v => !string.IsNullOrWhiteSpace(v)));
+        InspectModalMetaLabel.Text = snapshot is null
+            ? "-"
+            : string.Join(" | ", new[]
+            {
+                string.IsNullOrWhiteSpace(snapshot.Role) ? null : $"role={snapshot.Role}",
+                string.IsNullOrWhiteSpace(snapshot.Href) ? null : snapshot.Href
+            }.Where(static v => !string.IsNullOrWhiteSpace(v)));
+        InspectModalPreviewLabel.Text = snapshot is null
+            ? "-"
+            : string.Join(Environment.NewLine, new[]
+            {
+                string.IsNullOrWhiteSpace(snapshot.TextPreview) ? null : $"text: {snapshot.TextPreview}",
+                string.IsNullOrWhiteSpace(snapshot.AriaLabel) ? null : $"aria: {snapshot.AriaLabel}",
+                string.IsNullOrWhiteSpace(snapshot.Placeholder) ? null : $"placeholder: {snapshot.Placeholder}",
+                string.IsNullOrWhiteSpace(snapshot.ValuePreview) ? null : $"value: {snapshot.ValuePreview}"
+            }.Where(static v => !string.IsNullOrWhiteSpace(v)));
+        InspectModalDomPathLabel.Text = snapshot?.DomPath ?? "-";
+        InspectDetailsModal.IsVisible = true;
+    }
+
+    private void OnCloseInspectorModalClicked(object? sender, EventArgs e)
+    {
+        if (InspectDetailsModal is not null)
+        {
+            InspectDetailsModal.IsVisible = false;
+        }
     }
 }
 

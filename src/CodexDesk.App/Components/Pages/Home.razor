@@ -86,7 +86,7 @@
                 {
                     <div class="empty-state">
                         <h3>Start with a prompt</h3>
-                        <p>질문만 입력하면 첫 전송 때 `completed-chat-threads.jsonl` 기준 안내가 내부적으로 자동 적용됩니다.</p>
+                        <p>질문을 입력하면 그대로 Codex에 전달됩니다.</p>
                     </div>
                 }
                 else
@@ -516,6 +516,7 @@
         WorkspacePath = CodexCli.GetDefaultWorkspacePath();
         NaverTalkBrowser.StateChanged += OnNaverTalkBrowserStateChanged;
         CodexPromptMacroService.KeyObserved += OnMacroKeyObserved;
+        CodexPromptMacroService.PromptRequested += OnExternalPromptRequested;
         CodexPromptMacroService.Load();
         CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
         AddNewTab();
@@ -569,8 +570,7 @@
                     CommandPath.Trim(),
                     string.IsNullOrWhiteSpace(Model) ? null : Model.Trim(),
                     tab.ThreadId,
-                    AllowWorkspaceWrite,
-                    IncludeCompletedChatsContext: addAsUserMessage),
+                    AllowWorkspaceWrite),
                 tab.RunCts.Token);
 
             tab.ThreadId = result.ThreadId ?? tab.ThreadId;
@@ -685,6 +685,26 @@
             {
                 StateHasChanged();
             }
+        });
+    }
+
+    private async void OnExternalPromptRequested(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return;
+        }
+
+        await InvokeAsync(() =>
+        {
+            if (_tabs.Count == 0 || ActiveTab.IsBusy)
+            {
+                AddNewTab();
+            }
+
+            ActiveTab.DraftMessage = prompt.Trim();
+            UpdateTabTitle(ActiveTab);
+            StateHasChanged();
         });
     }
 
@@ -1002,12 +1022,6 @@
             }
 
             await CompletedChatsSupport.MergeCompletedChatsFilesAsync(sourcePath, targetPath);
-
-            var targetDirectory = Path.GetDirectoryName(targetPath);
-            var threadsPath = Path.Combine(
-                string.IsNullOrWhiteSpace(targetDirectory) ? AppContext.BaseDirectory : targetDirectory,
-                ChatThreadsPromptTemplates.ChatThreadsFileName);
-            await CompletedChatThreadsJsonlConverter.ConvertFromCompletedChatsJsonAsync(targetPath, threadsPath);
 
             CollectionResultActionStatus = $"Saved merged result to {targetPath}";
             NaverTalkBrowser.MarkCompletedChatsSavedToBaseline(CollectionResultActionStatus, NaverTalkBrowser.CurrentUrl);
@@ -1410,6 +1424,7 @@
     {
         NaverTalkBrowser.StateChanged -= OnNaverTalkBrowserStateChanged;
         CodexPromptMacroService.KeyObserved -= OnMacroKeyObserved;
+        CodexPromptMacroService.PromptRequested -= OnExternalPromptRequested;
         _loadingIndicatorTimer?.Dispose();
         foreach (var tab in _tabs)
         {

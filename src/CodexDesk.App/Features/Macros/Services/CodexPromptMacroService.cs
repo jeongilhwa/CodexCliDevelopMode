@@ -16,6 +16,7 @@ public sealed class CodexPromptMacroService
     private List<CodexPromptMacroItem> _macros = new();
 
     public event Action<string>? KeyObserved;
+    public event Action<string>? PromptRequested;
 
     public IReadOnlyList<CodexPromptMacroItem> Macros
     {
@@ -157,6 +158,16 @@ public sealed class CodexPromptMacroService
         }
 
         KeyObserved?.Invoke(keyDebugMessage.Trim());
+    }
+
+    public void PublishPromptRequested(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return;
+        }
+
+        PromptRequested?.Invoke(prompt.Trim());
     }
 
     private void Save()

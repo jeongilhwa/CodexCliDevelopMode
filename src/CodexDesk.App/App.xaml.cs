@@ -12,6 +12,6 @@ public partial class App : Application
 
 	protected override Window CreateWindow(IActivationState? activationState)
 	{
-		return new Window(_mainPage) { Title = "CodexDesk" };
+		return new Window(_mainPage) { Title = string.Empty };
 	}
 }

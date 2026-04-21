@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebBrowser Tab Draft</title>
+  <style>
+    :root {
+      --bg-top: #edf1f0;
+      --bg-bottom: #d8e0e2;
+      --ink: #14232b;
+      --muted: #62767f;
+      --line: rgba(20, 35, 43, 0.10);
+      --glass: rgba(255, 250, 244, 0.54);
+      --glass-strong: rgba(255, 252, 248, 0.84);
+      --panel: rgba(255, 255, 255, 0.78);
+      --accent: #1f6780;
+      --accent-warm: #b97045;
+      --shadow: 0 28px 60px rgba(16, 29, 35, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Bahnschrift", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(78, 149, 173, 0.18), transparent 22%),
+        radial-gradient(circle at 88% 16%, rgba(195, 142, 95, 0.15), transparent 18%),
+        linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 18px;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .glass {
+      backdrop-filter: blur(18px);
+      background: var(--glass);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .workspace {
+      min-height: 0;
+      border-radius: 30px;
+      padding: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      gap: 0;
+    }
+
+    .main-tabs {
+      min-height: 70px;
+      padding: 12px 12px 0;
+      display: flex;
+      align-items: end;
+      gap: 6px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.18);
+      border-bottom: 1px solid rgba(20, 35, 43, 0.08);
+    }
+
+    .main-tab {
+      min-width: 180px;
+      height: 54px;
+      border-radius: 18px 18px 0 0;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(20, 35, 43, 0.05);
+      color: #637780;
+    }
+
+    .main-tab.active {
+      background: var(--glass-strong);
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .main-tab .name {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .mini-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: rgba(20, 35, 43, 0.07);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .count {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .browserbar {
+      border-radius: 0 0 22px 22px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      border-top: 0;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      margin: 0 12px 12px;
+    }
+
+    .nav,
+    .tools,
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn,
+    .btn {
+      border: 0;
+      border-radius: 12px;
+      font: inherit;
+      cursor: default;
+      background: rgba(20, 35, 43, 0.07);
+      color: #50656f;
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+    }
+
+    .btn {
+      border-radius: 999px;
+      padding: 9px 14px;
+      color: var(--ink);
+    }
+
+    .btn.primary,
+    .icon-btn.primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-warm));
+      color: #fff;
+    }
+
+    .address {
+      min-width: 0;
+      height: 42px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      gap: 10px;
+      color: #536972;
+    }
+
+    .lock {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      background: rgba(31, 103, 128, 0.12);
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+
+    .url {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+
+    .viewport {
+      min-height: 0;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      background: rgba(255, 255, 255, 0.55);
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+      margin: 0 12px;
+    }
+
+    .page {
+      min-height: 0;
+      overflow: auto;
+      padding: 0;
+      display: grid;
+      background: linear-gradient(180deg, rgba(255,255,255,0.74), rgba(247,249,249,0.92));
+    }
+
+    .webview-fill {
+      min-height: 100%;
+      padding: 22px;
+      display: grid;
+      align-content: start;
+      gap: 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.04)),
+        linear-gradient(180deg, rgba(241,246,247,0.88), rgba(247,249,249,0.96));
+    }
+
+    .webview-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      color: #58707a;
+      font-size: 13px;
+    }
+
+    .webview-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .webview-badge {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(20, 35, 43, 0.08);
+      font-weight: 700;
+    }
+
+    .webview-hero {
+      border-radius: 24px;
+      padding: 24px;
+      background: linear-gradient(135deg, rgba(31,103,128,0.08), rgba(185,112,69,0.10));
+      border: 1px solid rgba(20, 35, 43, 0.06);
+      display: grid;
+      gap: 12px;
+    }
+
+    .webview-hero .eyebrow {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      color: var(--muted);
+    }
+
+    .webview-hero strong {
+      font-size: 28px;
+      line-height: 1.08;
+      max-width: 780px;
+    }
+
+    .webview-hero p {
+      margin: 0;
+      max-width: 760px;
+      line-height: 1.6;
+      color: #445962;
+    }
+
+    .webview-block {
+      border-radius: 22px;
+      min-height: 420px;
+      background: rgba(255,255,255,0.78);
+      border: 1px solid rgba(20, 35, 43, 0.06);
+      display: grid;
+      place-items: center;
+      color: #72868f;
+      font-size: 15px;
+    }
+
+    .statusbar {
+      border-radius: 18px;
+      padding: 10px 14px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      color: #50656f;
+      font-size: 13px;
+      margin: 12px 12px 12px;
+    }
+
+    .caption {
+      position: fixed;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      border-radius: 18px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.54);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(20, 35, 43, 0.08);
+      color: #46616b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 960px) {
+      .browserbar {
+        grid-template-columns: 1fr;
+      }
+
+      .webview-hero strong {
+        font-size: 23px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="workspace glass">
+      <nav class="main-tabs">
+        <div class="main-tab">
+          <div class="name">
+            <span class="mini-icon">C</span>
+            <span>Codex</span>
+          </div>
+          <span class="count">tab</span>
+        </div>
+        <div class="main-tab active">
+          <div class="name">
+            <span class="mini-icon">W</span>
+            <span>WebBrowser</span>
+          </div>
+          <span class="count">active</span>
+        </div>
+        <div class="main-tab">
+          <div class="name">
+            <span class="mini-icon">N</span>
+            <span>Network Capture</span>
+          </div>
+          <span class="count">tab</span>
+        </div>
+      </nav>
+
+      <div class="browserbar">
+        <div class="nav">
+          <div class="icon-btn">&larr;</div>
+          <div class="icon-btn">&rarr;</div>
+          <div class="icon-btn">&#8635;</div>
+        </div>
+
+        <div class="address">
+          <div class="lock">S</div>
+          <div class="url">https://partner.example.com/dashboard/overview</div>
+        </div>
+
+        <div class="tools">
+          <div class="icon-btn">C</div>
+          <div class="icon-btn">F</div>
+          <div class="icon-btn">I</div>
+          <div class="icon-btn">&#8942;</div>
+        </div>
+      </div>
+
+      <section class="viewport">
+        <div class="page">
+          <div class="webview-fill">
+            <div class="webview-top">
+              <div class="webview-brand">
+                <div class="webview-badge">P</div>
+                <strong>Partner Dashboard</strong>
+              </div>
+              <span>embedded page preview</span>
+            </div>
+
+            <section class="webview-hero">
+              <span class="eyebrow">embedded web content</span>
+              <strong>웹브라우저 탭은 설명 카드보다 실제 웹뷰 면적이 우선</strong>
+              <p>본문 설명 블록을 줄이고, 실제 페이지가 차지하는 화면 비율을 크게 유지하는 방향으로 정리한 상태입니다.</p>
+            </section>
+
+            <div class="webview-block">웹뷰 실제 컨텐츠 영역</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="statusbar">
+        <span>WebBrowser tab draft</span>
+        <span>주소바 + 웹뷰 중심</span>
+        <span>보조 패널 없음</span>
+      </div>
+    </main>
+  </div>
+
+  <div class="caption">
+    WebBrowser 탭 초안도 Network Capture와 같은 방식으로 메인 탭과 본문을 한 작업면 안에 붙여 정리했습니다.
+  </div>
+</body>
+</html>

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Network Capture Tab Draft</title>
+  <style>
+    :root {
+      --bg-top: #eef1f0;
+      --bg-bottom: #d7dfe1;
+      --ink: #18252c;
+      --muted: #667882;
+      --line: rgba(24, 37, 44, 0.10);
+      --glass: rgba(255, 251, 246, 0.50);
+      --glass-strong: rgba(255, 252, 248, 0.82);
+      --panel: rgba(255, 255, 255, 0.76);
+      --soft: rgba(24, 37, 44, 0.05);
+      --accent: #1c6780;
+      --ok: #2d8a63;
+      --warn: #c07a2f;
+      --shadow: 0 26px 56px rgba(18, 30, 35, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Bahnschrift", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(82, 151, 175, 0.16), transparent 22%),
+        radial-gradient(circle at 88% 15%, rgba(193, 143, 95, 0.14), transparent 18%),
+        linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 18px;
+      display: grid;
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .glass {
+      backdrop-filter: blur(18px);
+      background: var(--glass);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+
+    .main-tabs {
+      min-height: 70px;
+      padding: 12px 12px 0;
+      display: flex;
+      align-items: end;
+      gap: 6px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.18);
+      border-bottom: 1px solid rgba(24, 37, 44, 0.08);
+    }
+
+    .main-tab {
+      min-width: 180px;
+      height: 54px;
+      border-radius: 18px 18px 0 0;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(24, 37, 44, 0.05);
+      color: #657982;
+    }
+
+    .main-tab.active {
+      background: var(--glass-strong);
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .main-tab .name {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .mini-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: rgba(24, 37, 44, 0.07);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .count {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .workspace {
+      min-height: 0;
+      border-radius: 30px;
+      padding: 0;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 0;
+    }
+
+    .capture-head {
+      display: grid;
+      grid-template-rows: auto auto;
+      background: rgba(255, 255, 255, 0.18);
+      border-bottom: 1px solid rgba(24, 37, 44, 0.08);
+    }
+
+    .toolbar {
+      border-radius: 0;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.66);
+      border-top: 0;
+      border-left: 0;
+      border-right: 0;
+      border-bottom: 0;
+      display: grid;
+      grid-template-columns: auto auto auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+      margin: 0;
+      padding: 12px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 12px;
+      padding: 9px 12px;
+      font: inherit;
+      background: rgba(24, 37, 44, 0.08);
+      color: var(--ink);
+      cursor: default;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent), #b56f46);
+      color: #fff;
+    }
+
+    .filter {
+      min-width: 0;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      background: rgba(255,255,255,0.82);
+      border: 1px solid rgba(24, 37, 44, 0.08);
+      color: #6d8088;
+      font-size: 14px;
+    }
+
+    .surface {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+      gap: 12px;
+      padding: 12px;
+    }
+
+    .panel {
+      min-height: 0;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(24, 37, 44, 0.08);
+      background: rgba(255, 255, 255, 0.62);
+      display: grid;
+    }
+
+    .list-panel {
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .detail-panel {
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+
+    .panel-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(24, 37, 44, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .panel-head strong {
+      font-size: 14px;
+    }
+
+    .panel-head span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .grid-head,
+    .row {
+      display: grid;
+      grid-template-columns: 52px 74px 72px minmax(0, 1fr) 68px 68px;
+      gap: 10px;
+      align-items: center;
+      padding: 0 14px;
+    }
+
+    .grid-head {
+      min-height: 38px;
+      border-bottom: 1px solid rgba(24, 37, 44, 0.08);
+      background: rgba(24, 37, 44, 0.04);
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .grid-head > div:nth-child(1),
+    .grid-head > div:nth-child(2),
+    .grid-head > div:nth-child(3) {
+      text-align: center;
+    }
+
+    .grid-head > div:nth-child(5),
+    .grid-head > div:nth-child(6) {
+      text-align: right;
+    }
+
+    .rows {
+      min-height: 0;
+      overflow: auto;
+      background: rgba(255,255,255,0.44);
+    }
+
+    .row {
+      min-height: 46px;
+      border-bottom: 1px solid rgba(24, 37, 44, 0.05);
+      font-size: 13px;
+    }
+
+    .row.active {
+      background: rgba(28, 103, 128, 0.10);
+    }
+
+    .method {
+      font-weight: 700;
+      color: var(--accent);
+      text-align: center;
+    }
+
+    .status.ok { color: var(--ok); font-weight: 700; }
+    .status.warn { color: var(--warn); font-weight: 700; }
+
+    .row > div:nth-child(1),
+    .row > div:nth-child(2) {
+      text-align: center;
+    }
+
+    .row > div:nth-child(5),
+    .row > div:nth-child(6) {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .host,
+    .path {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meta {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(24, 37, 44, 0.08);
+      background: rgba(255,255,255,0.66);
+      display: grid;
+      gap: 8px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .meta-card {
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(24, 37, 44, 0.05);
+      display: grid;
+      gap: 4px;
+    }
+
+    .meta-card span {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .10em;
+    }
+
+    .meta-card strong {
+      font-size: 13px;
+    }
+
+    .detail-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 10px 10px 0;
+      border-bottom: 1px solid rgba(24, 37, 44, 0.08);
+      background: rgba(255,255,255,0.52);
+    }
+
+    .detail-tab {
+      height: 36px;
+      padding: 0 12px;
+      border-radius: 12px 12px 0 0;
+      display: flex;
+      align-items: center;
+      background: rgba(24, 37, 44, 0.05);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .detail-tab.active {
+      background: rgba(255, 255, 255, 0.84);
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .detail-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+      background: rgba(255,255,255,0.44);
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .code {
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(255,255,255,0.76);
+      border: 1px solid rgba(24, 37, 44, 0.06);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      color: #30464f;
+    }
+
+    .statusbar {
+      border-radius: 18px;
+      padding: 10px 14px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      background: rgba(255,255,255,0.56);
+      border: 1px solid rgba(24, 37, 44, 0.08);
+      color: #50656f;
+      font-size: 13px;
+    }
+
+    .caption {
+      position: fixed;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      border-radius: 18px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.54);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(24, 37, 44, 0.08);
+      color: #46616b;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 1080px) {
+      .surface {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        grid-template-columns: repeat(4, auto);
+      }
+
+      .filter {
+        grid-column: 1 / -1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="workspace glass">
+      <div class="capture-head">
+        <nav class="main-tabs">
+          <div class="main-tab">
+            <div class="name">
+              <span class="mini-icon">C</span>
+              <span>Codex</span>
+            </div>
+            <span class="count">tab</span>
+          </div>
+          <div class="main-tab">
+            <div class="name">
+              <span class="mini-icon">W</span>
+              <span>WebBrowser</span>
+            </div>
+            <span class="count">tab</span>
+          </div>
+          <div class="main-tab active">
+            <div class="name">
+              <span class="mini-icon">N</span>
+              <span>Network Capture</span>
+            </div>
+            <span class="count">active</span>
+          </div>
+        </nav>
+
+        <div class="toolbar">
+          <button class="btn primary">Capture On</button>
+          <button class="btn">Clear</button>
+          <button class="btn">Replay</button>
+          <button class="btn">Save</button>
+          <div class="filter">Filter by host, path, method, status...</div>
+        </div>
+      </div>
+
+      <section class="surface">
+        <section class="panel list-panel">
+          <div class="panel-head">
+            <strong>Sessions</strong>
+            <span>Fiddler Classic style list</span>
+          </div>
+
+          <div class="grid-head">
+            <div>#</div>
+            <div>Result</div>
+            <div>Method</div>
+            <div>Host / Path</div>
+            <div>Size</div>
+            <div>Time</div>
+          </div>
+
+          <div class="rows">
+            <div class="row active">
+              <div>214</div>
+              <div class="status ok">200</div>
+              <div class="method">GET</div>
+              <div class="host">partner.example.com /api/dashboard/summary</div>
+              <div>12 KB</div>
+              <div>84 ms</div>
+            </div>
+            <div class="row">
+              <div>215</div>
+              <div class="status ok">200</div>
+              <div class="method">POST</div>
+              <div class="host">partner.example.com /api/chat/send</div>
+              <div>3 KB</div>
+              <div>121 ms</div>
+            </div>
+            <div class="row">
+              <div>216</div>
+              <div class="status warn">304</div>
+              <div class="method">GET</div>
+              <div class="host">static.partner.example.com /assets/main.css</div>
+              <div>0 KB</div>
+              <div>19 ms</div>
+            </div>
+            <div class="row">
+              <div>217</div>
+              <div class="status ok">204</div>
+              <div class="method">OPTIONS</div>
+              <div class="host">partner.example.com /api/capture/start</div>
+              <div>0 KB</div>
+              <div>7 ms</div>
+            </div>
+            <div class="row">
+              <div>218</div>
+              <div class="status ok">200</div>
+              <div class="method">GET</div>
+              <div class="host">partner.example.com /api/network/events?cursor=next</div>
+              <div>44 KB</div>
+              <div>92 ms</div>
+            </div>
+            <div class="row">
+              <div>219</div>
+              <div class="status warn">401</div>
+              <div class="method">POST</div>
+              <div class="host">partner.example.com /api/admin/login-check</div>
+              <div>1 KB</div>
+              <div>55 ms</div>
+            </div>
+            <div class="row">
+              <div>220</div>
+              <div class="status ok">200</div>
+              <div class="method">GET</div>
+              <div class="host">cdn.partner.example.com /icons/sprite.svg</div>
+              <div>8 KB</div>
+              <div>31 ms</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel detail-panel">
+          <div class="panel-head">
+            <strong>Inspectors</strong>
+            <span>Selected session detail</span>
+          </div>
+
+          <div class="meta">
+            <div class="meta-grid">
+              <div class="meta-card">
+                <span>Host</span>
+                <strong>partner.example.com</strong>
+              </div>
+              <div class="meta-card">
+                <span>Status</span>
+                <strong>200 OK</strong>
+              </div>
+              <div class="meta-card">
+                <span>Method</span>
+                <strong>GET</strong>
+              </div>
+              <div class="meta-card">
+                <span>Content Type</span>
+                <strong>application/json</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-tabs">
+            <div class="detail-tab active">Headers</div>
+            <div class="detail-tab">Raw</div>
+            <div class="detail-tab">JSON</div>
+            <div class="detail-tab">Timeline</div>
+          </div>
+
+          <div class="detail-body">
+            <div class="code">GET /api/dashboard/summary HTTP/1.1
+Host: partner.example.com
+Accept: application/json
+Authorization: Bearer ***
+User-Agent: CodexDesk-WebView/1.0
+
+HTTP/1.1 200 OK
+content-type: application/json; charset=utf-8
+cache-control: no-store
+x-trace-id: 8f4bc13d7a92
+
+{
+  "workspace": "overview",
+  "pendingTasks": 12,
+  "captureState": "running"
+}</div>
+          </div>
+        </section>
+      </section>
+
+      <div class="statusbar" style="margin: 12px 12px 12px;">
+        <span>Capture running</span>
+        <span>214 sessions visible</span>
+        <span>left: request list</span>
+        <span>right: inspector detail</span>
+      </div>
+    </main>
+  </div>
+
+  <div class="caption">
+    Network Capture 탭 초안: Fiddler Classic처럼 왼쪽은 세션 리스트, 오른쪽은 선택한 요청 상세를 보여주는 밀도 높은 도구형 화면.
+  </div>
+</body>
+</html>
