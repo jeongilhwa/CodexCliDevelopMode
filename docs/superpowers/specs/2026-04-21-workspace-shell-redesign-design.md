@@ -1,177 +1,177 @@
-# Workspace Shell Redesign
+# 워크스페이스 셸 리디자인
 
-Date: 2026-04-21
-Project: CodexDesk.App
-Scope: Main MAUI Blazor workspace UI refresh for desktop-first use
+날짜: 2026-04-21
+프로젝트: CodexDesk.App
+범위: 데스크톱 중심 메인 MAUI Blazor 작업 화면 개편
 
-## Goal
+## 목표
 
-Reframe the current home screen into a workbench-style shell that feels closer to Visual Studio or a modern browser workspace than a landing page. The new shell should remove promotional or explanatory chrome from the main view, keep the active conversation front and center, use moderate acrylic blur, and move secondary tools into docked side panels.
+현재 홈 화면을 소개용 랜딩 화면이 아니라 실제 작업용 워크벤치 셸처럼 보이도록 바꾼다. 새 화면은 불필요한 설명성 UI를 메인 영역에서 제거하고, 활성 대화를 가장 앞에 두며, 중간 강도의 아크릴 블러를 사용하고, 부가 기능은 도킹 가능한 사이드 패널로 이동시킨다.
 
-## User Intent
+## 사용자 의도
 
-- Keep the main screen focused on working, not on explaining the app
-- Add a stronger tab-oriented workflow similar to Visual Studio or a web browser
-- Preserve split-view style capabilities, but make tabs the primary mental model
-- Use a moderate glass or blur effect so the background softly shows through without hurting readability
-- Remove unnecessary titles and move secondary controls off the center stage
+- 메인 화면이 설명보다 작업 중심으로 보이길 원함
+- Visual Studio 또는 웹브라우저처럼 탭 중심 흐름을 강화하고 싶음
+- 기존의 화면 분할 성격은 남기되, 사용자가 느끼는 기본 작업 단위는 탭이 되길 원함
+- 뒤 배경이 살짝 비치는 중간 강도의 유리 느낌 블러를 원함
+- 불필요한 제목과 설명은 없애고, 보조 기능은 옆으로 치우고 싶음
 
-## Proposed Direction
+## 제안 방향
 
-The app will use a three-region shell:
+앱은 다음 3개 영역을 갖는 셸 구조로 재구성한다.
 
-- Left dock: narrow tool rail for workspace sections such as settings, macros, browser tools, and utilities
-- Center workspace: primary document area with tab strip, transcript, composer, and run-state feedback
-- Right context panel: collapsible detail surface for the currently selected tool or context
+- 좌측 도크: 설정, 매크로, 브라우저 도구, 유틸리티 등 보조 기능 진입 영역
+- 중앙 워크스페이스: 탭 바, 대화 기록, 입력창, 실행 상태를 담는 핵심 작업 영역
+- 우측 컨텍스트 패널: 현재 선택한 도구나 상세 설정을 보여주는 접이식 패널
 
-Both side panels should default to a compact or hidden state so the central tab workspace remains dominant.
+좌우 패널은 기본적으로 축소되거나 접힌 상태를 유지하고, 중앙 탭 작업영역이 항상 가장 강하게 보이도록 한다.
 
-## Information Architecture
+## 정보 구조
 
-### Center Workspace
+### 중앙 워크스페이스
 
-The center region becomes the default focus target and should contain:
+중앙 영역은 사용자의 기본 시선이 머무는 핵심 공간이며 다음 요소를 포함한다.
 
-- A slim top workspace bar instead of the current hero section
-- A document-style tab strip with active, busy, new-tab, and close affordances
-- The active conversation transcript
-- Prompt composer and send controls
-- Lightweight inline run feedback, not a large status card
+- 기존 히어로 영역을 대체하는 얇은 상단 작업 바
+- 활성, 실행 중, 새 탭, 닫기 동작이 드러나는 문서형 탭 스트립
+- 활성 대화의 전체 transcript
+- 프롬프트 입력창과 전송 버튼
+- 큰 상태 카드 대신 얇고 국소적인 실행 상태 표시
 
-The current large title, descriptive intro text, and duplicate status controls will be removed from the main flow.
+현재의 큰 제목, 소개 문구, 중복 상태 카드 같은 요소는 메인 흐름에서 제거한다.
 
-### Left Dock
+### 좌측 도크
 
-The left dock owns navigation to non-primary tools. It should be visually compact and icon-first. Expected entries:
+좌측 도크는 비핵심 도구로 이동하는 진입점이다. 시각적으로는 좁고, 아이콘 중심이어야 한다. 초기 항목은 다음을 기준으로 한다.
 
-- Session or workspace controls
-- Prompt macros
-- Naver Talk tools
-- External tools or shell actions
+- 세션 또는 워크스페이스 제어
+- 프롬프트 매크로
+- Naver Talk 도구
+- 외부 도구 또는 셸 실행 기능
 
-Selecting a dock item should open either the left panel itself or the right context panel depending on the item, but should not displace the center workspace.
+도크 항목을 선택하면 좌측 보조 패널 또는 우측 컨텍스트 패널이 열릴 수 있지만, 중앙 작업영역을 밀어내거나 대체하면 안 된다.
 
-### Right Context Panel
+### 우측 컨텍스트 패널
 
-The right panel holds detail-heavy or form-heavy UI that should not compete with the conversation surface. Initial candidates:
+우측 패널은 대화 화면과 경쟁하면 안 되는 상세 설정형 UI를 수용한다. 초기 대상은 다음과 같다.
 
-- Settings currently shown in the modal
-- Macro editor and list management
-- Browser and collection status details
-- Tool-specific contextual information
+- 현재 모달 안에 있는 설정 UI
+- 매크로 편집기와 목록 관리
+- 브라우저 및 수집 상태 상세 정보
+- 선택한 도구에 따라 달라지는 컨텍스트 정보
 
-The right panel should be dismissible and collapsed by default.
+우측 패널은 기본적으로 접혀 있어야 하며, 필요할 때만 열 수 있어야 한다.
 
-## Visual Design
+## 시각 디자인
 
-### Overall Tone
+### 전체 톤
 
-Adopt a desktop productivity look inspired by Fluent acrylic and modern IDE shells rather than a marketing page. The UI should feel quiet, structured, and intentionally layered.
+마케팅 페이지가 아니라 데스크톱 생산성 도구 같은 분위기를 목표로 한다. Fluent 계열 아크릴과 IDE 셸에서 영향을 받은 조용하고 구조적인 톤을 사용한다.
 
-### Blur and Materials
+### 블러와 재질감
 
-- Use moderate blur on major containers and dock surfaces
-- Keep transcript cards and text-entry surfaces more opaque than surrounding chrome
-- Let background ambient shapes remain visible only as soft depth, not as a focal point
-- Use translucent borders and restrained shadows for panel separation
+- 주요 패널과 도크 표면에는 중간 강도의 블러를 사용한다
+- transcript 카드와 텍스트 입력 영역은 주변 크롬보다 더 불투명하게 유지한다
+- 배경의 앰비언트 도형은 깊이감만 주고 전면 요소가 되지 않게 한다
+- 패널 구분은 투명 테두리와 절제된 그림자로 처리한다
 
-### Hierarchy
+### 위계
 
-- Replace the current oversized hero with a thin workspace header
-- Make tabs visually dominant over section titles
-- Reduce repeated labels and explanatory text
-- Keep status signals compact and local to the element they describe
+- 현재의 큰 히어로 영역은 얇은 작업 헤더로 대체한다
+- 섹션 제목보다 탭이 더 중요한 요소로 보이게 한다
+- 반복되는 라벨과 설명 문구를 줄인다
+- 상태 표시는 필요한 위치에만 작고 명확하게 둔다
 
-## Interaction Model
+## 상호작용 모델
 
-### Tabs
+### 탭
 
-Tabs become the default unit of work.
+탭은 기본 작업 단위가 된다.
 
-- Each chat session remains a tab
-- Active tab is clearly separated from inactive tabs
-- Busy tabs show a compact live indicator
-- New tab remains always available at the end of the strip
-- Closing a tab should move focus to the nearest surviving tab
+- 각 채팅 세션은 하나의 탭으로 유지한다
+- 활성 탭은 비활성 탭과 명확히 구분되어야 한다
+- 실행 중인 탭은 작은 라이브 인디케이터를 표시한다
+- 새 탭 버튼은 항상 탭 스트립 끝에 남겨 둔다
+- 탭을 닫으면 가장 가까운 남은 탭으로 포커스를 이동한다
 
-Tab labels should continue to derive from the first meaningful user prompt, with truncation for long titles.
+탭 제목은 지금처럼 첫 의미 있는 사용자 프롬프트를 기반으로 정하되, 너무 길면 잘라서 표시한다.
 
-### Panels
+### 패널
 
-- Left dock stays available at all times in compact form
-- Left and right detail panels can be toggled without leaving the current tab
-- Secondary tools should no longer require a blocking modal for common use
-- Mobile and narrow widths may still fall back to overlay or drawer behavior
+- 좌측 도크는 항상 축소 형태로 접근 가능해야 한다
+- 좌우 상세 패널은 현재 탭을 벗어나지 않고 열고 닫을 수 있어야 한다
+- 자주 쓰는 보조 도구는 더 이상 무거운 모달을 기본 진입점으로 쓰지 않는다
+- 모바일 또는 좁은 너비에서는 오버레이나 드로어 형태로 자연스럽게 전환될 수 있다
 
-### Status and Feedback
+### 상태와 피드백
 
-- Replace the prominent status card with slim inline indicators in the workspace bar or panel headers
-- Keep long-running activity visible in the active tab and transcript loading state
-- Preserve approval prompts and collection result modals where blocking confirmation is still appropriate
+- 눈에 띄는 상태 카드는 제거하고 작업 바 또는 패널 헤더 안의 얇은 인디케이터로 바꾼다
+- 장시간 실행 상태는 활성 탭과 transcript 안에서 계속 보이게 한다
+- 승인 요청이나 수집 결과처럼 정말 막아야 하는 흐름만 모달을 유지한다
 
-## Component Boundaries
+## 컴포넌트 경계
 
-The redesign should be implemented with focused UI pieces inside the existing Blazor page rather than a single expanding page file.
+리디자인은 기존 Blazor 페이지 안에 모든 것을 계속 밀어 넣기보다, 역할이 분명한 UI 조각으로 나누는 방향이 바람직하다.
 
-Recommended boundaries:
+권장 경계는 다음과 같다.
 
-- Workspace shell container
-- Left dock and optional tool pane
-- Top workspace bar
-- Tab strip
-- Transcript panel
-- Composer panel
-- Right context panel
+- 워크스페이스 셸 컨테이너
+- 좌측 도크 및 선택적 도구 패널
+- 상단 작업 바
+- 탭 스트립
+- transcript 패널
+- 입력(composer) 패널
+- 우측 컨텍스트 패널
 
-If extraction is done incrementally, visual restructuring can begin in the existing page, but the end state should reduce layout and styling concentration inside `Home.razor`.
+단계적으로 추출하는 것은 허용되지만, 최종적으로는 `Home.razor` 하나에 레이아웃과 스타일이 과도하게 집중되지 않도록 한다.
 
-## Data and State Handling
+## 데이터와 상태 처리
 
-No new backend or persistence model is required for the redesign. Existing tab, busy-state, modal, macro, and Naver Talk state should be reused.
+이번 리디자인을 위해 새로운 백엔드 모델이나 저장 구조를 만들 필요는 없다. 기존 탭 상태, busy 상태, 모달 상태, 매크로 상태, Naver Talk 상태를 최대한 재사용한다.
 
-State changes that matter to layout:
+레이아웃에 직접 영향을 주는 상태는 다음과 같다.
 
-- Active tab selection
-- Left dock selection
-- Right panel open or closed state
-- Mobile drawer visibility
-- Busy status per tab
+- 현재 활성 탭
+- 현재 선택한 좌측 도크 항목
+- 우측 패널의 열림 또는 닫힘 상태
+- 모바일 드로어 표시 상태
+- 탭별 busy 상태
 
-New UI state should remain local to the page unless another component genuinely needs to share it.
+새로 추가하는 UI 상태는 다른 컴포넌트가 실제로 필요로 하지 않는 한 페이지 로컬 상태로 유지한다.
 
-## Error Handling and Risk
+## 오류 처리와 위험 요소
 
-- The redesign must not break existing send, resume, cancel, approval, macro, or browser workflows
-- Hidden panels must remain keyboard and pointer accessible
-- Heavy blur must degrade gracefully if a platform does not fully support the effect
-- Narrow layouts must avoid trapping critical controls off-screen
+- 리디자인으로 인해 기존 send, resume, cancel, approval, macro, browser 흐름이 깨지면 안 된다
+- 숨겨진 패널도 키보드와 마우스로 접근 가능해야 한다
+- 일부 플랫폼에서 블러 효과가 약하더라도 화면이 무너지지 않아야 한다
+- 좁은 화면에서 핵심 버튼이 화면 밖으로 사라지면 안 된다
 
-The main implementation risk is layout churn inside a large page component. To reduce that risk, ship the redesign in small slices and verify behavior after each slice.
+가장 큰 위험은 현재 큰 `Home.razor` 안에서 레이아웃 변경이 한 번에 커지는 것이다. 이를 줄이기 위해 기능을 작은 단위로 나누어 적용하고, 각 단계마다 동작을 검증한다.
 
-## Testing Strategy
+## 테스트 전략
 
-### Manual Verification
+### 수동 검증
 
-- Open the app and confirm the hero section is removed
-- Verify the center workspace remains functional for send, resume, cancel, and loading states
-- Create, switch, and close multiple tabs
-- Open and close left and right tool panels
-- Use settings, macros, and Naver Talk tools from their new locations
-- Confirm narrow-width behavior still exposes all critical controls
+- 앱을 열고 기존 히어로 영역이 제거되었는지 확인한다
+- 중앙 워크스페이스에서 send, resume, cancel, loading 상태가 계속 정상 동작하는지 확인한다
+- 여러 탭을 만들고, 전환하고, 닫아 본다
+- 좌우 패널을 열고 닫아 본다
+- 설정, 매크로, Naver Talk 도구가 새 위치에서도 정상 동작하는지 확인한다
+- 좁은 너비에서도 핵심 조작이 가능한지 확인한다
 
-### Automated Verification
+### 자동 검증
 
-- Add or update Razor component tests only if the current test setup supports the affected UI layer cleanly
-- Preserve existing unit tests for command-building and service logic
-- Prefer focused state and interaction tests for any extracted UI logic
+- 현재 테스트 환경이 받쳐줄 때만 Razor UI 상태 테스트를 추가하거나 수정한다
+- 명령 생성 및 서비스 로직 관련 기존 단위 테스트는 유지한다
+- 새로 추출한 UI 로직이 있다면 상태와 상호작용 중심으로 좁게 검증한다
 
-## Out of Scope
+## 범위 제외
 
-- Rewriting the Codex interaction pipeline
-- Changing the tab data model beyond what layout behavior requires
-- Replacing existing approval or collection result flows unless the redesign forces a follow-up pass
-- Large service-layer refactors unrelated to the new workspace shell
+- Codex 상호작용 파이프라인 자체를 다시 쓰는 일
+- 레이아웃 동작에 필요하지 않은 수준의 탭 데이터 모델 변경
+- 이번 패스에서 꼭 필요하지 않은 승인 모달 또는 수집 결과 흐름 재설계
+- 새 워크스페이스 셸과 직접 관련 없는 서비스 계층 대규모 리팩터링
 
-## Implementation Summary
+## 구현 요약
 
-The redesign should convert the current page from a hero-plus-panel layout into a workbench shell. The center tabbed conversation area becomes the product, side tools are docked and collapsible, and acrylic blur is used as supporting depth rather than decoration. The result should feel cleaner, denser, and more tool-like without removing existing capabilities.
+이번 리디자인은 현재 페이지를 소개형 레이아웃에서 작업형 워크벤치 셸로 바꾸는 작업이다. 중앙의 탭 기반 대화 영역이 제품의 중심이 되고, 보조 도구는 접이식 도킹 패널로 이동하며, 아크릴 블러는 장식이 아니라 깊이감을 주는 보조 수단으로 사용한다. 결과적으로 화면은 더 정돈되고, 더 도구답고, 더 집중된 UX를 제공해야 한다.
