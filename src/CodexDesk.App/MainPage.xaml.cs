@@ -52,6 +52,11 @@ public partial class MainPage : ContentPage
     private NetworkAnalysisDetailMode _networkAnalysisDetailMode = NetworkAnalysisDetailMode.Summary;
     private WorkspaceTab _activeWorkspaceTab = WorkspaceTab.Codex;
     private InspectorSelectionSnapshot? _lastInspectorSelection;
+    private WebViewPageSnapshotSaveResult? _pendingWebViewSnapshot;
+    private WebViewNetworkCaptureSaveResult? _pendingNetworkCaptureSnapshot;
+    private TaskCompletionSource<bool>? _pendingSnapshotAnalyzeChoice;
+    private string? _pendingSnapshotUserQuestion;
+    private bool _snapshotModalHidWebView;
 
     private enum WorkspaceTab
     {
@@ -118,6 +123,13 @@ public partial class MainPage : ContentPage
         double Width,
         double Height,
         string RawJson);
+
+    private sealed record BrowserRequestResult(
+        bool Ok,
+        int Status,
+        string StatusText,
+        string Url,
+        string Body);
 #if WINDOWS
     private IntPtr _keyboardHookHandle;
     private IntPtr _mainWindowHandle;
@@ -215,6 +227,16 @@ public partial class MainPage : ContentPage
 
         UpdateWebViewInspectorToggleButton();
         UpdateWebViewNetworkCaptureToggleButton();
+        if (BrowserRequestMethodEntry is not null)
+        {
+            BrowserRequestMethodEntry.Text = "POST";
+        }
+
+        if (BrowserRequestUrlEntry is not null)
+        {
+            BrowserRequestUrlEntry.Text = "/Home/ExtendLoginTime";
+        }
+
         if (WebViewNetworkListView is not null)
         {
             WebViewNetworkListView.ItemsSource = _webViewNetworkEntries;
@@ -586,7 +608,7 @@ public partial class MainPage : ContentPage
         UpdateNetworkAnalysisButtons();
     }
 
-    private void OnNetworkAnalyzeWithCodexClicked(object? sender, EventArgs e)
+    private async void OnNetworkAnalyzeWithCodexClicked(object? sender, EventArgs e)
     {
         var entries = ResolveNetworkAnalysisEntries();
         if (entries.Count == 0)
@@ -597,10 +619,113 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        var prompt = BuildNetworkAnalysisPrompt(entries, _networkAnalysisScope, _networkAnalysisDetailMode);
+        try
+        {
+            SetNetworkAnalyzeButtonSavingState(isSaving: true);
+            var snapshots = entries.Select(ToNetworkCaptureEntrySnapshot).ToList();
+            var result = await WebViewNetworkCaptureSnapshotWriter.SaveAsync(
+                snapshots,
+                AppContext.BaseDirectory,
+                _networkAnalysisScope == NetworkAnalysisScope.Selected ? "selected" : "all",
+                FormatNetworkAnalysisDetailMode(_networkAnalysisDetailMode));
+
+            _pendingNetworkCaptureSnapshot = result;
+            ShowNetworkCaptureSnapshotConfirmModal(result);
+            _naverTalkBrowser.SetStatus($"Network capture 저장 완료: {result.DirectoryPath}");
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Network capture 저장 실패: {ex.Message}");
+        }
+        finally
+        {
+            SetNetworkAnalyzeButtonSavingState(isSaving: false);
+        }
+    }
+
+    private void SetNetworkAnalyzeButtonSavingState(bool isSaving)
+    {
+        if (NetworkAnalyzeWithCodexButton is null)
+        {
+            return;
+        }
+
+        NetworkAnalyzeWithCodexButton.IsEnabled = !isSaving;
+        NetworkAnalyzeWithCodexButton.Text = isSaving ? "Saving..." : "Codex 분석";
+        NetworkAnalyzeWithCodexButton.BackgroundColor = isSaving
+            ? Color.FromArgb("#1F6780")
+            : Color.FromArgb("#1F6780");
+        NetworkAnalyzeWithCodexButton.TextColor = Colors.White;
+    }
+
+    private static WebViewNetworkCaptureEntrySnapshot ToNetworkCaptureEntrySnapshot(WebViewNetworkLogEntry entry)
+    {
+        return new WebViewNetworkCaptureEntrySnapshot(
+            int.TryParse(entry.IndexDisplay, NumberStyles.Integer, CultureInfo.InvariantCulture, out var sequence) ? sequence : 0,
+            entry.Summary,
+            entry.MethodDisplay,
+            entry.StatusDisplay,
+            entry.HostDisplay,
+            entry.PathDisplay,
+            entry.SizeDisplay,
+            entry.TimeDisplay,
+            entry.RequestDetails,
+            entry.ResponseDetails,
+            ExtractSection(entry.RequestDetails, "HEADERS:", "BODY:"),
+            ExtractSection(entry.RequestDetails, "BODY:", null),
+            ExtractSection(entry.ResponseDetails, "HEADERS:", "BODY:"),
+            ExtractSection(entry.ResponseDetails, "BODY:", null));
+    }
+
+    private void ShowNetworkCaptureSnapshotConfirmModal(WebViewNetworkCaptureSaveResult result)
+    {
+        if (NetworkCaptureSnapshotFolderLabel is not null)
+        {
+            NetworkCaptureSnapshotFolderLabel.Text = $"Folder: {Path.GetFileName(result.DirectoryPath)}";
+        }
+
+        if (NetworkCaptureSnapshotPathLabel is not null)
+        {
+            NetworkCaptureSnapshotPathLabel.Text = $"Path: {result.DirectoryPath}";
+        }
+
+        if (NetworkCaptureSnapshotPromptEditor is not null)
+        {
+            NetworkCaptureSnapshotPromptEditor.Text = result.Prompt;
+        }
+
+        if (NetworkCaptureSnapshotConfirmModal is not null)
+        {
+            NetworkCaptureSnapshotConfirmModal.IsVisible = true;
+        }
+    }
+
+    private void OnCancelNetworkCaptureSnapshotAnalysisClicked(object? sender, EventArgs e)
+    {
+        if (NetworkCaptureSnapshotConfirmModal is not null)
+        {
+            NetworkCaptureSnapshotConfirmModal.IsVisible = false;
+        }
+    }
+
+    private void OnConfirmNetworkCaptureSnapshotAnalysisClicked(object? sender, EventArgs e)
+    {
+        var snapshot = _pendingNetworkCaptureSnapshot;
+        if (snapshot is null)
+        {
+            _naverTalkBrowser.SetStatus("분석할 network capture snapshot 정보가 없습니다.");
+            return;
+        }
+
+        if (NetworkCaptureSnapshotConfirmModal is not null)
+        {
+            NetworkCaptureSnapshotConfirmModal.IsVisible = false;
+        }
+
+        var prompt = NetworkCaptureSnapshotPromptEditor?.Text;
         ApplyWorkspaceTab(WorkspaceTab.Codex);
-        _codexPromptMacroService.PublishPromptRequested(prompt);
-        _naverTalkBrowser.SetStatus($"Codex 분석 프롬프트 생성 완료: {entries.Count} request(s).");
+        _codexPromptMacroService.PublishPromptRequested(string.IsNullOrWhiteSpace(prompt) ? snapshot.Prompt : prompt);
+        _naverTalkBrowser.SetStatus($"Codex 분석 프롬프트 생성 완료: {Path.GetFileName(snapshot.DirectoryPath)}");
     }
 
     private void UpdateNetworkAnalysisButtons()

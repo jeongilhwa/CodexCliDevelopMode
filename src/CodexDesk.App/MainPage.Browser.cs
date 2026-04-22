@@ -311,10 +311,11 @@ public partial class MainPage : ContentPage
         var statusCode = status.HasValue ? status.Value.ToString(CultureInfo.InvariantCulture) : "-";
         var durationText = durationMs.HasValue ? $"{durationMs.Value:0.0}ms" : "-";
         var shortUrl = TrimForLog(url, 180);
+        var fullUrl = string.IsNullOrWhiteSpace(url) ? "-" : url.Trim();
         var reqHeaders = string.IsNullOrWhiteSpace(requestHeadersPreview) ? "-" : requestHeadersPreview.Trim();
-        var reqBody = TrimForLog(requestBodyPreview, 220);
+        var reqBody = string.IsNullOrWhiteSpace(requestBodyPreview) ? "-" : requestBodyPreview.Trim();
         var resHeaders = string.IsNullOrWhiteSpace(responseHeadersPreview) ? "-" : responseHeadersPreview.Trim();
-        var resBody = TrimForLog(responseBodyPreview, 220);
+        var resBody = string.IsNullOrWhiteSpace(responseBodyPreview) ? "-" : responseBodyPreview.Trim();
         var normalizedStatus = NormalizeStatusMessage(status, statusText);
         var statusMessage = TrimForLog(normalizedStatus, 60);
         var resource = TrimForLog(resourceType, 32);
@@ -322,8 +323,8 @@ public partial class MainPage : ContentPage
         var timestamp = DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
 
         var summary = $"[{timestamp}] [{channel}] {method} {statusCode} {durationText} {shortUrl}";
-        var request = $"URL: {shortUrl}\nTYPE: {resource}\nMIME: {mime}\nHEADERS:\n{reqHeaders}\nBODY: {reqBody}";
-        var response = $"STATUS: {statusCode} ({statusMessage})\nDURATION: {durationText}\nHEADERS:\n{resHeaders}\nBODY: {resBody}";
+        var request = $"URL: {fullUrl}\nTYPE: {resource}\nMIME: {mime}\nHEADERS:\n{reqHeaders}\nBODY:\n{reqBody}";
+        var response = $"STATUS: {statusCode} ({statusMessage})\nDURATION: {durationText}\nHEADERS:\n{resHeaders}\nBODY:\n{resBody}";
         return BuildWebViewNetworkEntry(
             _webViewNetworkEntries.Count + 1,
             summary,
@@ -1213,7 +1214,7 @@ public partial class MainPage : ContentPage
                 _ => pair.Value.ToJsonString()
             };
 
-            lines.Add($"{pair.Key}: {TrimForLog(value, 180)}");
+            lines.Add($"{pair.Key}: {value}");
         }
 
         return lines.Count == 0 ? "-" : string.Join("\n", lines);
@@ -1412,6 +1413,746 @@ public partial class MainPage : ContentPage
             ? httpsUri.AbsoluteUri
             : null;
     }
+
+    private void OnBrowserCookieClicked(object? sender, EventArgs e)
+    {
+        if (CookieImportModal is null)
+        {
+            return;
+        }
+
+        CookieImportModal.IsVisible = true;
+
+        if (CookieDomainEntry is not null && string.IsNullOrWhiteSpace(CookieDomainEntry.Text))
+        {
+            CookieDomainEntry.Text = TryResolveCurrentBrowserOrigin();
+        }
+
+        if (CookieImportStatusLabel is not null)
+        {
+            CookieImportStatusLabel.Text = "쿠키 문자열을 붙여넣고 적용할 도메인을 확인한 뒤 Apply Cookies를 누르세요.";
+            CookieImportStatusLabel.TextColor = Color.FromArgb("#637780");
+        }
+    }
+
+    private void OnCloseCookieImportModalClicked(object? sender, EventArgs e)
+    {
+        if (CookieImportModal is not null)
+        {
+            CookieImportModal.IsVisible = false;
+        }
+    }
+
+    private void OnBrowserRequestClicked(object? sender, EventArgs e)
+    {
+        if (BrowserRequestModal is null)
+        {
+            return;
+        }
+
+        BrowserRequestModal.IsVisible = true;
+
+        if (BrowserRequestMethodEntry is not null && string.IsNullOrWhiteSpace(BrowserRequestMethodEntry.Text))
+        {
+            BrowserRequestMethodEntry.Text = "POST";
+        }
+
+        if (BrowserRequestUrlEntry is not null && string.IsNullOrWhiteSpace(BrowserRequestUrlEntry.Text))
+        {
+            BrowserRequestUrlEntry.Text = "/Home/ExtendLoginTime";
+        }
+
+        SetBrowserRequestStatus("Body가 비어 있으면 body 없이 요청합니다.", isError: false);
+    }
+
+    private void OnCloseBrowserRequestModalClicked(object? sender, EventArgs e)
+    {
+        if (BrowserRequestModal is not null)
+        {
+            BrowserRequestModal.IsVisible = false;
+        }
+    }
+
+    private async void OnBrowserSnapshotClicked(object? sender, EventArgs e)
+    {
+        await ShowSnapshotButtonPressedAsync();
+
+        try
+        {
+            SetSnapshotButtonSavingState(isSaving: true);
+            _naverTalkBrowser.SetStatus("현재 WebView 페이지 스냅샷을 저장하는 중입니다...", _naverTalkBrowser.CurrentUrl);
+
+            var raw = await RunBrowserScriptAsync(WebViewPageSnapshotScriptBuilder.Build());
+            var snapshot = ParseScriptJson<WebViewPageSnapshotPayload>(raw);
+            if (snapshot is null)
+            {
+                _naverTalkBrowser.SetStatus("WebView 페이지 스냅샷 결과를 해석하지 못했습니다.", _naverTalkBrowser.CurrentUrl);
+                return;
+            }
+
+            var result = await WebViewPageSnapshotWriter.SaveAsync(snapshot, AppContext.BaseDirectory);
+            _pendingWebViewSnapshot = result;
+            _naverTalkBrowser.SetStatus($"WebView 페이지 스냅샷 저장 완료: {result.DirectoryPath}", _naverTalkBrowser.CurrentUrl);
+
+            SetSnapshotButtonSavingState(isSaving: false);
+            HideBrowserWebViewForSnapshotModal();
+            ShowBrowserSnapshotConfirmModal(result);
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"WebView 페이지 스냅샷 저장 실패: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+        finally
+        {
+            SetSnapshotButtonSavingState(isSaving: false);
+        }
+    }
+
+    private void HideBrowserWebViewForSnapshotModal()
+    {
+        if (NaverTalkWebView is null || !NaverTalkWebView.IsVisible)
+        {
+            return;
+        }
+
+        NaverTalkWebView.IsVisible = false;
+        _snapshotModalHidWebView = true;
+    }
+
+    private void RestoreBrowserWebViewAfterSnapshotModal()
+    {
+        if (!_snapshotModalHidWebView)
+        {
+            return;
+        }
+
+        NaverTalkWebView.IsVisible = true;
+        _snapshotModalHidWebView = false;
+    }
+
+    private async Task<bool> ShowBrowserSnapshotBeforeSaveModalAsync()
+    {
+        _pendingWebViewSnapshot = null;
+        _pendingSnapshotAnalyzeChoice = new TaskCompletionSource<bool>();
+        _pendingSnapshotUserQuestion = null;
+
+        if (BrowserSnapshotModalTitleLabel is not null)
+        {
+            BrowserSnapshotModalTitleLabel.Text = "Snapshot";
+        }
+
+        if (BrowserSnapshotModalDescriptionLabel is not null)
+        {
+            BrowserSnapshotModalDescriptionLabel.Text = "snapshot 저장 후 Codex로 분석할까요?";
+        }
+
+        if (BrowserSnapshotFolderLabel is not null)
+        {
+            BrowserSnapshotFolderLabel.Text = "Folder: 저장 후 생성됩니다.";
+        }
+
+        if (BrowserSnapshotPathLabel is not null)
+        {
+            BrowserSnapshotPathLabel.Text = "Path: 저장 후 생성됩니다.";
+        }
+
+        if (BrowserSnapshotPromptEditor is not null)
+        {
+            BrowserSnapshotPromptEditor.Text = "현재 WebView 페이지 스냅샷을 분석해줘.";
+        }
+
+        if (BrowserSnapshotConfirmModal is not null)
+        {
+            BrowserSnapshotConfirmModal.IsVisible = true;
+        }
+
+        return await _pendingSnapshotAnalyzeChoice.Task;
+    }
+
+    private async Task ShowSnapshotButtonPressedAsync()
+    {
+        if (BrowserSnapshotButton is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await BrowserSnapshotButton.ScaleToAsync(0.94, 70, Easing.CubicOut);
+            await BrowserSnapshotButton.ScaleToAsync(1.0, 110, Easing.CubicOut);
+        }
+        catch
+        {
+            BrowserSnapshotButton.Scale = 1.0;
+        }
+    }
+
+    private void SetSnapshotButtonSavingState(bool isSaving)
+    {
+        if (BrowserSnapshotButton is null)
+        {
+            return;
+        }
+
+        BrowserSnapshotButton.IsEnabled = !isSaving;
+        BrowserSnapshotButton.Text = isSaving ? "Saving..." : "Snapshot";
+        BrowserSnapshotButton.BackgroundColor = isSaving
+            ? Color.FromArgb("#1F6780")
+            : Color.FromArgb("#1220252C");
+        BrowserSnapshotButton.TextColor = isSaving
+            ? Colors.White
+            : Color.FromArgb("#50656F");
+    }
+
+    private async Task<string?> ShowSnapshotAnalyzePromptDialogAsync(WebViewPageSnapshotSaveResult result)
+    {
+#if WINDOWS
+        if (MainLayoutGrid.Handler?.PlatformView is UI.FrameworkElement rootElement &&
+            rootElement.XamlRoot is not null)
+        {
+            try
+            {
+                return await Dispatcher.DispatchAsync(async () =>
+                {
+                    var promptBox = new UI.Controls.TextBox
+                    {
+                        Text = result.Prompt,
+                        AcceptsReturn = true,
+                        TextWrapping = UI.TextWrapping.Wrap,
+                        MinHeight = 220,
+                        FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas")
+                    };
+
+                    var content = new UI.Controls.StackPanel
+                    {
+                        Spacing = 10
+                    };
+                    content.Children.Add(new UI.Controls.TextBlock
+                    {
+                        Text = "방금 저장한 snapshot을 Codex로 분석 시작할까요?",
+                        TextWrapping = UI.TextWrapping.Wrap
+                    });
+                    content.Children.Add(new UI.Controls.TextBlock
+                    {
+                        Text = $"Folder: {Path.GetFileName(result.DirectoryPath)}{Environment.NewLine}Path: {result.DirectoryPath}",
+                        TextWrapping = UI.TextWrapping.Wrap,
+                        FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas")
+                    });
+                    content.Children.Add(promptBox);
+
+                    var dialog = new UI.Controls.ContentDialog
+                    {
+                        XamlRoot = rootElement.XamlRoot,
+                        Title = "Snapshot Saved",
+                        Content = content,
+                        PrimaryButtonText = "Yes",
+                        CloseButtonText = "No",
+                        DefaultButton = UI.Controls.ContentDialogButton.Primary
+                    };
+
+                    var dialogResult = await dialog.ShowAsync();
+                    return dialogResult == UI.Controls.ContentDialogResult.Primary
+                        ? promptBox.Text
+                        : null;
+                });
+            }
+            catch (Exception ex)
+            {
+                _naverTalkBrowser.SetStatus($"WinUI dialog failed. Trying native MessageBox: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            }
+        }
+
+        if (TryShowNativeSnapshotMessageBox(result, out var shouldAnalyze))
+        {
+            return shouldAnalyze ? result.Prompt : null;
+        }
+#endif
+
+        var shouldAnalyzeFallback = await DisplayAlertAsync(
+            "Snapshot Saved",
+            $"방금 저장한 snapshot을 Codex로 분석 시작할까요?{Environment.NewLine}{Environment.NewLine}Folder: {Path.GetFileName(result.DirectoryPath)}{Environment.NewLine}Path: {result.DirectoryPath}",
+            "Yes",
+            "No");
+
+        return shouldAnalyzeFallback ? result.Prompt : null;
+    }
+
+    private static bool TryShowNativeSnapshotMessageBox(WebViewPageSnapshotSaveResult result, out bool shouldAnalyze)
+    {
+        shouldAnalyze = false;
+#if WINDOWS
+        try
+        {
+            var hwnd = IntPtr.Zero;
+            if (TryGetNativeWindow(out var nativeWindow))
+            {
+                hwnd = WinRT.Interop.WindowNative.GetWindowHandle(nativeWindow);
+            }
+
+            var message =
+                $"방금 저장한 snapshot을 Codex로 분석 시작할까요?{Environment.NewLine}{Environment.NewLine}" +
+                $"Folder: {Path.GetFileName(result.DirectoryPath)}{Environment.NewLine}" +
+                $"Path: {result.DirectoryPath}";
+
+            var dialogResult = MessageBoxW(
+                hwnd,
+                message,
+                "Snapshot Saved",
+                MessageBoxYesNo | MessageBoxIconQuestion | MessageBoxApplicationModal | MessageBoxSetForeground);
+
+            shouldAnalyze = dialogResult == MessageBoxResultYes;
+            return dialogResult is MessageBoxResultYes or MessageBoxResultNo;
+        }
+        catch
+        {
+            return false;
+        }
+#else
+        return false;
+#endif
+    }
+
+#if WINDOWS
+    private const uint MessageBoxYesNo = 0x00000004;
+    private const uint MessageBoxIconQuestion = 0x00000020;
+    private const uint MessageBoxApplicationModal = 0x00000000;
+    private const uint MessageBoxSetForeground = 0x00010000;
+    private const int MessageBoxResultYes = 6;
+    private const int MessageBoxResultNo = 7;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int MessageBoxW(
+        IntPtr hWnd,
+        string lpText,
+        string lpCaption,
+        uint uType);
+#endif
+
+    private void ShowBrowserSnapshotConfirmModal(WebViewPageSnapshotSaveResult result)
+    {
+        if (BrowserSnapshotModalTitleLabel is not null)
+        {
+            BrowserSnapshotModalTitleLabel.Text = "Snapshot Saved";
+        }
+
+        if (BrowserSnapshotModalDescriptionLabel is not null)
+        {
+            BrowserSnapshotModalDescriptionLabel.Text = "방금 저장한 snapshot을 Codex로 분석 시작할까요?";
+        }
+
+        if (BrowserSnapshotFolderLabel is not null)
+        {
+            BrowserSnapshotFolderLabel.Text = $"Folder: {Path.GetFileName(result.DirectoryPath)}";
+        }
+
+        if (BrowserSnapshotPathLabel is not null)
+        {
+            BrowserSnapshotPathLabel.Text = $"Path: {result.DirectoryPath}";
+        }
+
+        if (BrowserSnapshotPromptEditor is not null)
+        {
+            BrowserSnapshotPromptEditor.Text = result.Prompt;
+        }
+
+        if (BrowserSnapshotConfirmModal is not null)
+        {
+            BrowserSnapshotConfirmModal.IsVisible = true;
+        }
+    }
+
+    private void OnCancelBrowserSnapshotAnalysisClicked(object? sender, EventArgs e)
+    {
+        if (BrowserSnapshotConfirmModal is not null)
+        {
+            BrowserSnapshotConfirmModal.IsVisible = false;
+        }
+
+        RestoreBrowserWebViewAfterSnapshotModal();
+
+        var pendingChoice = _pendingSnapshotAnalyzeChoice;
+        if (pendingChoice is not null)
+        {
+            _pendingSnapshotUserQuestion = BrowserSnapshotPromptEditor?.Text;
+            _pendingSnapshotAnalyzeChoice = null;
+            pendingChoice.TrySetResult(false);
+        }
+    }
+
+    private void OnConfirmBrowserSnapshotAnalysisClicked(object? sender, EventArgs e)
+    {
+        var snapshot = _pendingWebViewSnapshot;
+        var pendingChoice = _pendingSnapshotAnalyzeChoice;
+        if (pendingChoice is not null)
+        {
+            if (BrowserSnapshotConfirmModal is not null)
+            {
+                BrowserSnapshotConfirmModal.IsVisible = false;
+            }
+
+            _pendingSnapshotUserQuestion = BrowserSnapshotPromptEditor?.Text;
+            _pendingSnapshotAnalyzeChoice = null;
+            pendingChoice.TrySetResult(true);
+            return;
+        }
+
+        if (snapshot is null)
+        {
+            _naverTalkBrowser.SetStatus("분석할 snapshot 정보가 없습니다.", _naverTalkBrowser.CurrentUrl);
+            return;
+        }
+
+        if (BrowserSnapshotConfirmModal is not null)
+        {
+            BrowserSnapshotConfirmModal.IsVisible = false;
+        }
+
+        RestoreBrowserWebViewAfterSnapshotModal();
+
+        ApplyWorkspaceTab(WorkspaceTab.Codex);
+        var prompt = BrowserSnapshotPromptEditor?.Text;
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            prompt = snapshot.Prompt;
+        }
+
+        PublishSnapshotPromptToCodex(snapshot, prompt);
+    }
+
+    private static string BuildSnapshotPromptWithUserQuestion(WebViewPageSnapshotSaveResult snapshot, string? userQuestion)
+    {
+        if (string.IsNullOrWhiteSpace(userQuestion))
+        {
+            return snapshot.Prompt;
+        }
+
+        return snapshot.Prompt +
+            Environment.NewLine +
+            Environment.NewLine +
+            "추가 질문:" +
+            Environment.NewLine +
+            userQuestion.Trim();
+    }
+
+    private void PublishSnapshotPromptToCodex(WebViewPageSnapshotSaveResult snapshot, string? promptOverride = null)
+    {
+        ApplyWorkspaceTab(WorkspaceTab.Codex);
+        _codexPromptMacroService.PublishPromptRequested(string.IsNullOrWhiteSpace(promptOverride) ? snapshot.Prompt : promptOverride);
+        _naverTalkBrowser.SetStatus($"Codex 분석 프롬프트 생성 완료: {Path.GetFileName(snapshot.DirectoryPath)}");
+    }
+
+    private async void OnSendBrowserRequestClicked(object? sender, EventArgs e)
+    {
+        var url = BrowserRequestUrlEntry?.Text?.Trim();
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            SetBrowserRequestStatus("요청 URL을 입력해 주세요.", isError: true);
+            return;
+        }
+
+        var method = BrowserRequestMethodEntry?.Text;
+        if (string.IsNullOrWhiteSpace(method))
+        {
+            method = "POST";
+        }
+
+        try
+        {
+            SetBrowserRequestStatus("요청을 보내는 중입니다...", isError: false);
+            if (BrowserRequestResultLabel is not null)
+            {
+                BrowserRequestResultLabel.Text = "-";
+            }
+
+            var script = WebViewFetchRequestScriptBuilder.Build(url, method, BrowserRequestBodyEditor?.Text);
+            var raw = await RunBrowserScriptAsync(script);
+            var result = ParseScriptJson<BrowserRequestResult>(raw);
+            if (result is null)
+            {
+                SetBrowserRequestStatus("요청 결과를 해석하지 못했습니다.", isError: true);
+                if (BrowserRequestResultLabel is not null)
+                {
+                    BrowserRequestResultLabel.Text = TrimForLog(raw, 4000);
+                }
+
+                return;
+            }
+
+            var statusText = result.Status > 0
+                ? $"{result.Status} {result.StatusText}".Trim()
+                : result.StatusText;
+            var message = result.Ok
+                ? $"요청 성공: {statusText}"
+                : $"요청 실패: {statusText}";
+            SetBrowserRequestStatus(message, isError: !result.Ok);
+
+            if (BrowserRequestResultLabel is not null)
+            {
+                BrowserRequestResultLabel.Text =
+                    $"URL: {result.Url}{Environment.NewLine}" +
+                    $"Status: {statusText}{Environment.NewLine}{Environment.NewLine}" +
+                    TrimForLog(result.Body, 4000);
+            }
+        }
+        catch (Exception ex)
+        {
+            SetBrowserRequestStatus($"요청 실행 실패: {ex.Message}", isError: true);
+        }
+    }
+
+    private async void OnApplyCookieClicked(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        try
+        {
+            if (!TryResolveCookieTargetUri(out var targetOrigin, out var targetUri))
+            {
+                SetCookieImportStatus("쿠키를 넣을 도메인을 먼저 입력하세요.", isError: true);
+                return;
+            }
+
+            var cookiePairs = ParseCookieHeader(CookieHeaderEditor?.Text).ToList();
+            if (cookiePairs.Count == 0)
+            {
+                SetCookieImportStatus("붙여넣은 쿠키 문자열에서 유효한 name=value 항목을 찾지 못했습니다.", isError: true);
+                return;
+            }
+
+            var coreWebView2 = await TryEnsureCoreWebView2Async();
+            if (coreWebView2 is null)
+            {
+                SetCookieImportStatus("WebView2가 아직 준비되지 않았습니다. 페이지를 한 번 연 뒤 다시 시도하세요.", isError: true);
+                return;
+            }
+
+            var imported = 0;
+            var failed = 0;
+            var cookieManager = coreWebView2.CookieManager;
+            foreach (var (name, value) in cookiePairs)
+            {
+                try
+                {
+                    var cookie = cookieManager.CreateCookie(name, value, targetUri.Host, "/");
+                    cookie.IsSecure = string.Equals(targetUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
+                    cookieManager.AddOrUpdateCookie(cookie);
+                    imported++;
+                }
+                catch
+                {
+                    failed++;
+                }
+            }
+
+            SetCookieImportStatus(
+                failed == 0
+                    ? $"{targetUri.Host}에 쿠키 {imported}개를 적용했습니다. 필요하면 페이지를 새로고침하세요."
+                    : $"{targetUri.Host}에 쿠키 {imported}개 적용, {failed}개 실패했습니다.",
+                isError: failed > 0);
+
+            if (BrowserAddressEntry is not null)
+            {
+                BrowserAddressEntry.Text = targetOrigin;
+            }
+
+            NaverTalkWebView.Reload();
+        }
+        catch (Exception ex)
+        {
+            SetCookieImportStatus($"쿠키 적용 실패: {ex.Message}", isError: true);
+        }
+#else
+        SetCookieImportStatus("쿠키 주입은 Windows WebView2에서만 지원됩니다.", isError: true);
+#endif
+    }
+
+    private async void OnGetCurrentCookiesClicked(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        try
+        {
+            if (!TryResolveCookieTargetUri(out var targetOrigin, out var targetUri))
+            {
+                SetCookieImportStatus("쿠키를 가져올 도메인을 먼저 입력하거나 페이지에 접속하세요.", isError: true);
+                return;
+            }
+
+            var coreWebView2 = await TryEnsureCoreWebView2Async();
+            if (coreWebView2 is null)
+            {
+                SetCookieImportStatus("WebView2가 아직 준비되지 않았습니다. 페이지를 한 번 연 뒤 다시 시도하세요.", isError: true);
+                return;
+            }
+
+            var cookies = await coreWebView2.CookieManager.GetCookiesAsync(targetOrigin);
+            var cookieHeader = string.Join("; ", cookies.Select(cookie => $"{cookie.Name}={cookie.Value}"));
+            if (CookieHeaderEditor is not null)
+            {
+                CookieHeaderEditor.Text = cookieHeader;
+            }
+
+            SetCookieImportStatus(
+                cookies.Count == 0
+                    ? $"{targetUri.Host}에서 가져올 쿠키가 없습니다."
+                    : $"{targetUri.Host} 쿠키 {cookies.Count}개를 문자열로 가져왔습니다.",
+                isError: false);
+        }
+        catch (Exception ex)
+        {
+            SetCookieImportStatus($"쿠키 가져오기 실패: {ex.Message}", isError: true);
+        }
+#else
+        SetCookieImportStatus("쿠키 가져오기는 Windows WebView2에서만 지원됩니다.", isError: true);
+#endif
+    }
+
+    private async void OnCopyCookiesClicked(object? sender, EventArgs e)
+    {
+        var cookieHeader = CookieHeaderEditor?.Text;
+        if (string.IsNullOrWhiteSpace(cookieHeader))
+        {
+            SetCookieImportStatus("복사할 쿠키 문자열이 없습니다.", isError: true);
+            return;
+        }
+
+        try
+        {
+            await Clipboard.Default.SetTextAsync(cookieHeader.Trim());
+            SetCookieImportStatus("쿠키 문자열을 클립보드에 복사했습니다.", isError: false);
+        }
+        catch (Exception ex)
+        {
+            SetCookieImportStatus($"클립보드 복사 실패: {ex.Message}", isError: true);
+        }
+    }
+
+    private bool TryResolveCookieTargetUri(out string targetOrigin, out Uri targetUri)
+    {
+        targetOrigin = NormalizeCookieTargetOrigin(CookieDomainEntry?.Text) ?? TryResolveCurrentBrowserOrigin() ?? string.Empty;
+        if (Uri.TryCreate(targetOrigin, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
+        {
+            targetUri = uri;
+            if (CookieDomainEntry is not null)
+            {
+                CookieDomainEntry.Text = targetOrigin;
+            }
+
+            return true;
+        }
+
+        targetUri = null!;
+        return false;
+    }
+
+    private void SetCookieImportStatus(string message, bool isError)
+    {
+        if (CookieImportStatusLabel is not null)
+        {
+            CookieImportStatusLabel.Text = message;
+            CookieImportStatusLabel.TextColor = isError
+                ? Color.FromArgb("#B35A4A")
+                : Color.FromArgb("#2D8A63");
+        }
+
+        _naverTalkBrowser.SetStatus(message, _naverTalkBrowser.CurrentUrl);
+    }
+
+    private void SetBrowserRequestStatus(string message, bool isError)
+    {
+        if (BrowserRequestStatusLabel is not null)
+        {
+            BrowserRequestStatusLabel.Text = message;
+            BrowserRequestStatusLabel.TextColor = isError
+                ? Color.FromArgb("#B35A4A")
+                : Color.FromArgb("#2D8A63");
+        }
+
+        _naverTalkBrowser.SetStatus(message, _naverTalkBrowser.CurrentUrl);
+    }
+
+    private string? TryResolveCurrentBrowserOrigin()
+    {
+        var candidates = new[]
+        {
+            _naverTalkBrowser.CurrentUrl,
+            BrowserAddressEntry?.Text,
+            BrowserUrlLabel?.Text
+        };
+
+        foreach (var candidate in candidates)
+        {
+            var normalized = NormalizeCookieTargetOrigin(candidate);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeCookieTargetOrigin(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        var normalizedUrl = NormalizeAddressInput(input);
+        if (string.IsNullOrWhiteSpace(normalizedUrl) ||
+            !Uri.TryCreate(normalizedUrl, UriKind.Absolute, out var uri) ||
+            string.IsNullOrWhiteSpace(uri.Host))
+        {
+            return null;
+        }
+
+        return uri.IsDefaultPort
+            ? $"{uri.Scheme}://{uri.Host}"
+            : $"{uri.Scheme}://{uri.Host}:{uri.Port.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private static IEnumerable<(string Name, string Value)> ParseCookieHeader(string? cookieHeader)
+    {
+        if (string.IsNullOrWhiteSpace(cookieHeader))
+        {
+            yield break;
+        }
+
+        var cookies = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var segment in cookieHeader.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var separatorIndex = segment.IndexOf('=');
+            if (separatorIndex <= 0)
+            {
+                continue;
+            }
+
+            var name = segment[..separatorIndex].Trim();
+            var value = segment[(separatorIndex + 1)..].Trim();
+            if (!IsValidCookieName(name))
+            {
+                continue;
+            }
+
+            cookies[name] = value.Trim('"');
+        }
+
+        foreach (var cookie in cookies)
+        {
+            yield return (cookie.Key, cookie.Value);
+        }
+    }
+
+    private static bool IsValidCookieName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        const string separators = "()<>@,;:\\\"/[]?={} \t";
+        return name.All(ch => ch > 0x20 && ch < 0x7f && !separators.Contains(ch, StringComparison.Ordinal));
+    }
+
     private async Task TypeTextIntoNaverTalkAsync(string? text, bool submit)
     {
         if (string.IsNullOrWhiteSpace(text))

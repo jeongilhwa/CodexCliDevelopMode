@@ -81,6 +81,14 @@
                 <button class="tab-add" @onclick="AddNewTab" title="New chat tab">+</button>
             </div>
 
+            @if (!string.IsNullOrWhiteSpace(ActiveTab.PendingPromptNotice))
+            {
+                <div class="external-prompt-banner">
+                    <strong>Codex 입력창에 프롬프트가 준비되었습니다.</strong>
+                    <pre>@ActiveTab.PendingPromptNotice</pre>
+                </div>
+            }
+
             <div class="transcript">
                 @if (ActiveTab.Messages.Count == 0)
                 {
@@ -538,6 +546,7 @@
 
         var prompt = tab.DraftMessage.Trim();
         tab.DraftMessage = string.Empty;
+        tab.PendingPromptNotice = string.Empty;
         await InvokeAsync(StateHasChanged);
         await SendPromptAsync(prompt, addAsUserMessage: true, tab);
     }
@@ -702,10 +711,31 @@
                 AddNewTab();
             }
 
-            ActiveTab.DraftMessage = prompt.Trim();
+            var trimmedPrompt = prompt.Trim();
+            ActiveTab.DraftMessage = trimmedPrompt;
+            ActiveTab.PendingPromptNotice = BuildExternalPromptNotice(trimmedPrompt);
             UpdateTabTitle(ActiveTab);
             StateHasChanged();
         });
+    }
+
+    private static string BuildExternalPromptNotice(string prompt)
+    {
+        var lines = prompt
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("Snapshot folder:", StringComparison.OrdinalIgnoreCase) ||
+                           line.StartsWith("Snapshot path:", StringComparison.OrdinalIgnoreCase))
+            .Take(2)
+            .ToArray();
+
+        if (lines.Length > 0)
+        {
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        var preview = prompt.Length > 500 ? prompt[..500] + "..." : prompt;
+        return preview;
     }
 
     private async Task<bool> TryApplyMacroByObservedMessageAsync(string keyDebugMessage)
@@ -953,6 +983,7 @@
         tab.ThreadId = null;
         tab.Messages.Clear();
         tab.DraftMessage = string.Empty;
+        tab.PendingPromptNotice = string.Empty;
         tab.Title = $"Chat {tab.TabNumber}";
     }
 
@@ -1536,6 +1567,7 @@
         public string? ThreadId { get; set; }
         public IList<ChatMessage> Messages { get; } = new List<ChatMessage>();
         public string DraftMessage { get; set; } = string.Empty;
+        public string PendingPromptNotice { get; set; } = string.Empty;
         public bool IsBusy { get; set; }
         public DateTimeOffset? BusyStartedAt { get; set; }
         public CancellationTokenSource? RunCts { get; set; }

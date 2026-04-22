@@ -220,8 +220,8 @@ button:disabled {
 
 .chat-panel {
     display: grid;
-    grid-template-rows: 1.3rem auto minmax(0, 1fr) auto auto;
-    gap: 0.4rem;
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+    gap: 0.55rem;
     padding: 0.7rem;
 }
 
@@ -420,13 +420,37 @@ button:disabled {
 }
 
 .transcript {
-    min-height: 12rem;
-    max-height: 32rem;
+    min-height: 16rem;
+    max-height: 44rem;
     overflow: auto;
     display: grid;
     gap: 0.4rem;
     padding-right: 0.2rem;
     align-content: start;
+}
+
+.external-prompt-banner {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.72rem 0.85rem;
+    border: 1px solid rgba(31, 103, 128, 0.22);
+    border-radius: 0.65rem;
+    background: rgba(31, 103, 128, 0.08);
+}
+
+.external-prompt-banner strong {
+    font-size: 0.9rem;
+    color: #1c4d60;
+}
+
+.external-prompt-banner pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: #24444f;
 }
 
 .empty-state {
@@ -510,7 +534,7 @@ button:disabled {
 }
 
 .composer textarea {
-    min-height: 4rem;
+    min-height: 9rem;
     padding: 0.55rem 0.7rem;
     border-radius: 0.6rem;
 }

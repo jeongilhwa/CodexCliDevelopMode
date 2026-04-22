@@ -337,6 +337,33 @@
                                             BackgroundColor="#1220252C"
                                             TextColor="#50656F"
                                             Clicked="OnWebViewInspectorToggleClicked" />
+                                    <Button x:Name="BrowserCookieButton"
+                                            Text="Cookie"
+                                            FontFamily="Bahnschrift"
+                                            FontSize="12"
+                                            Padding="14,9"
+                                            CornerRadius="12"
+                                            BackgroundColor="#1220252C"
+                                            TextColor="#50656F"
+                                            Clicked="OnBrowserCookieClicked" />
+                                    <Button x:Name="BrowserRequestButton"
+                                            Text="Request"
+                                            FontFamily="Bahnschrift"
+                                            FontSize="12"
+                                            Padding="14,9"
+                                            CornerRadius="12"
+                                            BackgroundColor="#1F6780"
+                                            TextColor="#FFFFFF"
+                                            Clicked="OnBrowserRequestClicked" />
+                                    <Button x:Name="BrowserSnapshotButton"
+                                            Text="Snapshot"
+                                            FontFamily="Bahnschrift"
+                                            FontSize="12"
+                                            Padding="14,9"
+                                            CornerRadius="12"
+                                            BackgroundColor="#1220252C"
+                                            TextColor="#50656F"
+                                            Clicked="OnBrowserSnapshotClicked" />
                                 </HorizontalStackLayout>
                             </Grid>
                         </Border>
@@ -511,6 +538,339 @@
                                 </Grid>
                             </Border>
                         </Grid>
+
+                        <Grid x:Name="CookieImportModal"
+                              Grid.RowSpan="3"
+                              IsVisible="False"
+                              BackgroundColor="#660E171B"
+                              Padding="36">
+                            <Border BackgroundColor="#F4FBFCFC"
+                                    Stroke="#1A18252C"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 22"
+                                    MaximumWidthRequest="900"
+                                    HorizontalOptions="Center"
+                                    VerticalOptions="Center">
+                                <Grid RowDefinitions="Auto,Auto,*,Auto"
+                                      RowSpacing="12"
+                                      Padding="18">
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="12">
+                                        <VerticalStackLayout Spacing="4">
+                                            <Label Text="Cookie Import"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="18"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#18252C" />
+                                            <Label Text="브라우저 Cookie 헤더를 붙여넣으면 현재 WebBrowser 세션에만 주입합니다. 코드에는 저장하지 않습니다."
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="12"
+                                                   TextColor="#637780" />
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="1"
+                                                Text="Close"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="14,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#1220252C"
+                                                TextColor="#50656F"
+                                                Clicked="OnCloseCookieImportModalClicked" />
+                                    </Grid>
+
+                                    <Grid Grid.Row="1"
+                                          ColumnDefinitions="*,Auto,Auto,Auto"
+                                          ColumnSpacing="10">
+                                        <Border BackgroundColor="#DFFFFFFF"
+                                                Stroke="#1420252C"
+                                                StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 14"
+                                                HeightRequest="44">
+                                            <Entry x:Name="CookieDomainEntry"
+                                                   Margin="12,0"
+                                                   Placeholder="쿠키를 넣을 도메인 예: https://www.aliexpress.com 또는 aliexpress.com"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   TextColor="#31474F"
+                                                   PlaceholderColor="#6B8793"
+                                                   VerticalOptions="Center" />
+                                        </Border>
+                                        <Button Grid.Column="1"
+                                                x:Name="ApplyCookieButton"
+                                                Text="Apply Cookies"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="16,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#1F6780"
+                                                TextColor="#FFFFFF"
+                                                Clicked="OnApplyCookieClicked" />
+                                        <Button Grid.Column="2"
+                                                x:Name="GetCurrentCookiesButton"
+                                                Text="Get Current"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="16,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#EEF3F6"
+                                                TextColor="#31474F"
+                                                Clicked="OnGetCurrentCookiesClicked" />
+                                        <Button Grid.Column="3"
+                                                x:Name="CopyCookiesButton"
+                                                Text="Copy"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="16,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#EEF3F6"
+                                                TextColor="#31474F"
+                                                Clicked="OnCopyCookiesClicked" />
+                                    </Grid>
+
+                                    <Border Grid.Row="2"
+                                            BackgroundColor="#DFFFFFFF"
+                                            Stroke="#1420252C"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            MinimumHeightRequest="260">
+                                        <Editor x:Name="CookieHeaderEditor"
+                                                Margin="12"
+                                                Placeholder="cna=...; _tb_token_=...; JSESSIONID=..."
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                TextColor="#14313A"
+                                                PlaceholderColor="#7A8F98"
+                                                AutoSize="TextChanges" />
+                                    </Border>
+
+                                    <Label Grid.Row="3"
+                                           x:Name="CookieImportStatusLabel"
+                                           Text="쿠키는 민감정보입니다. 필요한 사이트에서만 사용하고 공유/커밋하지 마세요."
+                                           FontFamily="Bahnschrift"
+                                           FontSize="12"
+                                           TextColor="#B35A4A" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Grid x:Name="BrowserRequestModal"
+                              Grid.RowSpan="3"
+                              IsVisible="False"
+                              BackgroundColor="#660E171B"
+                              Padding="36">
+                            <Border BackgroundColor="#F4FBFCFC"
+                                    Stroke="#1A18252C"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 22"
+                                    MaximumWidthRequest="920"
+                                    HorizontalOptions="Center"
+                                    VerticalOptions="Center">
+                                <Grid RowDefinitions="Auto,Auto,*,Auto,Auto"
+                                      RowSpacing="12"
+                                      Padding="18">
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="12">
+                                        <VerticalStackLayout Spacing="4">
+                                            <Label Text="WebView Request"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="18"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#18252C" />
+                                            <Label Text="현재 WebView 로그인 세션으로 fetch를 실행합니다. 쿠키와 브라우저 헤더는 WebView가 처리합니다."
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="12"
+                                                   TextColor="#637780" />
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="1"
+                                                Text="Close"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="14,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#1220252C"
+                                                TextColor="#50656F"
+                                                Clicked="OnCloseBrowserRequestModalClicked" />
+                                    </Grid>
+
+                                    <Grid Grid.Row="1"
+                                          ColumnDefinitions="120,*,Auto"
+                                          ColumnSpacing="10">
+                                        <Border BackgroundColor="#DFFFFFFF"
+                                                Stroke="#1420252C"
+                                                StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 14"
+                                                HeightRequest="44">
+                                            <Entry x:Name="BrowserRequestMethodEntry"
+                                                   Margin="12,0"
+                                                   Text="POST"
+                                                   Placeholder="POST"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   TextColor="#31474F"
+                                                   PlaceholderColor="#6B8793"
+                                                   VerticalOptions="Center" />
+                                        </Border>
+                                        <Border Grid.Column="1"
+                                                BackgroundColor="#DFFFFFFF"
+                                                Stroke="#1420252C"
+                                                StrokeThickness="1"
+                                                StrokeShape="RoundRectangle 14"
+                                                HeightRequest="44">
+                                            <Entry x:Name="BrowserRequestUrlEntry"
+                                                   Margin="12,0"
+                                                   Placeholder="/Home/ExtendLoginTime"
+                                                   FontFamily="Consolas"
+                                                   FontSize="13"
+                                                   TextColor="#31474F"
+                                                   PlaceholderColor="#6B8793"
+                                                   VerticalOptions="Center" />
+                                        </Border>
+                                        <Button Grid.Column="2"
+                                                x:Name="SendBrowserRequestButton"
+                                                Text="Send"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="18,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#1F6780"
+                                                TextColor="#FFFFFF"
+                                                Clicked="OnSendBrowserRequestClicked" />
+                                    </Grid>
+
+                                    <Border Grid.Row="2"
+                                            BackgroundColor="#DFFFFFFF"
+                                            Stroke="#1420252C"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            MinimumHeightRequest="180">
+                                        <Editor x:Name="BrowserRequestBodyEditor"
+                                                Margin="12"
+                                                Placeholder="JSON body"
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                TextColor="#14313A"
+                                                PlaceholderColor="#7A8F98"
+                                                AutoSize="TextChanges" />
+                                    </Border>
+
+                                    <Label Grid.Row="3"
+                                           x:Name="BrowserRequestStatusLabel"
+                                           Text="Body가 비어 있으면 body 없이 요청합니다."
+                                           FontFamily="Bahnschrift"
+                                           FontSize="12"
+                                           TextColor="#637780" />
+
+                                    <Border Grid.Row="4"
+                                            BackgroundColor="#EFFFFFFF"
+                                            Stroke="#12142324"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            Padding="12"
+                                            MinimumHeightRequest="96">
+                                        <ScrollView Orientation="Vertical">
+                                            <Label x:Name="BrowserRequestResultLabel"
+                                                   Text="-"
+                                                   FontFamily="Consolas"
+                                                   FontSize="12"
+                                                   TextColor="#30464F"
+                                                   LineBreakMode="WordWrap" />
+                                        </ScrollView>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Grid x:Name="BrowserSnapshotConfirmModal"
+                              Grid.RowSpan="3"
+                              IsVisible="False"
+                              ZIndex="100"
+                              BackgroundColor="#660E171B"
+                              Padding="36">
+                            <Border BackgroundColor="#F4FBFCFC"
+                                    Stroke="#1A18252C"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 22"
+                                    MaximumWidthRequest="920"
+                                    HorizontalOptions="Center"
+                                    VerticalOptions="Center">
+                                <Grid RowDefinitions="Auto,Auto,*,Auto"
+                                      RowSpacing="14"
+                                      Padding="18">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Label x:Name="BrowserSnapshotModalTitleLabel"
+                                               Text="Snapshot"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="18"
+                                               FontAttributes="Bold"
+                                               TextColor="#18252C" />
+                                        <Label x:Name="BrowserSnapshotModalDescriptionLabel"
+                                               Text="snapshot 저장 후 Codex로 분석할까요?"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="13"
+                                               TextColor="#637780" />
+                                    </VerticalStackLayout>
+
+                                    <Border Grid.Row="1"
+                                            BackgroundColor="#EFFFFFFF"
+                                            Stroke="#12142324"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            Padding="12">
+                                        <VerticalStackLayout Spacing="8">
+                                            <Label x:Name="BrowserSnapshotFolderLabel"
+                                                   Text="Folder: -"
+                                                   FontFamily="Consolas"
+                                                   FontSize="12"
+                                                   TextColor="#30464F"
+                                                   LineBreakMode="TailTruncation" />
+                                            <Label x:Name="BrowserSnapshotPathLabel"
+                                                   Text="Path: -"
+                                                   FontFamily="Consolas"
+                                                   FontSize="12"
+                                                   TextColor="#30464F"
+                                                   LineBreakMode="WordWrap" />
+                                        </VerticalStackLayout>
+                                    </Border>
+
+                                    <Border Grid.Row="2"
+                                            BackgroundColor="#DFFFFFFF"
+                                            Stroke="#1420252C"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            MinimumHeightRequest="220">
+                                        <Editor x:Name="BrowserSnapshotPromptEditor"
+                                                Margin="12"
+                                                Placeholder="Codex에게 물어볼 질문"
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                TextColor="#14313A"
+                                                PlaceholderColor="#7A8F98"
+                                                AutoSize="Disabled" />
+                                    </Border>
+
+                                    <HorizontalStackLayout Grid.Row="3"
+                                                           Spacing="10"
+                                                           HorizontalOptions="End">
+                                        <Button Text="No"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="18,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#EEF3F6"
+                                                TextColor="#31474F"
+                                                Clicked="OnCancelBrowserSnapshotAnalysisClicked" />
+                                        <Button Text="Yes"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="18,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#1F6780"
+                                                TextColor="#FFFFFF"
+                                                Clicked="OnConfirmBrowserSnapshotAnalysisClicked" />
+                                    </HorizontalStackLayout>
+                                </Grid>
+                            </Border>
+                        </Grid>
                     </Grid>
 
                     <Grid x:Name="NetworkWorkspacePanel"
@@ -608,7 +968,7 @@
                         <Grid Grid.Row="1"
                               Margin="12,12,12,12"
                               x:Name="ChatSplitGrid"
-                              ColumnDefinitions="1.15*,0.85*"
+                              ColumnDefinitions="0.9*,1.1*"
                               ColumnSpacing="12">
                             <Border x:Name="NetworkPane"
                                     BackgroundColor="#9FFFFFFF"
@@ -912,6 +1272,96 @@
                                             </Border>
                                         </VerticalStackLayout>
                                     </ScrollView>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Grid x:Name="NetworkCaptureSnapshotConfirmModal"
+                              Grid.RowSpan="2"
+                              IsVisible="False"
+                              ZIndex="100"
+                              BackgroundColor="#660E171B"
+                              Padding="36">
+                            <Border BackgroundColor="#F4FBFCFC"
+                                    Stroke="#1A18252C"
+                                    StrokeThickness="1"
+                                    StrokeShape="RoundRectangle 22"
+                                    MaximumWidthRequest="920"
+                                    HorizontalOptions="Center"
+                                    VerticalOptions="Center">
+                                <Grid RowDefinitions="Auto,Auto,*,Auto"
+                                      RowSpacing="14"
+                                      Padding="18">
+                                    <VerticalStackLayout Spacing="6">
+                                        <Label Text="Network Capture Saved"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="18"
+                                               FontAttributes="Bold"
+                                               TextColor="#18252C" />
+                                        <Label Text="방금 저장한 network capture를 Codex로 분석 시작할까요?"
+                                               FontFamily="Bahnschrift"
+                                               FontSize="13"
+                                               TextColor="#637780" />
+                                    </VerticalStackLayout>
+
+                                    <Border Grid.Row="1"
+                                            BackgroundColor="#EFFFFFFF"
+                                            Stroke="#12142324"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            Padding="12">
+                                        <VerticalStackLayout Spacing="8">
+                                            <Label x:Name="NetworkCaptureSnapshotFolderLabel"
+                                                   Text="Folder: -"
+                                                   FontFamily="Consolas"
+                                                   FontSize="12"
+                                                   TextColor="#30464F"
+                                                   LineBreakMode="TailTruncation" />
+                                            <Label x:Name="NetworkCaptureSnapshotPathLabel"
+                                                   Text="Path: -"
+                                                   FontFamily="Consolas"
+                                                   FontSize="12"
+                                                   TextColor="#30464F"
+                                                   LineBreakMode="WordWrap" />
+                                        </VerticalStackLayout>
+                                    </Border>
+
+                                    <Border Grid.Row="2"
+                                            BackgroundColor="#DFFFFFFF"
+                                            Stroke="#1420252C"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            MinimumHeightRequest="220">
+                                        <Editor x:Name="NetworkCaptureSnapshotPromptEditor"
+                                                Margin="12"
+                                                Placeholder="Codex에게 물어볼 질문"
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                TextColor="#14313A"
+                                                PlaceholderColor="#7A8F98"
+                                                AutoSize="Disabled" />
+                                    </Border>
+
+                                    <HorizontalStackLayout Grid.Row="3"
+                                                           Spacing="10"
+                                                           HorizontalOptions="End">
+                                        <Button Text="No"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="18,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#EEF3F6"
+                                                TextColor="#31474F"
+                                                Clicked="OnCancelNetworkCaptureSnapshotAnalysisClicked" />
+                                        <Button Text="Yes"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="18,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#1F6780"
+                                                TextColor="#FFFFFF"
+                                                Clicked="OnConfirmNetworkCaptureSnapshotAnalysisClicked" />
+                                    </HorizontalStackLayout>
                                 </Grid>
                             </Border>
                         </Grid>

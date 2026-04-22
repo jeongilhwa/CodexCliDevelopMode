@@ -11,6 +11,7 @@ obj/
 
 # Local Codex artifacts
 .codex-build/
+.tmp-build/
 .tmpobj/
 _perm_test*.tmp
 src/CodexDesk.App/completed-chats.json
