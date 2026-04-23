@@ -34,6 +34,7 @@ public partial class MainPage : ContentPage
                 webView2.CoreWebView2Initialized += OnCoreWebView2Initialized;
                 if (webView2.CoreWebView2 is not null)
                 {
+                    _ = ApplyWebViewUserAgentAsync(webView2.CoreWebView2);
                     AttachWebViewNewWindowHandler(webView2.CoreWebView2);
                     AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
                     _ = EnsureWebViewInspectorScriptRegisteredAsync(webView2.CoreWebView2);
@@ -56,6 +57,7 @@ public partial class MainPage : ContentPage
         }
 
         _naverTalkBrowser.SetStatus("WebView2 is ready.");
+        _ = ApplyWebViewUserAgentAsync(sender.CoreWebView2);
         AttachWebViewNewWindowHandler(sender.CoreWebView2);
         AttachWebViewKeyboardDebugHandlers(sender.CoreWebView2);
         _ = EnsureWebViewInspectorScriptRegisteredAsync(sender.CoreWebView2);
@@ -1288,7 +1290,20 @@ public partial class MainPage : ContentPage
 
     private void OnBrowserStateChanged()
     {
+#if WINDOWS
+        _ = MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            var coreWebView2 = await TryEnsureCoreWebView2Async();
+            if (coreWebView2 is not null)
+            {
+                await ApplyWebViewUserAgentAsync(coreWebView2);
+            }
+
+            UpdateBrowserChrome();
+        });
+#else
         _ = MainThread.InvokeOnMainThreadAsync(UpdateBrowserChrome);
+#endif
     }
 
     private void OnNaverTalkWebViewFocused(object? sender, FocusEventArgs e)
@@ -1300,6 +1315,21 @@ public partial class MainPage : ContentPage
     {
         _isNaverTalkWebViewFocused = false;
     }
+
+#if WINDOWS
+    private Task ApplyWebViewUserAgentAsync(CoreWebView2 coreWebView2)
+    {
+        var requestedUserAgent = _naverTalkBrowser.Settings.WebViewUserAgent?.Trim() ?? string.Empty;
+        if (string.Equals(_lastAppliedWebViewUserAgent, requestedUserAgent, StringComparison.Ordinal))
+        {
+            return Task.CompletedTask;
+        }
+
+        coreWebView2.Settings.UserAgent = requestedUserAgent;
+        _lastAppliedWebViewUserAgent = requestedUserAgent;
+        return Task.CompletedTask;
+    }
+#endif
 
     private void OnBrowserCommandRequested(BrowserCommand command)
     {

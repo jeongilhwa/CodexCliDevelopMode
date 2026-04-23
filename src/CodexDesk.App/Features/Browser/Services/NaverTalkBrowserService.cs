@@ -14,6 +14,7 @@ public sealed class NaverTalkBrowserService
     private const string TargetUrlKey = "naver-talk.target-url";
     private const string LoginIdKey = "naver-talk.login-id";
     private const string AutoLoginEnabledKey = "naver-talk.auto-login-enabled";
+    private const string WebViewUserAgentKey = "naver-talk.webview-user-agent";
     private const string TypingMacroTextKey = "naver-talk.typing-macro-text";
     private const string TypingMacroSendEnterEnabledKey = "naver-talk.typing-macro-send-enter-enabled";
     private const string TypingMacrosJsonKey = "naver-talk.typing-macros-json";
@@ -83,6 +84,7 @@ public sealed class NaverTalkBrowserService
             var savedTargetUrl = Preferences.Default.Get(TargetUrlKey, NaverTalkSettings.DefaultTargetUrl);
             var savedLoginId = Preferences.Default.Get(LoginIdKey, string.Empty);
             var savedAutoLoginEnabled = Preferences.Default.Get(AutoLoginEnabledKey, true);
+            var savedWebViewUserAgent = Preferences.Default.Get(WebViewUserAgentKey, string.Empty);
             var savedTypingMacroText = Preferences.Default.Get(TypingMacroTextKey, string.Empty);
             var savedTypingMacroSendEnterEnabled = Preferences.Default.Get(TypingMacroSendEnterEnabledKey, false);
             var savedTypingMacrosJson = Preferences.Default.Get(TypingMacrosJsonKey, string.Empty);
@@ -96,6 +98,7 @@ public sealed class NaverTalkBrowserService
                 NormalizeUrl(savedTargetUrl),
                 savedLoginId.Trim(),
                 savedAutoLoginEnabled,
+                savedWebViewUserAgent.Trim(),
                 savedTypingMacroText,
                 savedTypingMacroSendEnterEnabled,
                 savedTypingMacrosJson);
@@ -133,6 +136,7 @@ public sealed class NaverTalkBrowserService
             NormalizeUrl(update.TargetUrl),
             update.LoginId.Trim(),
             update.AutoLoginEnabled,
+            update.WebViewUserAgent.Trim(),
             update.TypingMacroText,
             update.TypingMacroSendEnterEnabled,
             normalizedTypingMacrosJson);
@@ -140,6 +144,7 @@ public sealed class NaverTalkBrowserService
         Preferences.Default.Set(TargetUrlKey, _settings.TargetUrl);
         Preferences.Default.Set(LoginIdKey, _settings.LoginId);
         Preferences.Default.Set(AutoLoginEnabledKey, _settings.AutoLoginEnabled);
+        Preferences.Default.Set(WebViewUserAgentKey, _settings.WebViewUserAgent);
         Preferences.Default.Set(TypingMacroTextKey, _settings.TypingMacroText);
         Preferences.Default.Set(TypingMacroSendEnterEnabledKey, _settings.TypingMacroSendEnterEnabled);
         Preferences.Default.Set(TypingMacrosJsonKey, _settings.TypingMacrosJson);

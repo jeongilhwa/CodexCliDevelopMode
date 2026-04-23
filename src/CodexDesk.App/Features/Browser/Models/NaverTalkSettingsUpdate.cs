@@ -9,6 +9,7 @@ public sealed record NaverTalkSettingsUpdate(
     string LoginId,
     string? NewPasswordOrNull,
     bool AutoLoginEnabled,
+    string WebViewUserAgent,
     string TypingMacroText,
     bool TypingMacroSendEnterEnabled,
     string TypingMacrosJson);

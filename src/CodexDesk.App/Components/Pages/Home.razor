@@ -303,13 +303,28 @@
                         <span>로그인 페이지가 나오면 자동 로그인 시도</span>
                     </label>
 
+                    <label class="field">
+                        <span>WebView2 User-Agent Preset</span>
+                        <select value="@SelectedWebViewUserAgentPresetKey" @onchange="OnUserAgentPresetChanged">
+                            @foreach (var preset in WebViewUserAgentPresets)
+                            {
+                                <option value="@preset.Key">@preset.Label</option>
+                            }
+                        </select>
+                    </label>
+
+                    <label class="field">
+                        <span>WebView2 User-Agent (optional)</span>
+                        <input value="@WebViewUserAgent" @oninput="OnWebViewUserAgentInput" placeholder="비워두면 WebView2 기본 User-Agent를 사용합니다." />
+                    </label>
+
                     <p class="hint">
                         저장된 비밀번호: <strong>@(NaverTalkBrowser.HasStoredPassword ? "있음" : "없음")</strong>
                         비밀번호 입력칸을 비워두고 저장하면 기존 저장값은 유지됩니다.
                     </p>
 
                     <div class="button-row">
-                        <button type="button" class="ghost" @onclick="SaveNaverTalkSettingsAsync">Save Login</button>
+                        <button type="button" class="ghost" @onclick="SaveNaverTalkSettingsAsync">Save Naver Settings</button>
                         <button type="button" class="primary" @onclick="OpenNaverTalkAsync">Open Naver Talk</button>
                         <button type="button" class="ghost" @onclick="ReloadNaverTalkBrowserAsync">Reload WebView</button>
                         <button type="button" class="ghost" @onclick="ClearNaverTalkPasswordAsync">Clear Saved Password</button>
@@ -479,6 +494,8 @@
     private string NaverLoginPassword { get; set; } = string.Empty;
 
     private bool AutoNaverLoginEnabled { get; set; } = true;
+    private string WebViewUserAgent { get; set; } = string.Empty;
+    private string SelectedWebViewUserAgentPresetKey { get; set; } = UserAgentPresetDefaultKey;
 
     private bool AllowWorkspaceWrite { get; set; } = true;
 
@@ -504,6 +521,15 @@
     private DateTime _lastObservedShortcutAt = DateTime.MinValue;
     private DateTimeOffset? _lastSeenCollectionResultAt;
     private string CollectionResultActionStatus { get; set; } = string.Empty;
+    private const string UserAgentPresetDefaultKey = "default";
+    private const string UserAgentPresetCustomKey = "custom";
+    private static readonly IReadOnlyList<UserAgentPresetOption> WebViewUserAgentPresets =
+    [
+        new(UserAgentPresetDefaultKey, "Default (WebView2)", string.Empty),
+        new("chrome136", "Chrome 136 (Windows)", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"),
+        new("edge136", "Edge 136 (Windows)", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0"),
+        new(UserAgentPresetCustomKey, "Custom (manual input)", null)
+    ];
     private bool IsMacrosSettingsVisible => IsSessionModalOpen && SettingsTab == "macros";
     private bool IsNaverSettingsVisible => IsSessionModalOpen && SettingsTab == "naver";
     private string StatusLabel =>
@@ -1391,6 +1417,7 @@
             NaverLoginId,
             passwordToStore,
             AutoNaverLoginEnabled,
+            WebViewUserAgent,
             string.Empty,
             false,
             string.Empty));
@@ -1410,11 +1437,57 @@
         NaverTalkUrl = settings.TargetUrl;
         NaverLoginId = settings.LoginId;
         AutoNaverLoginEnabled = settings.AutoLoginEnabled;
+        WebViewUserAgent = settings.WebViewUserAgent;
+        SelectedWebViewUserAgentPresetKey = ResolveUserAgentPresetKey(WebViewUserAgent);
         if (clearPasswordInput)
         {
             NaverLoginPassword = string.Empty;
         }
     }
+
+    private void OnUserAgentPresetChanged(ChangeEventArgs args)
+    {
+        var selectedKey = args.Value?.ToString() ?? UserAgentPresetDefaultKey;
+        SelectedWebViewUserAgentPresetKey = selectedKey;
+
+        var selectedPreset = WebViewUserAgentPresets.FirstOrDefault(preset =>
+            string.Equals(preset.Key, selectedKey, StringComparison.Ordinal));
+
+        if (selectedPreset?.Value is not null)
+        {
+            WebViewUserAgent = selectedPreset.Value;
+        }
+    }
+
+    private void OnWebViewUserAgentInput(ChangeEventArgs args)
+    {
+        WebViewUserAgent = args.Value?.ToString() ?? string.Empty;
+        SelectedWebViewUserAgentPresetKey = ResolveUserAgentPresetKey(WebViewUserAgent);
+    }
+
+    private static string ResolveUserAgentPresetKey(string? userAgent)
+    {
+        var normalized = userAgent?.Trim() ?? string.Empty;
+
+        foreach (var preset in WebViewUserAgentPresets)
+        {
+            if (preset.Value is null)
+            {
+                continue;
+            }
+
+            if (string.Equals(preset.Value, normalized, StringComparison.Ordinal))
+            {
+                return preset.Key;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(normalized)
+            ? UserAgentPresetDefaultKey
+            : UserAgentPresetCustomKey;
+    }
+
+    private sealed record UserAgentPresetOption(string Key, string Label, string? Value);
 
     private void OnNaverTalkBrowserStateChanged()
     {
