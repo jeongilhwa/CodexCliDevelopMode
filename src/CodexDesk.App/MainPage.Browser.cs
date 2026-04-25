@@ -336,7 +336,9 @@ public partial class MainPage : ContentPage
             url,
             status,
             durationMs,
-            encodedDataLength);
+            encodedDataLength,
+            resourceType,
+            mimeType);
     }
 
     private static string NormalizeStatusMessage(int? status, string? statusText)
