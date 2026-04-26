@@ -46,8 +46,12 @@ public partial class MainPage : ContentPage
     private static readonly Color SplitterHoverColor = Color.FromArgb("#78909C");
     private static readonly Color SplitterActiveColor = Color.FromArgb("#1D5C74");
     private readonly ObservableCollection<WebViewNetworkLogEntry> _webViewNetworkEntries = [];
-    private const int MaxWebViewNetworkEntries = 120;
-    private const int MaxNetworkAnalysisPromptLength = 52000;
+    private readonly List<WebViewNetworkLogEntry> _webViewNetworkAllEntries = [];
+    private readonly HashSet<string> _activeNetworkFilters = new(StringComparer.OrdinalIgnoreCase);
+    private string _networkSearchQuery = string.Empty;
+    private int _webViewNetworkSequence;
+    private const int MaxWebViewNetworkEntries = 1000;
+    private const int MaxNetworkAnalysisPromptLength = 80000;
     private NetworkAnalysisScope _networkAnalysisScope = NetworkAnalysisScope.Selected;
     private NetworkAnalysisDetailMode _networkAnalysisDetailMode = NetworkAnalysisDetailMode.Summary;
     private WorkspaceTab _activeWorkspaceTab = WorkspaceTab.Codex;
@@ -78,6 +82,7 @@ public partial class MainPage : ContentPage
     private enum NetworkAnalysisScope
     {
         Selected,
+        Filtered,
         All
     }
 
@@ -93,6 +98,7 @@ public partial class MainPage : ContentPage
         string Summary,
         string RequestDetails,
         string ResponseDetails,
+        string UrlDisplay,
         string StatusDisplay,
         Color StatusColor,
         string MethodDisplay,
@@ -130,6 +136,23 @@ public partial class MainPage : ContentPage
         string StatusText,
         string Url,
         string Body);
+
+    private sealed class NetworkCaptureManifest
+    {
+        public List<NetworkCaptureManifestRequest>? Requests { get; set; }
+    }
+
+    private sealed class NetworkCaptureManifestRequest
+    {
+        public string? Folder { get; set; }
+        public int Sequence { get; set; }
+        public string? Method { get; set; }
+        public string? Status { get; set; }
+        public string? Host { get; set; }
+        public string? Path { get; set; }
+        public string? Time { get; set; }
+        public string? Size { get; set; }
+    }
 #if WINDOWS
     private IntPtr _keyboardHookHandle;
     private IntPtr _mainWindowHandle;
@@ -246,6 +269,7 @@ public partial class MainPage : ContentPage
         InitializeWorkspaceShell();
         UpdateNetworkCount();
         UpdateNetworkAnalysisButtons();
+        UpdateNetworkFilterChipStyles();
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
     }
 
@@ -466,18 +490,13 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        _webViewNetworkEntries.Insert(0, entry);
-        while (_webViewNetworkEntries.Count > MaxWebViewNetworkEntries)
+        _webViewNetworkAllEntries.Insert(0, entry);
+        while (_webViewNetworkAllEntries.Count > MaxWebViewNetworkEntries)
         {
-            _webViewNetworkEntries.RemoveAt(_webViewNetworkEntries.Count - 1);
+            _webViewNetworkAllEntries.RemoveAt(_webViewNetworkAllEntries.Count - 1);
         }
 
-        if (WebViewNetworkListView.SelectedItem is null)
-        {
-            WebViewNetworkListView.SelectedItem = _webViewNetworkEntries[0];
-            ApplyNetworkDetails(_webViewNetworkEntries[0]);
-        }
-
+        ApplyNetworkFilters(selectFirstWhenEmpty: true);
         UpdateNetworkCount();
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.LogList);
     }
@@ -499,102 +518,287 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        WebViewNetworkRequestHeadersLabel.Text = string.Empty;
-        WebViewNetworkRequestBodyLabel.Text = string.Empty;
-        WebViewNetworkResponseHeadersLabel.Text = string.Empty;
-        WebViewNetworkResponseBodyLabel.Text = string.Empty;
-        if (SelectedNetworkSummaryLabel is not null)
-        {
-            SelectedNetworkSummaryLabel.Text = "선택된 요청 없음";
-        }
-
-        if (SelectedNetworkMethodLabel is not null)
-        {
-            SelectedNetworkMethodLabel.Text = "-";
-        }
-
-        if (SelectedNetworkStatusLabel is not null)
-        {
-            SelectedNetworkStatusLabel.Text = "-";
-            SelectedNetworkStatusLabel.TextColor = Color.FromArgb("#60717A");
-        }
-
-        if (SelectedNetworkSizeLabel is not null)
-        {
-            SelectedNetworkSizeLabel.Text = "-";
-        }
-
-        if (SelectedNetworkTimeLabel is not null)
-        {
-            SelectedNetworkTimeLabel.Text = "-";
-        }
-
+        ClearNetworkDetails();
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
     }
 
     private void OnNetworkClearClicked(object? sender, EventArgs e)
     {
+        _webViewNetworkAllEntries.Clear();
         _webViewNetworkEntries.Clear();
+        _webViewNetworkSequence = 0;
         if (WebViewNetworkListView is not null)
         {
             WebViewNetworkListView.SelectedItem = null;
         }
 
-        if (WebViewNetworkRequestHeadersLabel is not null)
-        {
-            WebViewNetworkRequestHeadersLabel.Text = "Request headers";
-        }
-
-        if (WebViewNetworkRequestBodyLabel is not null)
-        {
-            WebViewNetworkRequestBodyLabel.Text = "Request body";
-        }
-
-        if (WebViewNetworkResponseHeadersLabel is not null)
-        {
-            WebViewNetworkResponseHeadersLabel.Text = "Response headers";
-        }
-
-        if (WebViewNetworkResponseBodyLabel is not null)
-        {
-            WebViewNetworkResponseBodyLabel.Text = "Response body";
-        }
-
-        if (SelectedNetworkSummaryLabel is not null)
-        {
-            SelectedNetworkSummaryLabel.Text = "선택된 요청 없음";
-        }
-
-        if (SelectedNetworkMethodLabel is not null)
-        {
-            SelectedNetworkMethodLabel.Text = "-";
-        }
-
-        if (SelectedNetworkStatusLabel is not null)
-        {
-            SelectedNetworkStatusLabel.Text = "-";
-            SelectedNetworkStatusLabel.TextColor = Color.FromArgb("#60717A");
-        }
-
-        if (SelectedNetworkSizeLabel is not null)
-        {
-            SelectedNetworkSizeLabel.Text = "-";
-        }
-
-        if (SelectedNetworkTimeLabel is not null)
-        {
-            SelectedNetworkTimeLabel.Text = "-";
-        }
-
+        ClearNetworkDetails();
         UpdateNetworkCount();
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
     }
 
+    private async void OnNetworkLoadClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            var pick = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "manifest.json 선택 (Network Capture)"
+            });
+
+            if (pick is null || string.IsNullOrWhiteSpace(pick.FullPath))
+            {
+                return;
+            }
+
+            await LoadNetworkCaptureFromManifestAsync(pick.FullPath);
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Network capture 불러오기 실패: {ex.Message}");
+        }
+    }
+
+    private async Task LoadNetworkCaptureFromManifestAsync(string manifestPath)
+    {
+        if (!File.Exists(manifestPath))
+        {
+            _naverTalkBrowser.SetStatus("선택한 manifest 파일을 찾을 수 없습니다.");
+            return;
+        }
+
+        NetworkCaptureManifest? manifest;
+        await using (var stream = File.OpenRead(manifestPath))
+        {
+            manifest = await JsonSerializer.DeserializeAsync<NetworkCaptureManifest>(stream, AppJsonOptions);
+        }
+
+        var requests = manifest?.Requests ?? [];
+        if (requests.Count == 0)
+        {
+            _naverTalkBrowser.SetStatus("manifest에 요청 항목이 없습니다.");
+            return;
+        }
+
+        var snapshotDirectory = Path.GetDirectoryName(manifestPath) ?? string.Empty;
+        var loaded = new List<WebViewNetworkLogEntry>();
+
+        foreach (var request in requests)
+        {
+            var folder = (request.Folder ?? string.Empty).Replace('/', Path.DirectorySeparatorChar);
+            var requestDirectory = Path.GetFullPath(Path.Combine(snapshotDirectory, folder));
+            var normalizedRoot = Path.GetFullPath(snapshotDirectory);
+            if (!requestDirectory.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var summary = await ReadSnapshotTextAsync(Path.Combine(requestDirectory, "summary.txt"), "-");
+            var requestDetails = await ReadSnapshotTextAsync(Path.Combine(requestDirectory, "request.txt"), "-");
+            var responseDetails = await ReadSnapshotTextAsync(Path.Combine(requestDirectory, "response.txt"), "-");
+
+            var method = string.IsNullOrWhiteSpace(request.Method) ? "GET" : request.Method.Trim().ToUpperInvariant();
+            var status = string.IsNullOrWhiteSpace(request.Status) ? "-" : request.Status.Trim();
+            var host = string.IsNullOrWhiteSpace(request.Host) ? "-" : request.Host.Trim();
+            var path = string.IsNullOrWhiteSpace(request.Path) ? "/" : request.Path.Trim();
+            var time = string.IsNullOrWhiteSpace(request.Time) ? "-" : request.Time.Trim();
+            var size = string.IsNullOrWhiteSpace(request.Size) ? "-" : request.Size.Trim();
+            var sequence = request.Sequence > 0 ? request.Sequence : (loaded.Count + 1);
+            var statusCode = int.TryParse(status, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedStatus)
+                ? parsedStatus
+                : (int?)null;
+            var url = BuildLoadedRequestUrl(host, path, requestDetails);
+
+            loaded.Add(new WebViewNetworkLogEntry(
+                sequence,
+                string.IsNullOrWhiteSpace(summary) || summary == "-"
+                    ? $"[imported] {method} {status} {time} {host}{path}"
+                    : summary,
+                requestDetails,
+                responseDetails,
+                url,
+                status,
+                ResolveStatusColor(statusCode),
+                method,
+                host,
+                path,
+                size,
+                time));
+        }
+
+        if (loaded.Count == 0)
+        {
+            _naverTalkBrowser.SetStatus("manifest에서 읽을 수 있는 요청 폴더가 없습니다.");
+            return;
+        }
+
+        _activeNetworkFilters.Clear();
+        _networkSearchQuery = string.Empty;
+        if (NetworkSearchEntry is not null)
+        {
+            NetworkSearchEntry.Text = string.Empty;
+        }
+
+        UpdateNetworkFilterChipStyles();
+
+        _webViewNetworkAllEntries.Clear();
+        _webViewNetworkEntries.Clear();
+        _webViewNetworkAllEntries.AddRange(loaded);
+        _webViewNetworkSequence = loaded.Max(entry => entry.Sequence);
+        ApplyNetworkFilters(selectFirstWhenEmpty: true);
+        _naverTalkBrowser.SetStatus($"Network capture 복원 완료: {loaded.Count}건");
+    }
+
+    private static async Task<string> ReadSnapshotTextAsync(string path, string fallback)
+    {
+        if (!File.Exists(path))
+        {
+            return fallback;
+        }
+
+        var text = await File.ReadAllTextAsync(path);
+        return string.IsNullOrWhiteSpace(text) ? fallback : text.Trim();
+    }
+
+    private static string BuildLoadedRequestUrl(string host, string path, string requestDetails)
+    {
+        var rawUrl = ExtractRequestMeta(requestDetails, "URL:");
+        if (!string.IsNullOrWhiteSpace(rawUrl))
+        {
+            return rawUrl;
+        }
+
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absolute))
+        {
+            return absolute.ToString();
+        }
+
+        if (string.IsNullOrWhiteSpace(host) || host == "-")
+        {
+            return path;
+        }
+
+        var normalizedPath = string.IsNullOrWhiteSpace(path) ? "/" : path;
+        if (!normalizedPath.StartsWith("/", StringComparison.Ordinal))
+        {
+            normalizedPath = "/" + normalizedPath;
+        }
+
+        return $"https://{host}{normalizedPath}";
+    }
+
+    private void OnNetworkFilterChipClicked(object? sender, EventArgs e)
+    {
+        if (sender is not Element { ClassId: { Length: > 0 } classId })
+        {
+            return;
+        }
+
+        var filter = classId.Trim().ToLowerInvariant();
+        if (filter == "all")
+        {
+            _activeNetworkFilters.Clear();
+            UpdateNetworkFilterChipStyles();
+            ApplyNetworkFilters(selectFirstWhenEmpty: true);
+            UpdateNetworkCount();
+            return;
+        }
+
+        if (!_activeNetworkFilters.Add(filter))
+        {
+            _activeNetworkFilters.Remove(filter);
+        }
+
+        UpdateNetworkFilterChipStyles();
+        ApplyNetworkFilters(selectFirstWhenEmpty: true);
+        UpdateNetworkCount();
+    }
+
+    private void OnNetworkSearchTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        _networkSearchQuery = e.NewTextValue?.Trim() ?? string.Empty;
+        ApplyNetworkFilters(selectFirstWhenEmpty: true);
+    }
+
+    private void OnNetworkSearchClearClicked(object? sender, EventArgs e)
+    {
+        _networkSearchQuery = string.Empty;
+        if (NetworkSearchEntry is not null)
+        {
+            NetworkSearchEntry.Text = string.Empty;
+        }
+
+        ApplyNetworkFilters(selectFirstWhenEmpty: true);
+    }
+
+    private async void OnNetworkItemSecondaryTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not BindableObject { BindingContext: WebViewNetworkLogEntry entry })
+        {
+            return;
+        }
+
+        if (WebViewNetworkListView is not null)
+        {
+            WebViewNetworkListView.SelectedItem = entry;
+        }
+
+#if WINDOWS
+        if (sender is Element sourceElement &&
+            sourceElement.Handler?.PlatformView is UI.FrameworkElement platformElement)
+        {
+            var flyout = new UI.Controls.MenuFlyout();
+
+            var copyUrlItem = new UI.Controls.MenuFlyoutItem
+            {
+                Text = "URL Copy"
+            };
+            copyUrlItem.Click += async (_, _) => await CopyNetworkUrlAsync(entry);
+            flyout.Items.Add(copyUrlItem);
+
+            var copySessionItem = new UI.Controls.MenuFlyoutItem
+            {
+                Text = "Session Copy"
+            };
+            copySessionItem.Click += async (_, _) => await CopyNetworkSessionAsync(entry);
+            flyout.Items.Add(copySessionItem);
+
+            var position = e.GetPosition(sourceElement);
+            if (position is not null)
+            {
+                flyout.ShowAt(
+                    platformElement,
+                    new UI.Controls.Primitives.FlyoutShowOptions
+                    {
+                        Position = new global::Windows.Foundation.Point(position.Value.X, position.Value.Y)
+                    });
+                return;
+            }
+
+            flyout.ShowAt(platformElement);
+            return;
+        }
+#endif
+
+        var action = await DisplayActionSheet("Network Item", "Cancel", null, "URL Copy", "Session Copy");
+        if (string.Equals(action, "URL Copy", StringComparison.Ordinal))
+        {
+            await CopyNetworkUrlAsync(entry);
+        }
+        else if (string.Equals(action, "Session Copy", StringComparison.Ordinal))
+        {
+            await CopyNetworkSessionAsync(entry);
+        }
+    }
+
     private void OnNetworkAnalysisScopeClicked(object? sender, EventArgs e)
     {
-        _networkAnalysisScope = _networkAnalysisScope == NetworkAnalysisScope.Selected
-            ? NetworkAnalysisScope.All
-            : NetworkAnalysisScope.Selected;
+        _networkAnalysisScope = _networkAnalysisScope switch
+        {
+            NetworkAnalysisScope.Selected => NetworkAnalysisScope.Filtered,
+            NetworkAnalysisScope.Filtered => NetworkAnalysisScope.All,
+            _ => NetworkAnalysisScope.Selected
+        };
         UpdateNetworkAnalysisButtons();
     }
 
@@ -614,9 +818,12 @@ public partial class MainPage : ContentPage
         var entries = ResolveNetworkAnalysisEntries();
         if (entries.Count == 0)
         {
-            _naverTalkBrowser.SetStatus(_networkAnalysisScope == NetworkAnalysisScope.Selected
-                ? "분석할 네트워크 요청을 먼저 선택하세요."
-                : "분석할 네트워크 캡쳐 목록이 없습니다.");
+            _naverTalkBrowser.SetStatus(_networkAnalysisScope switch
+            {
+                NetworkAnalysisScope.Selected => "분석할 네트워크 요청을 먼저 선택하세요.",
+                NetworkAnalysisScope.Filtered => "필터로 걸린 네트워크 요청이 없습니다.",
+                _ => "분석할 네트워크 캡쳐 목록이 없습니다."
+            });
             return;
         }
 
@@ -627,7 +834,12 @@ public partial class MainPage : ContentPage
             var result = await WebViewNetworkCaptureSnapshotWriter.SaveAsync(
                 snapshots,
                 AppContext.BaseDirectory,
-                _networkAnalysisScope == NetworkAnalysisScope.Selected ? "selected" : "all",
+                _networkAnalysisScope switch
+                {
+                    NetworkAnalysisScope.Selected => "selected",
+                    NetworkAnalysisScope.Filtered => "filtered",
+                    _ => "all"
+                },
                 FormatNetworkAnalysisDetailMode(_networkAnalysisDetailMode));
 
             _pendingNetworkCaptureSnapshot = result;
@@ -733,9 +945,12 @@ public partial class MainPage : ContentPage
     {
         if (NetworkAnalysisScopeButton is not null)
         {
-            NetworkAnalysisScopeButton.Text = _networkAnalysisScope == NetworkAnalysisScope.Selected
-                ? "범위: 선택"
-                : "범위: 전체";
+            NetworkAnalysisScopeButton.Text = _networkAnalysisScope switch
+            {
+                NetworkAnalysisScope.Selected => "범위: 선택",
+                NetworkAnalysisScope.Filtered => "범위: 필터선택",
+                _ => "범위: 전체"
+            };
         }
 
         if (NetworkAnalysisDetailButton is not null)
@@ -758,7 +973,9 @@ public partial class MainPage : ContentPage
                 : [];
         }
 
-        return _webViewNetworkEntries.ToList();
+        return _networkAnalysisScope == NetworkAnalysisScope.Filtered
+            ? _webViewNetworkEntries.ToList()
+            : _webViewNetworkAllEntries.ToList();
     }
 
     private static string BuildNetworkAnalysisPrompt(
@@ -771,7 +988,12 @@ public partial class MainPage : ContentPage
         builder.AppendLine("- 실패/지연/중복 호출/인증 또는 CORS 의심 지점을 먼저 찾아줘.");
         builder.AppendLine("- 원인 후보, 확인 방법, 수정 방향을 한국어로 정리해줘.");
         builder.AppendLine("- 민감정보가 있어 보이면 노출 위험도 같이 표시해줘.");
-        builder.AppendLine(CultureInfo.InvariantCulture, $"- 분석 범위: {(scope == NetworkAnalysisScope.Selected ? "선택 요청" : "전체 캡쳐 리스트")}");
+        builder.AppendLine(CultureInfo.InvariantCulture, $"- 분석 범위: {scope switch
+        {
+            NetworkAnalysisScope.Selected => "선택 요청",
+            NetworkAnalysisScope.Filtered => "필터 선택 요청",
+            _ => "전체 캡쳐 리스트"
+        }}");
         builder.AppendLine(CultureInfo.InvariantCulture, $"- 상세 포함: {FormatNetworkAnalysisDetailMode(detailMode)}");
         builder.AppendLine();
         builder.AppendLine("## Capture Summary");
@@ -938,8 +1160,312 @@ public partial class MainPage : ContentPage
     {
         if (NetworkCountLabel is not null)
         {
-            NetworkCountLabel.Text = $"{_webViewNetworkEntries.Count} items";
+            NetworkCountLabel.Text = _activeNetworkFilters.Count == 0
+                ? $"{_webViewNetworkEntries.Count} items"
+                : $"{_webViewNetworkEntries.Count} / {_webViewNetworkAllEntries.Count} items";
         }
+    }
+
+    private async Task CopyNetworkUrlAsync(WebViewNetworkLogEntry entry)
+    {
+        var url = string.IsNullOrWhiteSpace(entry.UrlDisplay) || entry.UrlDisplay == "-"
+            ? $"https://{entry.HostDisplay}{entry.PathDisplay}"
+            : entry.UrlDisplay;
+        await Clipboard.Default.SetTextAsync(url);
+        _naverTalkBrowser.SetStatus("Network URL copied.");
+    }
+
+    private async Task CopyNetworkSessionAsync(WebViewNetworkLogEntry entry)
+    {
+        var sessionText = BuildNetworkSessionClipboardText(entry);
+        await Clipboard.Default.SetTextAsync(sessionText);
+        _naverTalkBrowser.SetStatus("Network session copied.");
+    }
+
+    private static string BuildNetworkSessionClipboardText(WebViewNetworkLogEntry entry)
+    {
+        var method = string.IsNullOrWhiteSpace(entry.MethodDisplay) ? "GET" : entry.MethodDisplay;
+        var url = string.IsNullOrWhiteSpace(entry.UrlDisplay) || entry.UrlDisplay == "-"
+            ? $"https://{entry.HostDisplay}{entry.PathDisplay}"
+            : entry.UrlDisplay;
+        var statusCode = string.IsNullOrWhiteSpace(entry.StatusDisplay) ? "-" : entry.StatusDisplay;
+        var statusText = ExtractResponseStatusText(entry.ResponseDetails);
+
+        var requestHeaders = ExtractSection(entry.RequestDetails, "HEADERS:", "BODY:");
+        var requestBody = ExtractSection(entry.RequestDetails, "BODY:", null);
+        var responseHeaders = ExtractSection(entry.ResponseDetails, "HEADERS:", "BODY:");
+        var responseBody = ExtractSection(entry.ResponseDetails, "BODY:", null);
+
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine($"{method} {url} HTTP/1.1");
+        AppendBlockIfAny(builder, requestHeaders);
+
+        if (!string.IsNullOrWhiteSpace(requestBody) && requestBody != "-")
+        {
+            builder.AppendLine();
+            builder.AppendLine(requestBody);
+        }
+
+        builder.AppendLine();
+        builder.AppendLine(string.IsNullOrWhiteSpace(statusText) || statusText == "-"
+            ? $"HTTP/1.1 {statusCode}"
+            : $"HTTP/1.1 {statusCode} {statusText}");
+        AppendBlockIfAny(builder, responseHeaders);
+
+        if (!string.IsNullOrWhiteSpace(responseBody) && responseBody != "-")
+        {
+            builder.AppendLine();
+            builder.AppendLine(responseBody);
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendBlockIfAny(System.Text.StringBuilder builder, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || text == "-")
+        {
+            return;
+        }
+
+        builder.AppendLine(text.Trim());
+    }
+
+    private static string ExtractResponseStatusText(string responseDetails)
+    {
+        if (string.IsNullOrWhiteSpace(responseDetails))
+        {
+            return string.Empty;
+        }
+
+        var match = Regex.Match(responseDetails, @"STATUS:\s*\d+\s*\((?<text>[^)]*)\)", RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups["text"].Value.Trim() : string.Empty;
+    }
+
+    private void ClearNetworkDetails()
+    {
+        if (WebViewNetworkRequestHeadersLabel is not null)
+        {
+            WebViewNetworkRequestHeadersLabel.Text = "Request headers";
+        }
+
+        if (WebViewNetworkRequestBodyLabel is not null)
+        {
+            WebViewNetworkRequestBodyLabel.Text = "Request body";
+        }
+
+        if (WebViewNetworkResponseHeadersLabel is not null)
+        {
+            WebViewNetworkResponseHeadersLabel.Text = "Response headers";
+        }
+
+        if (WebViewNetworkResponseBodyLabel is not null)
+        {
+            WebViewNetworkResponseBodyLabel.Text = "Response body";
+        }
+
+        if (SelectedNetworkSummaryLabel is not null)
+        {
+            SelectedNetworkSummaryLabel.Text = "선택된 요청 없음";
+        }
+
+        if (SelectedNetworkMethodLabel is not null)
+        {
+            SelectedNetworkMethodLabel.Text = "-";
+        }
+
+        if (SelectedNetworkStatusLabel is not null)
+        {
+            SelectedNetworkStatusLabel.Text = "-";
+            SelectedNetworkStatusLabel.TextColor = Color.FromArgb("#60717A");
+        }
+
+        if (SelectedNetworkSizeLabel is not null)
+        {
+            SelectedNetworkSizeLabel.Text = "-";
+        }
+
+        if (SelectedNetworkTimeLabel is not null)
+        {
+            SelectedNetworkTimeLabel.Text = "-";
+        }
+    }
+
+    private void ApplyNetworkFilters(bool selectFirstWhenEmpty)
+    {
+        if (WebViewNetworkListView is null)
+        {
+            return;
+        }
+
+        var previousSelection = WebViewNetworkListView.SelectedItem as WebViewNetworkLogEntry;
+        var filteredEntries = _webViewNetworkAllEntries
+            .Where(MatchesNetworkEntry)
+            .ToList();
+
+        _webViewNetworkEntries.Clear();
+        foreach (var entry in filteredEntries)
+        {
+            _webViewNetworkEntries.Add(entry);
+        }
+
+        if (previousSelection is not null && _webViewNetworkEntries.Contains(previousSelection))
+        {
+            WebViewNetworkListView.SelectedItem = previousSelection;
+            ApplyNetworkDetails(previousSelection);
+        }
+        else if (selectFirstWhenEmpty && _webViewNetworkEntries.Count > 0)
+        {
+            WebViewNetworkListView.SelectedItem = _webViewNetworkEntries[0];
+            ApplyNetworkDetails(_webViewNetworkEntries[0]);
+        }
+        else
+        {
+            WebViewNetworkListView.SelectedItem = null;
+            ClearNetworkDetails();
+        }
+
+        UpdateNetworkCount();
+    }
+
+    private bool MatchesNetworkEntry(WebViewNetworkLogEntry entry)
+    {
+        return MatchesAnyActiveFilter(entry) && MatchesNetworkSearch(entry);
+    }
+
+    private bool MatchesAnyActiveFilter(WebViewNetworkLogEntry entry)
+    {
+        if (_activeNetworkFilters.Count == 0)
+        {
+            return true;
+        }
+
+        var url = entry.UrlDisplay ?? string.Empty;
+        var scheme = string.Empty;
+        var path = entry.PathDisplay ?? string.Empty;
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            scheme = uri.Scheme.ToLowerInvariant();
+            path = uri.AbsolutePath;
+        }
+
+        var ext = Path.GetExtension(path)?.TrimStart('.').ToLowerInvariant() ?? string.Empty;
+        var requestType = ExtractRequestMeta(entry.RequestDetails, "TYPE:").ToLowerInvariant();
+        var mimeType = ExtractRequestMeta(entry.RequestDetails, "MIME:").ToLowerInvariant();
+
+        foreach (var filter in _activeNetworkFilters)
+        {
+            if (MatchesFilter(filter, scheme, ext, requestType, mimeType))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool MatchesNetworkSearch(WebViewNetworkLogEntry entry)
+    {
+        if (string.IsNullOrWhiteSpace(_networkSearchQuery))
+        {
+            return true;
+        }
+
+        var terms = _networkSearchQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (terms.Length == 0)
+        {
+            return true;
+        }
+
+        foreach (var term in terms)
+        {
+            if (!MatchesNetworkSearchTerm(entry, term))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool MatchesNetworkSearchTerm(WebViewNetworkLogEntry entry, string term)
+    {
+        return ContainsIgnoreCase(entry.MethodDisplay, term)
+               || ContainsIgnoreCase(entry.StatusDisplay, term)
+               || ContainsIgnoreCase(entry.HostDisplay, term)
+               || ContainsIgnoreCase(entry.PathDisplay, term)
+               || ContainsIgnoreCase(entry.UrlDisplay, term)
+               || ContainsIgnoreCase(entry.Summary, term)
+               || ContainsIgnoreCase(entry.RequestDetails, term)
+               || ContainsIgnoreCase(entry.ResponseDetails, term);
+    }
+
+    private static bool ContainsIgnoreCase(string? value, string term)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+               && value.Contains(term, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool MatchesFilter(string filter, string scheme, string ext, string requestType, string mimeType)
+    {
+        return filter switch
+        {
+            "http" => scheme == "http",
+            "https" => scheme == "https",
+            "png" => ext == "png" || mimeType.Contains("image/png", StringComparison.Ordinal),
+            "jpg" => ext is "jpg" or "jpeg" || mimeType.Contains("image/jpeg", StringComparison.Ordinal),
+            "js" => ext is "js" or "mjs" or "cjs" || mimeType.Contains("javascript", StringComparison.Ordinal),
+            "css" => ext == "css" || mimeType.Contains("text/css", StringComparison.Ordinal),
+            "json" => ext == "json" || mimeType.Contains("application/json", StringComparison.Ordinal),
+            "xhr" => requestType is "xhr" or "fetch",
+            "html" => ext is "html" or "htm" || requestType == "document" || mimeType.Contains("text/html", StringComparison.Ordinal),
+            _ => false
+        };
+    }
+
+    private static string ExtractRequestMeta(string requestDetails, string key)
+    {
+        if (string.IsNullOrWhiteSpace(requestDetails))
+        {
+            return string.Empty;
+        }
+
+        foreach (var line in requestDetails.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+            {
+                return trimmed[key.Length..].Trim();
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private void UpdateNetworkFilterChipStyles()
+    {
+        SetFilterButtonStyle(NetworkFilterAllButton, _activeNetworkFilters.Count == 0);
+        SetFilterButtonStyle(NetworkFilterHttpButton, _activeNetworkFilters.Contains("http"));
+        SetFilterButtonStyle(NetworkFilterHttpsButton, _activeNetworkFilters.Contains("https"));
+        SetFilterButtonStyle(NetworkFilterPngButton, _activeNetworkFilters.Contains("png"));
+        SetFilterButtonStyle(NetworkFilterJpgButton, _activeNetworkFilters.Contains("jpg"));
+        SetFilterButtonStyle(NetworkFilterJsButton, _activeNetworkFilters.Contains("js"));
+        SetFilterButtonStyle(NetworkFilterCssButton, _activeNetworkFilters.Contains("css"));
+        SetFilterButtonStyle(NetworkFilterJsonButton, _activeNetworkFilters.Contains("json"));
+        SetFilterButtonStyle(NetworkFilterXhrButton, _activeNetworkFilters.Contains("xhr"));
+        SetFilterButtonStyle(NetworkFilterHtmlButton, _activeNetworkFilters.Contains("html"));
+    }
+
+    private static void SetFilterButtonStyle(Button? button, bool isActive)
+    {
+        if (button is null)
+        {
+            return;
+        }
+
+        button.BackgroundColor = isActive ? Color.FromArgb("#1C6780") : Color.FromArgb("#EEF3F6");
+        button.TextColor = isActive ? Colors.White : Color.FromArgb("#31474F");
     }
 
     private static string ExtractSection(string source, string startMarker, string? endMarker)
@@ -1012,6 +1538,7 @@ public partial class MainPage : ContentPage
             normalizedSummary,
             normalizedRequest,
             normalizedResponse,
+            string.IsNullOrWhiteSpace(url) ? "-" : url.Trim(),
             statusDisplay,
             statusColor,
             methodDisplay,

@@ -328,7 +328,7 @@ public partial class MainPage : ContentPage
         var request = $"URL: {fullUrl}\nTYPE: {resource}\nMIME: {mime}\nHEADERS:\n{reqHeaders}\nBODY:\n{reqBody}";
         var response = $"STATUS: {statusCode} ({statusMessage})\nDURATION: {durationText}\nHEADERS:\n{resHeaders}\nBODY:\n{resBody}";
         return BuildWebViewNetworkEntry(
-            _webViewNetworkEntries.Count + 1,
+            ++_webViewNetworkSequence,
             summary,
             request,
             response,

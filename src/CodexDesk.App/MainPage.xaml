@@ -883,7 +883,7 @@
                                 Stroke="#14142324"
                                 StrokeThickness="1"
                                 StrokeShape="RoundRectangle 0,0,0,0">
-                            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto"
+                            <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*,Auto"
                                   ColumnSpacing="8">
                                 <Button Grid.Column="0"
                                         x:Name="NetworkCaptureToolbarToggleButton"
@@ -905,14 +905,24 @@
                                         BackgroundColor="#1220252C"
                                         TextColor="#50656F"
                                         Clicked="OnNetworkClearClicked" />
-                                <Label Grid.Column="2"
+                                <Button Grid.Column="2"
+                                        x:Name="NetworkLoadButton"
+                                        Text="Load"
+                                        FontFamily="Bahnschrift"
+                                        FontSize="12"
+                                        Padding="14,9"
+                                        CornerRadius="12"
+                                        BackgroundColor="#1220252C"
+                                        TextColor="#50656F"
+                                        Clicked="OnNetworkLoadClicked" />
+                                <Label Grid.Column="3"
                                        Text="Request / Response"
                                        FontFamily="Bahnschrift"
                                        FontSize="13"
                                        FontAttributes="Bold"
                                        TextColor="#18252C"
                                        VerticalOptions="Center" />
-                                <Button Grid.Column="3"
+                                <Button Grid.Column="4"
                                         x:Name="NetworkAnalysisScopeButton"
                                         Text="범위: 선택"
                                         FontFamily="Bahnschrift"
@@ -922,7 +932,7 @@
                                         BackgroundColor="#EEF3F6"
                                         TextColor="#31474F"
                                         Clicked="OnNetworkAnalysisScopeClicked" />
-                                <Button Grid.Column="4"
+                                <Button Grid.Column="5"
                                         x:Name="NetworkAnalysisDetailButton"
                                         Text="상세: 요약"
                                         FontFamily="Bahnschrift"
@@ -932,7 +942,7 @@
                                         BackgroundColor="#EEF3F6"
                                         TextColor="#31474F"
                                         Clicked="OnNetworkAnalysisDetailClicked" />
-                                <Button Grid.Column="5"
+                                <Button Grid.Column="6"
                                         x:Name="NetworkAnalyzeWithCodexButton"
                                         Text="Codex 분석"
                                         FontFamily="Bahnschrift"
@@ -942,20 +952,38 @@
                                         BackgroundColor="#1F6780"
                                         TextColor="#FFFFFF"
                                         Clicked="OnNetworkAnalyzeWithCodexClicked" />
-                                <Border Grid.Column="6"
+                                <Border Grid.Column="7"
                                         HeightRequest="40"
                                         BackgroundColor="#D1FFFFFF"
                                         Stroke="#1420252C"
                                         StrokeThickness="1"
                                         StrokeShape="RoundRectangle 12">
-                                    <Label Margin="12,0"
-                                           Text="all sessions"
-                                           FontFamily="Bahnschrift"
-                                           FontSize="14"
-                                           TextColor="#6D8088"
-                                           VerticalOptions="Center" />
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="6"
+                                          Padding="8,0">
+                                        <Entry x:Name="NetworkSearchEntry"
+                                               Placeholder="Find requests..."
+                                               FontFamily="Consolas"
+                                               FontSize="13"
+                                               TextColor="#18252C"
+                                               PlaceholderColor="#6D8088"
+                                               BackgroundColor="Transparent"
+                                               ClearButtonVisibility="WhileEditing"
+                                               TextChanged="OnNetworkSearchTextChanged"
+                                               VerticalOptions="Center" />
+                                        <Button Grid.Column="1"
+                                                Text="Clear"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="11"
+                                                Padding="8,4"
+                                                CornerRadius="10"
+                                                BackgroundColor="#EEF3F6"
+                                                TextColor="#31474F"
+                                                Clicked="OnNetworkSearchClearClicked"
+                                                VerticalOptions="Center" />
+                                    </Grid>
                                 </Border>
-                                <Label Grid.Column="7"
+                                <Label Grid.Column="8"
                                        x:Name="NetworkCountLabel"
                                        Text="0 items"
                                        FontFamily="Bahnschrift"
@@ -975,7 +1003,7 @@
                                     Stroke="#1418252C"
                                     StrokeThickness="1"
                                     StrokeShape="RoundRectangle 24">
-                                <Grid RowDefinitions="Auto,Auto,*"
+                                <Grid RowDefinitions="Auto,Auto,Auto,*"
                                       RowSpacing="0">
                                     <Grid Padding="14,12"
                                           ColumnDefinitions="*,Auto"
@@ -994,6 +1022,23 @@
                                     </Grid>
 
                                     <Grid Grid.Row="1"
+                                          Padding="14,8"
+                                          ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                                          ColumnSpacing="6"
+                                          BackgroundColor="#0A18252C">
+                                        <Button Grid.Column="0" x:Name="NetworkFilterAllButton" Text="ALL" FontFamily="Bahnschrift" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#1C6780" TextColor="#FFFFFF" Clicked="OnNetworkFilterChipClicked" ClassId="all" />
+                                        <Button Grid.Column="1" x:Name="NetworkFilterHttpButton" Text="http" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="http" />
+                                        <Button Grid.Column="2" x:Name="NetworkFilterHttpsButton" Text="https" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="https" />
+                                        <Button Grid.Column="3" x:Name="NetworkFilterPngButton" Text="png" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="png" />
+                                        <Button Grid.Column="4" x:Name="NetworkFilterJpgButton" Text="jpg" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="jpg" />
+                                        <Button Grid.Column="5" x:Name="NetworkFilterJsButton" Text="js" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="js" />
+                                        <Button Grid.Column="6" x:Name="NetworkFilterCssButton" Text="css" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="css" />
+                                        <Button Grid.Column="7" x:Name="NetworkFilterJsonButton" Text="json" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="json" />
+                                        <Button Grid.Column="8" x:Name="NetworkFilterXhrButton" Text="xhr/fetch" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="xhr" />
+                                        <Button Grid.Column="9" x:Name="NetworkFilterHtmlButton" Text="html/doc" FontFamily="Consolas" FontSize="11" Padding="10,5" CornerRadius="10" BackgroundColor="#EEF3F6" TextColor="#31474F" Clicked="OnNetworkFilterChipClicked" ClassId="html" />
+                                    </Grid>
+
+                                    <Grid Grid.Row="2"
                                           Padding="14,0"
                                           HeightRequest="38"
                                           ColumnDefinitions="52,74,72,*,68,68"
@@ -1007,7 +1052,7 @@
                                         <Label Grid.Column="5" Text="Time" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" HorizontalTextAlignment="End" VerticalTextAlignment="Center" />
                                     </Grid>
 
-                                    <CollectionView Grid.Row="2"
+                                    <CollectionView Grid.Row="3"
                                                     x:Name="WebViewNetworkListView"
                                                     SelectionMode="Single"
                                                     SelectionChanged="OnWebViewNetworkSelectionChanged"
@@ -1021,6 +1066,10 @@
                                                       HeightRequest="46"
                                                       ColumnDefinitions="52,74,72,*,68,68"
                                                       ColumnSpacing="10">
+                                                    <Grid.GestureRecognizers>
+                                                        <TapGestureRecognizer Buttons="Secondary"
+                                                                              Tapped="OnNetworkItemSecondaryTapped" />
+                                                    </Grid.GestureRecognizers>
                                                     <Label Grid.Column="0"
                                                            Text="{Binding IndexDisplay}"
                                                            FontFamily="Consolas"
