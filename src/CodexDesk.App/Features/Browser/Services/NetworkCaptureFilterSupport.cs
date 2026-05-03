@@ -25,6 +25,29 @@ internal static class NetworkCaptureFilterSupport
         return selected == NetworkCaptureFilterKind.All || selected == actual;
     }
 
+    public static bool MatchesSearch(
+        string? query,
+        string? method,
+        string? status,
+        string? host,
+        string? path,
+        string? resourceType,
+        string? mimeType)
+    {
+        var normalizedQuery = Normalize(query);
+        if (string.IsNullOrWhiteSpace(normalizedQuery))
+        {
+            return true;
+        }
+
+        return Contains(method, normalizedQuery) ||
+               Contains(status, normalizedQuery) ||
+               Contains(host, normalizedQuery) ||
+               Contains(path, normalizedQuery) ||
+               Contains(resourceType, normalizedQuery) ||
+               Contains(mimeType, normalizedQuery);
+    }
+
     public static string FormatLabel(NetworkCaptureFilterKind kind)
     {
         return kind switch
@@ -126,5 +149,10 @@ internal static class NetworkCaptureFilterSupport
     private static string Normalize(string? value)
     {
         return value?.Trim().ToLowerInvariant() ?? string.Empty;
+    }
+
+    private static bool Contains(string? value, string query)
+    {
+        return Normalize(value).Contains(query, StringComparison.Ordinal);
     }
 }

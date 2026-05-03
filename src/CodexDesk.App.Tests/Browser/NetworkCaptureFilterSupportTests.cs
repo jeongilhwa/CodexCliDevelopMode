@@ -56,6 +56,34 @@ public sealed class NetworkCaptureFilterSupportTests
     }
 
     [TestMethod]
+    [DataRow("", "GET", "200", "www.youtube.com", "/watch?v=1", "xhr", "application/json", true)]
+    [DataRow("youtube", "GET", "200", "www.youtube.com", "/watch?v=1", "xhr", "application/json", true)]
+    [DataRow("POST", "POST", "200", "api.example.com", "/v1/log_event", "fetch", "application/json", true)]
+    [DataRow("404", "GET", "404", "cdn.example.com", "/missing.png", "image", "image/png", true)]
+    [DataRow("json", "POST", "200", "api.example.com", "/v1/log_event", "fetch", "application/json", true)]
+    [DataRow("missing", "GET", "200", "www.youtube.com", "/watch?v=1", "xhr", "application/json", false)]
+    public void MatchesSearch_MatchesVisibleNetworkFields(
+        string query,
+        string method,
+        string status,
+        string host,
+        string path,
+        string resourceType,
+        string mimeType,
+        bool expected)
+    {
+        NetworkCaptureFilterSupport.MatchesSearch(
+                query,
+                method,
+                status,
+                host,
+                path,
+                resourceType,
+                mimeType)
+            .Should().Be(expected);
+    }
+
+    [TestMethod]
     public void MaxEntries_IsOneThousand()
     {
         NetworkCaptureFilterSupport.MaxEntries.Should().Be(1000);

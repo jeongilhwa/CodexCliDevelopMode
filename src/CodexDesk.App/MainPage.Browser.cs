@@ -2015,8 +2015,15 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            var cookies = await coreWebView2.CookieManager.GetCookiesAsync(targetOrigin);
-            var cookieHeader = string.Join("; ", cookies.Select(cookie => $"{cookie.Name}={cookie.Value}"));
+            var allCookies = await coreWebView2.CookieManager.GetCookiesAsync(string.Empty);
+            var cookies = allCookies
+                .Where(cookie => WebViewCookieExportSupport.MatchesHost(targetUri.Host, cookie.Domain))
+                .Select(cookie => new WebViewCookieExportItem(cookie.Name, cookie.Value, cookie.Domain, cookie.Path))
+                .OrderBy(cookie => cookie.Domain, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(cookie => cookie.Path, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(cookie => cookie.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var cookieHeader = WebViewCookieExportSupport.BuildCookieHeader(cookies);
             if (CookieHeaderEditor is not null)
             {
                 CookieHeaderEditor.Text = cookieHeader;
@@ -2025,7 +2032,7 @@ public partial class MainPage : ContentPage
             SetCookieImportStatus(
                 cookies.Count == 0
                     ? $"{targetUri.Host}에서 가져올 쿠키가 없습니다."
-                    : $"{targetUri.Host} 쿠키 {cookies.Count}개를 문자열로 가져왔습니다.",
+                    : $"{targetUri.Host} 저장소 쿠키 {cookies.Count}개를 문자열로 가져왔습니다.",
                 isError: false);
         }
         catch (Exception ex)

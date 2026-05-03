@@ -948,12 +948,16 @@
                                         Stroke="#1420252C"
                                         StrokeThickness="1"
                                         StrokeShape="RoundRectangle 12">
-                                    <Label Margin="12,0"
-                                           Text="all sessions"
+                                    <Entry x:Name="NetworkSearchEntry"
+                                           Margin="10,0"
+                                           Placeholder="Find sessions"
+                                           PlaceholderColor="#8A9AA1"
                                            FontFamily="Bahnschrift"
                                            FontSize="14"
-                                           TextColor="#6D8088"
-                                           VerticalOptions="Center" />
+                                           TextColor="#31474F"
+                                           BackgroundColor="Transparent"
+                                           ClearButtonVisibility="WhileEditing"
+                                           TextChanged="OnNetworkSearchTextChanged" />
                                 </Border>
                                 <Label Grid.Column="7"
                                        x:Name="NetworkCountLabel"

@@ -49,7 +49,9 @@ public partial class MainPage : ContentPage
     private readonly ObservableCollection<WebViewNetworkLogEntry> _filteredWebViewNetworkEntries = [];
     private const int MaxWebViewNetworkEntries = NetworkCaptureFilterSupport.MaxEntries;
     private const int MaxNetworkAnalysisPromptLength = 52000;
+    private int _webViewNetworkSequence;
     private NetworkCaptureFilterKind _networkCaptureFilter = NetworkCaptureFilterKind.All;
+    private string _networkSearchText = string.Empty;
     private NetworkAnalysisScope _networkAnalysisScope = NetworkAnalysisScope.Selected;
     private NetworkAnalysisDetailMode _networkAnalysisDetailMode = NetworkAnalysisDetailMode.Summary;
     private WorkspaceTab _activeWorkspaceTab = WorkspaceTab.Codex;
@@ -545,6 +547,7 @@ public partial class MainPage : ContentPage
     {
         _webViewNetworkEntries.Clear();
         _filteredWebViewNetworkEntries.Clear();
+        _webViewNetworkSequence = 0;
         if (WebViewNetworkListView is not null)
         {
             WebViewNetworkListView.SelectedItem = null;
@@ -620,6 +623,13 @@ public partial class MainPage : ContentPage
 
         RefreshFilteredNetworkEntries(preserveSelection: false);
         UpdateNetworkFilterButtons();
+        UpdateNetworkCount();
+    }
+
+    private void OnNetworkSearchTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        _networkSearchText = e.NewTextValue?.Trim() ?? string.Empty;
+        RefreshFilteredNetworkEntries(preserveSelection: true);
         UpdateNetworkCount();
     }
 
@@ -825,7 +835,15 @@ public partial class MainPage : ContentPage
 
         _filteredWebViewNetworkEntries.Clear();
         foreach (var entry in _webViewNetworkEntries.Where(entry =>
-                     NetworkCaptureFilterSupport.Matches(_networkCaptureFilter, entry.FilterKind)))
+                     NetworkCaptureFilterSupport.Matches(_networkCaptureFilter, entry.FilterKind) &&
+                     NetworkCaptureFilterSupport.MatchesSearch(
+                         _networkSearchText,
+                         entry.MethodDisplay,
+                         entry.StatusDisplay,
+                         entry.HostDisplay,
+                         entry.PathDisplay,
+                         entry.ResourceTypeDisplay,
+                         entry.MimeTypeDisplay)))
         {
             _filteredWebViewNetworkEntries.Add(entry);
         }
@@ -1037,7 +1055,8 @@ public partial class MainPage : ContentPage
     {
         if (NetworkCountLabel is not null)
         {
-            NetworkCountLabel.Text = _networkCaptureFilter == NetworkCaptureFilterKind.All
+            NetworkCountLabel.Text = _networkCaptureFilter == NetworkCaptureFilterKind.All &&
+                                     string.IsNullOrWhiteSpace(_networkSearchText)
                 ? $"{_webViewNetworkEntries.Count} items"
                 : $"{_filteredWebViewNetworkEntries.Count} / {_webViewNetworkEntries.Count} items";
         }
