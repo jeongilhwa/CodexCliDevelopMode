@@ -1943,10 +1943,10 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            var cookiePairs = ParseCookieHeader(CookieHeaderEditor?.Text).ToList();
-            if (cookiePairs.Count == 0)
+            var cookiesToImport = WebViewCookieExportSupport.ParseCookieImportText(CookieHeaderEditor?.Text, targetOrigin);
+            if (cookiesToImport.Count == 0)
             {
-                SetCookieImportStatus("붙여넣은 쿠키 문자열에서 유효한 name=value 항목을 찾지 못했습니다.", isError: true);
+                SetCookieImportStatus("붙여넣은 텍스트에서 유효한 쿠키 항목을 찾지 못했습니다.", isError: true);
                 return;
             }
 
@@ -1957,33 +1957,106 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            var imported = 0;
-            var failed = 0;
             var cookieManager = coreWebView2.CookieManager;
-            foreach (var (name, value) in cookiePairs)
+            var existingCookies = await cookieManager.GetCookiesAsync(string.Empty);
+            var importPlan = WebViewCookieExportSupport.BuildImportPlan(
+                cookiesToImport,
+                existingCookies
+                    .Select(cookie => new WebViewCookieImportItem(
+                        cookie.Name,
+                        cookie.Value,
+                        cookie.Domain,
+                        cookie.Path,
+                        cookie.IsSecure,
+                        cookie.IsHttpOnly,
+                        cookie.SameSite.ToString()))
+                    .ToList());
+
+            var deleted = 0;
+            var deleteFailed = 0;
+            foreach (var cookieToDelete in importPlan.CookiesToDelete)
             {
                 try
                 {
-                    var cookie = cookieManager.CreateCookie(name, value, targetUri.Host, "/");
-                    cookie.IsSecure = string.Equals(targetUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase);
-                    cookieManager.AddOrUpdateCookie(cookie);
-                    imported++;
+                    cookieManager.DeleteCookiesWithDomainAndPath(
+                        cookieToDelete.Name,
+                        cookieToDelete.Domain,
+                        cookieToDelete.Path);
+                    deleted++;
                 }
                 catch
                 {
-                    failed++;
+                    deleteFailed++;
                 }
             }
 
-            SetCookieImportStatus(
-                failed == 0
-                    ? $"{targetUri.Host}에 쿠키 {imported}개를 적용했습니다. 필요하면 페이지를 새로고침하세요."
-                    : $"{targetUri.Host}에 쿠키 {imported}개 적용, {failed}개 실패했습니다.",
-                isError: failed > 0);
+            foreach (var cookieToReplace in importPlan.CookiesToReplace)
+            {
+                try
+                {
+                    cookieManager.DeleteCookiesWithDomainAndPath(
+                        cookieToReplace.Name,
+                        cookieToReplace.Domain,
+                        cookieToReplace.Path);
+                }
+                catch
+                {
+                    deleteFailed++;
+                }
+            }
+
+            var applied = 0;
+            var applyFailed = 0;
+            foreach (var cookieToImport in importPlan.CookiesToApply)
+            {
+                try
+                {
+                    var cookie = cookieManager.CreateCookie(
+                        cookieToImport.Name,
+                        cookieToImport.Value,
+                        cookieToImport.Domain,
+                        cookieToImport.Path);
+                    cookie.IsSecure = cookieToImport.IsSecure;
+                    cookie.IsHttpOnly = cookieToImport.IsHttpOnly;
+                    if (TryMapSameSite(cookieToImport.SameSite, out var sameSite))
+                    {
+                        cookie.SameSite = sameSite;
+                    }
+                    cookieManager.AddOrUpdateCookie(cookie);
+                    applied++;
+                }
+                catch
+                {
+                    applyFailed++;
+                }
+            }
+
+            var failureCount = deleteFailed + applyFailed;
+            var statusBuilder = new StringBuilder()
+                .Append($"{targetUri.Host} 쿠키 동기화 완료: ")
+                .Append($"추가 {importPlan.AddedCount}건, 수정 {importPlan.ModifiedCount}건");
+
+            if (importPlan.UnchangedCount > 0)
+            {
+                statusBuilder.Append($", 유지 {importPlan.UnchangedCount}건");
+            }
+
+            if (deleted > 0 || importPlan.RemovedCount > 0)
+            {
+                statusBuilder.Append($", 삭제 {deleted}건");
+            }
+
+            if (failureCount > 0)
+            {
+                statusBuilder.Append($", 실패 {failureCount}건");
+            }
+
+            statusBuilder.Append(". 필요하면 페이지를 새로고침하세요.");
+            SetCookieImportStatus(statusBuilder.ToString(), isError: failureCount > 0);
 
             if (BrowserAddressEntry is not null)
             {
-                BrowserAddressEntry.Text = targetOrigin;
+                BrowserAddressEntry.Text = WebViewCookieExportSupport.ExtractTargetOrigin(CookieHeaderEditor?.Text) ?? targetOrigin;
             }
 
             NaverTalkWebView.Reload();
@@ -2024,9 +2097,15 @@ public partial class MainPage : ContentPage
                 .ThenBy(cookie => cookie.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var cookieHeader = WebViewCookieExportSupport.BuildCookieHeader(cookies);
+            var cookieDetails = WebViewCookieExportSupport.BuildCookieDetails(targetOrigin, cookies);
             if (CookieHeaderEditor is not null)
             {
                 CookieHeaderEditor.Text = cookieHeader;
+            }
+
+            if (CookieDetailsEditor is not null)
+            {
+                CookieDetailsEditor.Text = cookieDetails;
             }
 
             SetCookieImportStatus(
@@ -2064,9 +2143,34 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private void OnClearCookiesClicked(object? sender, EventArgs e)
+    {
+        if (CookieDomainEntry is not null)
+        {
+            CookieDomainEntry.Text = string.Empty;
+        }
+
+        if (CookieHeaderEditor is not null)
+        {
+            CookieHeaderEditor.Text = string.Empty;
+        }
+
+        if (CookieDetailsEditor is not null)
+        {
+            CookieDetailsEditor.Text = string.Empty;
+        }
+
+        SetCookieImportStatus("쿠키 입력과 상세 표시를 비웠습니다.", isError: false);
+    }
+
     private bool TryResolveCookieTargetUri(out string targetOrigin, out Uri targetUri)
     {
-        targetOrigin = NormalizeCookieTargetOrigin(CookieDomainEntry?.Text) ?? TryResolveCurrentBrowserOrigin() ?? string.Empty;
+        targetOrigin =
+            NormalizeCookieTargetOrigin(CookieDomainEntry?.Text) ??
+            WebViewCookieExportSupport.ExtractTargetOrigin(CookieHeaderEditor?.Text) ??
+            WebViewCookieExportSupport.ExtractTargetOrigin(CookieDetailsEditor?.Text) ??
+            TryResolveCurrentBrowserOrigin() ??
+            string.Empty;
         if (Uri.TryCreate(targetOrigin, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
         {
             targetUri = uri;
@@ -2147,49 +2251,6 @@ public partial class MainPage : ContentPage
         return uri.IsDefaultPort
             ? $"{uri.Scheme}://{uri.Host}"
             : $"{uri.Scheme}://{uri.Host}:{uri.Port.ToString(CultureInfo.InvariantCulture)}";
-    }
-
-    private static IEnumerable<(string Name, string Value)> ParseCookieHeader(string? cookieHeader)
-    {
-        if (string.IsNullOrWhiteSpace(cookieHeader))
-        {
-            yield break;
-        }
-
-        var cookies = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var segment in cookieHeader.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var separatorIndex = segment.IndexOf('=');
-            if (separatorIndex <= 0)
-            {
-                continue;
-            }
-
-            var name = segment[..separatorIndex].Trim();
-            var value = segment[(separatorIndex + 1)..].Trim();
-            if (!IsValidCookieName(name))
-            {
-                continue;
-            }
-
-            cookies[name] = value.Trim('"');
-        }
-
-        foreach (var cookie in cookies)
-        {
-            yield return (cookie.Key, cookie.Value);
-        }
-    }
-
-    private static bool IsValidCookieName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return false;
-        }
-
-        const string separators = "()<>@,;:\\\"/[]?={} \t";
-        return name.All(ch => ch > 0x20 && ch < 0x7f && !separators.Contains(ch, StringComparison.Ordinal));
     }
 
     private async Task TypeTextIntoNaverTalkAsync(string? text, bool submit)

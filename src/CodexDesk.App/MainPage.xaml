@@ -551,7 +551,7 @@
                                     MaximumWidthRequest="900"
                                     HorizontalOptions="Center"
                                     VerticalOptions="Center">
-                                <Grid RowDefinitions="Auto,Auto,*,Auto"
+                                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                                       RowSpacing="12"
                                       Padding="18">
                                     <Grid ColumnDefinitions="*,Auto"
@@ -579,7 +579,7 @@
                                     </Grid>
 
                                     <Grid Grid.Row="1"
-                                          ColumnDefinitions="*,Auto,Auto,Auto"
+                                          ColumnDefinitions="*,Auto,Auto,Auto,Auto"
                                           ColumnSpacing="10">
                                         <Border BackgroundColor="#DFFFFFFF"
                                                 Stroke="#1420252C"
@@ -625,6 +625,16 @@
                                                 BackgroundColor="#EEF3F6"
                                                 TextColor="#31474F"
                                                 Clicked="OnCopyCookiesClicked" />
+                                        <Button Grid.Column="4"
+                                                x:Name="ClearCookiesButton"
+                                                Text="Clear"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="16,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#FFF4E7"
+                                                TextColor="#8A5B1F"
+                                                Clicked="OnClearCookiesClicked" />
                                     </Grid>
 
                                     <Border Grid.Row="2"
@@ -632,18 +642,33 @@
                                             Stroke="#1420252C"
                                             StrokeThickness="1"
                                             StrokeShape="RoundRectangle 14"
-                                            MinimumHeightRequest="260">
+                                            HeightRequest="180">
                                         <Editor x:Name="CookieHeaderEditor"
                                                 Margin="12"
                                                 Placeholder="cna=...; _tb_token_=...; JSESSIONID=..."
                                                 FontFamily="Consolas"
                                                 FontSize="12"
                                                 TextColor="#14313A"
-                                                PlaceholderColor="#7A8F98"
-                                                AutoSize="TextChanges" />
+                                                PlaceholderColor="#7A8F98" />
                                     </Border>
 
-                                    <Label Grid.Row="3"
+                                    <Border Grid.Row="3"
+                                            BackgroundColor="#F6FAFB"
+                                            Stroke="#1420252C"
+                                            StrokeThickness="1"
+                                            StrokeShape="RoundRectangle 14"
+                                            HeightRequest="180">
+                                        <Editor x:Name="CookieDetailsEditor"
+                                                Margin="12"
+                                                Placeholder="Get Current를 누르면 domain, path, scope URL이 여기에 표시됩니다."
+                                                FontFamily="Consolas"
+                                                FontSize="12"
+                                                TextColor="#31474F"
+                                                PlaceholderColor="#7A8F98"
+                                                IsReadOnly="True" />
+                                    </Border>
+
+                                    <Label Grid.Row="4"
                                            x:Name="CookieImportStatusLabel"
                                            Text="쿠키는 민감정보입니다. 필요한 사이트에서만 사용하고 공유/커밋하지 마세요."
                                            FontFamily="Bahnschrift"
