@@ -31,8 +31,11 @@ internal static class NetworkCaptureFilterSupport
         string? status,
         string? host,
         string? path,
+        string? fullUrl,
         string? resourceType,
-        string? mimeType)
+        string? mimeType,
+        string? requestDetails,
+        string? responseDetails)
     {
         var normalizedQuery = Normalize(query);
         if (string.IsNullOrWhiteSpace(normalizedQuery))
@@ -44,8 +47,11 @@ internal static class NetworkCaptureFilterSupport
                Contains(status, normalizedQuery) ||
                Contains(host, normalizedQuery) ||
                Contains(path, normalizedQuery) ||
+               Contains(fullUrl, normalizedQuery) ||
                Contains(resourceType, normalizedQuery) ||
-               Contains(mimeType, normalizedQuery);
+               Contains(mimeType, normalizedQuery) ||
+               Contains(requestDetails, normalizedQuery) ||
+               Contains(responseDetails, normalizedQuery);
     }
 
     public static string FormatLabel(NetworkCaptureFilterKind kind)

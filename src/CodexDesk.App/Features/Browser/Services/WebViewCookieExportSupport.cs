@@ -127,6 +127,12 @@ internal static class WebViewCookieExportSupport
             return detailedCookies;
         }
 
+        var devToolsRowCookies = ParseDevToolsCookieRows(input);
+        if (devToolsRowCookies.Count > 0)
+        {
+            return devToolsRowCookies;
+        }
+
         var devToolsCookies = ParseDevToolsCookieTable(input, fallbackTargetOrigin);
         if (devToolsCookies.Count > 0)
         {
@@ -134,6 +140,101 @@ internal static class WebViewCookieExportSupport
         }
 
         return ParseCookieHeader(input, fallbackTargetOrigin);
+    }
+
+    public static string BuildCookieImportDiagnostics(string? input, string fallbackTargetOrigin)
+    {
+        var builder = new StringBuilder();
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return "Cookie import diagnostics\n\nInput is empty.";
+        }
+
+        var normalizedInput = input.ReplaceLineEndings("\n");
+        var lines = normalizedInput.Split('\n');
+        var targetOrigin = NormalizeOrigin(fallbackTargetOrigin) ?? fallbackTargetOrigin;
+        var detailedCookies = ParseDetailedCookieBlocks(input, fallbackTargetOrigin);
+        var devToolsRowCookies = ParseDevToolsCookieRows(input);
+        var devToolsCookies = ParseDevToolsCookieTable(input, fallbackTargetOrigin);
+        var headerCookies = ParseCookieHeader(input, fallbackTargetOrigin);
+
+        builder
+            .AppendLine("Cookie import diagnostics")
+            .AppendLine()
+            .AppendLine($"Input lines: {lines.Length}")
+            .AppendLine($"Fallback target origin: {targetOrigin}")
+            .AppendLine($"Detailed block parser: {detailedCookies.Count} item(s)")
+            .AppendLine($"DevTools row parser: {devToolsRowCookies.Count} item(s)")
+            .AppendLine($"DevTools table parser: {devToolsCookies.Count} item(s)")
+            .AppendLine($"Cookie header parser: {headerCookies.Count} item(s)");
+
+        if (detailedCookies.Count == 0 && devToolsRowCookies.Count == 0 && devToolsCookies.Count == 0 && headerCookies.Count == 0)
+        {
+            builder
+                .AppendLine()
+                .AppendLine("No parser matched any cookie items.")
+                .AppendLine()
+                .AppendLine("First non-empty lines:");
+
+            var nonEmptyLines = lines
+                .Select((line, index) => new { Line = line, Index = index })
+                .Where(static item => !string.IsNullOrWhiteSpace(item.Line))
+                .Take(12)
+                .ToList();
+
+            if (nonEmptyLines.Count == 0)
+            {
+                builder.AppendLine("- (none)");
+            }
+            else
+            {
+                foreach (var item in nonEmptyLines)
+                {
+                    builder.AppendLine($"- L{item.Index + 1}: {item.Line.Trim().Replace('\t', ' ')}");
+                }
+            }
+
+            builder
+                .AppendLine()
+                .AppendLine("DevTools row scan:");
+
+            var rowCandidates = lines
+                .Select((line, index) => new { Line = line, Index = index })
+                .Where(static item => !string.IsNullOrWhiteSpace(item.Line))
+                .Take(12)
+                .ToList();
+
+            if (rowCandidates.Count == 0)
+            {
+                builder.AppendLine("- no non-empty rows");
+            }
+            else
+            {
+                foreach (var row in rowCandidates)
+                {
+                    builder.AppendLine($"- row {row.Index + 1}: {AnalyzeDevToolsRow(row.Line)}");
+                }
+            }
+
+            builder
+                .AppendLine()
+                .AppendLine("DevTools table scan:");
+
+            var maxCandidateIndex = Math.Min(lines.Length - 4, 11);
+            if (maxCandidateIndex < 0)
+            {
+                builder.AppendLine("- not enough lines for a DevTools cookie block");
+            }
+            else
+            {
+                for (var index = 0; index <= maxCandidateIndex; index++)
+                {
+                    builder.AppendLine($"- candidate at line {index + 1}: {AnalyzeDevToolsCandidate(lines, index)}");
+                }
+            }
+        }
+
+        return builder.ToString().TrimEnd();
     }
 
     public static WebViewCookieImportPlan BuildImportPlan(
@@ -397,11 +498,29 @@ internal static class WebViewCookieExportSupport
                     value,
                     domain,
                     path,
-                    GetDevToolsSecure(metadata, fallbackTargetOrigin),
+                    GetDevToolsSecure(metadata),
                     GetDevToolsHttpOnly(metadata),
                     GetDevToolsSameSite(metadata)));
 
             index = endIndex;
+        }
+
+        return cookies;
+    }
+
+    private static IReadOnlyList<WebViewCookieImportItem> ParseDevToolsCookieRows(string input)
+    {
+        var lines = input.ReplaceLineEndings("\n").Split('\n');
+        var cookies = new List<WebViewCookieImportItem>();
+
+        foreach (var rawLine in lines)
+        {
+            if (!TryParseDevToolsCookieRow(rawLine, out var cookie))
+            {
+                continue;
+            }
+
+            cookies.Add(cookie);
         }
 
         return cookies;
@@ -452,6 +571,13 @@ internal static class WebViewCookieExportSupport
 
     private static string? ExtractFirstDevToolsDomain(string input)
     {
+        var rowCookies = ParseDevToolsCookieRows(input);
+        if (rowCookies.Count > 0)
+        {
+            var rowDomain = rowCookies[0].Domain.Trim();
+            return rowDomain.StartsWith(".", StringComparison.Ordinal) ? rowDomain[1..] : rowDomain;
+        }
+
         var lines = input.ReplaceLineEndings("\n").Split('\n');
         if (!TryFindDevToolsCookieStart(lines, 0, out var startIndex))
         {
@@ -466,17 +592,7 @@ internal static class WebViewCookieExportSupport
     {
         for (var index = Math.Max(searchStartIndex, 0); index <= lines.Length - 4; index++)
         {
-            var name = lines[index].Trim();
-            var value = lines[index + 1].Trim();
-            var domain = lines[index + 2].Trim();
-            var path = lines[index + 3].Trim();
-
-            if (!IsValidCookieName(name) || string.IsNullOrEmpty(value))
-            {
-                continue;
-            }
-
-            if (!LooksLikeCookieDomain(domain) || !LooksLikeCookiePath(path))
+            if (!IsDevToolsCookieStart(lines, index))
             {
                 continue;
             }
@@ -487,6 +603,138 @@ internal static class WebViewCookieExportSupport
 
         startIndex = -1;
         return false;
+    }
+
+    private static bool IsDevToolsCookieStart(string[] lines, int index)
+    {
+        if (index < 0 || index > lines.Length - 4)
+        {
+            return false;
+        }
+
+        var name = lines[index].Trim();
+        var value = lines[index + 1].Trim();
+        var domain = lines[index + 2].Trim();
+        var path = lines[index + 3].Trim();
+        return IsValidCookieName(name) &&
+               !string.IsNullOrEmpty(value) &&
+               LooksLikeCookieDomain(domain) &&
+               LooksLikeCookiePath(path);
+    }
+
+    private static string AnalyzeDevToolsCandidate(string[] lines, int index)
+    {
+        if (index < 0 || index > lines.Length - 4)
+        {
+            return "out of range";
+        }
+
+        var name = lines[index].Trim();
+        var value = lines[index + 1].Trim();
+        var domain = lines[index + 2].Trim();
+        var path = lines[index + 3].Trim();
+        if (!IsValidCookieName(name))
+        {
+            return "name line is empty";
+        }
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return "value line is empty";
+        }
+
+        if (!LooksLikeCookieDomain(domain))
+        {
+            return $"domain line is not a host: '{domain}'";
+        }
+
+        if (!LooksLikeCookiePath(path))
+        {
+            return $"path line does not start with '/': '{path}'";
+        }
+
+        return "looks like a valid DevTools cookie start";
+    }
+
+    private static bool TryParseDevToolsCookieRow(string rawLine, out WebViewCookieImportItem cookie)
+    {
+        cookie = default!;
+        if (string.IsNullOrWhiteSpace(rawLine))
+        {
+            return false;
+        }
+
+        var columns = rawLine.Split('\t');
+        if (columns.Length < 4)
+        {
+            return false;
+        }
+
+        var name = columns[0].Trim();
+        var value = columns[1].Trim();
+        var domain = columns[2].Trim();
+        var path = columns[3].Trim();
+        if (!IsValidCookieName(name) ||
+            string.IsNullOrEmpty(value) ||
+            !LooksLikeCookieDomain(domain) ||
+            !LooksLikeCookiePath(path))
+        {
+            return false;
+        }
+
+        var metadata = columns.Length > 4
+            ? columns[4..]
+            : [];
+
+        cookie = new WebViewCookieImportItem(
+            name,
+            value,
+            domain,
+            NormalizePath(path),
+            GetDevToolsSecure(metadata),
+            GetDevToolsHttpOnly(metadata),
+            GetDevToolsSameSite(metadata));
+        return true;
+    }
+
+    private static string AnalyzeDevToolsRow(string rawLine)
+    {
+        if (string.IsNullOrWhiteSpace(rawLine))
+        {
+            return "empty row";
+        }
+
+        var columns = rawLine.Split('\t');
+        if (columns.Length < 4)
+        {
+            return $"not tabular: {columns.Length} column(s)";
+        }
+
+        var name = columns[0].Trim();
+        var value = columns[1].Trim();
+        var domain = columns[2].Trim();
+        var path = columns[3].Trim();
+        if (!IsValidCookieName(name))
+        {
+            return "name column is empty";
+        }
+
+        if (string.IsNullOrEmpty(value))
+        {
+            return "value column is empty";
+        }
+
+        if (!LooksLikeCookieDomain(domain))
+        {
+            return $"domain column is not a host: '{domain}'";
+        }
+
+        if (!LooksLikeCookiePath(path))
+        {
+            return $"path column does not start with '/': '{path}'";
+        }
+
+        return $"looks like a valid DevTools row with {columns.Length} column(s)";
     }
 
     private static bool LooksLikeCookieDomain(string value)
@@ -517,29 +765,85 @@ internal static class WebViewCookieExportSupport
 
     private static bool GetDevToolsHttpOnly(string[] metadata)
     {
-        return metadata.Length > 2 && IsCheckmark(metadata[2]);
+        var markers = GetDevToolsBooleanMarkers(metadata);
+        return markers.Count > 0 && markers[0];
     }
 
-    private static bool GetDevToolsSecure(string[] metadata, string fallbackTargetOrigin)
+    private static bool GetDevToolsSecure(string[] metadata)
     {
-        _ = fallbackTargetOrigin;
-        return metadata.Length > 3 && IsCheckmark(metadata[3]);
+        var markers = GetDevToolsBooleanMarkers(metadata);
+        return markers.Count > 1 && markers[1];
     }
 
     private static string? GetDevToolsSameSite(string[] metadata)
     {
-        if (metadata.Length <= 4)
+        foreach (var item in GetMeaningfulDevToolsMetadata(metadata))
         {
-            return null;
+            if (item is "None" or "Lax" or "Strict")
+            {
+                return item;
+            }
         }
 
-        var sameSite = metadata[4].Trim();
-        return sameSite is "None" or "Lax" or "Strict" ? sameSite : null;
+        return null;
     }
 
     private static bool IsCheckmark(string? value)
     {
         return string.Equals(value?.Trim(), "✓", StringComparison.Ordinal);
+    }
+
+    private static List<bool> GetDevToolsBooleanMarkers(string[] metadata)
+    {
+        return GetMeaningfulDevToolsMetadata(metadata)
+            .Where(IsDevToolsCheckmark)
+            .Select(static _ => true)
+            .ToList();
+    }
+
+    private static IEnumerable<string> GetMeaningfulDevToolsMetadata(string[] metadata)
+    {
+        foreach (var raw in metadata)
+        {
+            var value = raw.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            if (LooksLikeDevToolsExpiry(value) ||
+                LooksLikeDevToolsSize(value) ||
+                LooksLikeDevToolsPriority(value))
+            {
+                continue;
+            }
+
+            yield return value;
+        }
+    }
+
+    private static bool IsDevToolsCheckmark(string? value)
+    {
+        var normalized = value?.Trim();
+        return IsCheckmark(normalized) ||
+               normalized is "✓" or "✔" or "true" or "True";
+    }
+
+    private static bool LooksLikeDevToolsExpiry(string value)
+    {
+        return string.Equals(value, "Session", StringComparison.OrdinalIgnoreCase) ||
+               value.Contains('T', StringComparison.Ordinal) ||
+               value.Contains("GMT", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LooksLikeDevToolsSize(string value)
+    {
+        return int.TryParse(value, out _);
+    }
+
+    private static bool LooksLikeDevToolsPriority(string value)
+    {
+        return value is "Low" or "Medium" or "High";
     }
 
     private static string NormalizePath(string? path)

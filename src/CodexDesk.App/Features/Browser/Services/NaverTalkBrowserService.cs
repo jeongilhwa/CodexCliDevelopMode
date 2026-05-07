@@ -20,6 +20,7 @@ public sealed class NaverTalkBrowserService
     private const string TypingMacrosJsonKey = "naver-talk.typing-macros-json";
     private const string PasswordKey = "naver-talk-password";
     private const string CookieJarKey = "naver-talk-cookie-jar";
+    private const string DomainCookieSnapshotsKey = "naver-talk-domain-cookie-snapshots";
 
     private readonly SemaphoreSlim _initializeLock = new(1, 1);
 
@@ -245,6 +246,40 @@ public sealed class NaverTalkBrowserService
         {
             return null;
         }
+    }
+
+    internal async Task SaveDomainCookieSnapshotAsync(string targetOrigin, IReadOnlyList<NaverTalkPersistedCookie> cookies)
+    {
+        await EnsureInitializedAsync();
+
+        try
+        {
+            var existingJson = await TryGetRawSecureValueAsync(DomainCookieSnapshotsKey);
+            var updatedJson = DomainCookieSessionStore.UpsertSnapshot(existingJson, targetOrigin, cookies);
+            if (string.IsNullOrWhiteSpace(updatedJson))
+            {
+                SecureStorage.Default.Remove(DomainCookieSnapshotsKey);
+                _status = "Removed saved domain cookie snapshots.";
+            }
+            else
+            {
+                await SecureStorage.Default.SetAsync(DomainCookieSnapshotsKey, updatedJson);
+                _status = "Saved domain cookie snapshot.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _status = $"Failed to save domain cookie snapshot: {ex.Message}";
+        }
+
+        NotifyStateChanged();
+    }
+
+    internal async Task<IReadOnlyList<SavedDomainCookieSnapshot>> TryGetSavedDomainCookieSnapshotsAsync()
+    {
+        await EnsureInitializedAsync();
+        var raw = await TryGetRawSecureValueAsync(DomainCookieSnapshotsKey);
+        return DomainCookieSessionStore.ParseSnapshots(raw);
     }
 
     /// <summary>
@@ -665,9 +700,14 @@ if (loginButton) {
 
     private static async Task<string?> TryGetRawCookieJarAsync()
     {
+        return await TryGetRawSecureValueAsync(CookieJarKey);
+    }
+
+    private static async Task<string?> TryGetRawSecureValueAsync(string key)
+    {
         try
         {
-            return await SecureStorage.Default.GetAsync(CookieJarKey);
+            return await SecureStorage.Default.GetAsync(key);
         }
         catch
         {

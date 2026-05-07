@@ -284,6 +284,73 @@ public partial class MainPage : ContentPage
 #endif
     }
 
+    private async Task TryRestoreSavedDomainCookieSnapshotsAsync()
+    {
+#if WINDOWS
+        if (_savedDomainCookieSnapshotsRestored)
+        {
+            return;
+        }
+
+        var snapshots = await _naverTalkBrowser.TryGetSavedDomainCookieSnapshotsAsync();
+        _savedDomainCookieSnapshotsRestored = true;
+        if (snapshots.Count == 0)
+        {
+            return;
+        }
+
+        var coreWebView2 = await TryEnsureCoreWebView2Async();
+        if (coreWebView2 is null)
+        {
+            _savedDomainCookieSnapshotsRestored = false;
+            return;
+        }
+
+        var restored = 0;
+        var failed = 0;
+        var cookieManager = coreWebView2.CookieManager;
+        foreach (var snapshot in snapshots)
+        {
+            foreach (var persistedCookie in snapshot.Cookies)
+            {
+                try
+                {
+                    var cookie = cookieManager.CreateCookie(
+                        persistedCookie.Name,
+                        persistedCookie.Value,
+                        persistedCookie.Domain,
+                        persistedCookie.Path);
+
+                    cookie.IsSecure = persistedCookie.IsSecure;
+                    cookie.IsHttpOnly = persistedCookie.IsHttpOnly;
+
+                    if (persistedCookie.ExpiresAtUnixSeconds is { } expiresAtUnixSeconds)
+                    {
+                        cookie.Expires = expiresAtUnixSeconds;
+                    }
+
+                    if (TryMapSameSite(persistedCookie.SameSite, out var sameSite))
+                    {
+                        cookie.SameSite = sameSite;
+                    }
+
+                    cookieManager.AddOrUpdateCookie(cookie);
+                    restored++;
+                }
+                catch
+                {
+                    failed++;
+                }
+            }
+        }
+
+        _naverTalkBrowser.SetStatus(
+            failed == 0
+                ? $"저장된 도메인 쿠키 {restored}개를 자동 로드했습니다."
+                : $"저장된 도메인 쿠키 {restored}개 로드, {failed}개 실패했습니다.");
+#endif
+    }
+
 #if WINDOWS
     private async Task<CoreWebView2?> TryEnsureCoreWebView2Async()
     {

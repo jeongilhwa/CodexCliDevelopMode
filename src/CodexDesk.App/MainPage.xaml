@@ -579,7 +579,7 @@
                                     </Grid>
 
                                     <Grid Grid.Row="1"
-                                          ColumnDefinitions="*,Auto,Auto,Auto,Auto"
+                                          ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto"
                                           ColumnSpacing="10">
                                         <Border BackgroundColor="#DFFFFFFF"
                                                 Stroke="#1420252C"
@@ -616,6 +616,16 @@
                                                 TextColor="#31474F"
                                                 Clicked="OnGetCurrentCookiesClicked" />
                                         <Button Grid.Column="3"
+                                                x:Name="SaveCookiesButton"
+                                                Text="Save Cookies"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="16,9"
+                                                CornerRadius="12"
+                                                BackgroundColor="#EEF3F6"
+                                                TextColor="#31474F"
+                                                Clicked="OnSaveCookiesClicked" />
+                                        <Button Grid.Column="4"
                                                 x:Name="CopyCookiesButton"
                                                 Text="Copy"
                                                 FontFamily="Bahnschrift"
@@ -625,7 +635,7 @@
                                                 BackgroundColor="#EEF3F6"
                                                 TextColor="#31474F"
                                                 Clicked="OnCopyCookiesClicked" />
-                                        <Button Grid.Column="4"
+                                        <Button Grid.Column="5"
                                                 x:Name="ClearCookiesButton"
                                                 Text="Clear"
                                                 FontFamily="Bahnschrift"
@@ -975,7 +985,7 @@
                                         StrokeShape="RoundRectangle 12">
                                     <Entry x:Name="NetworkSearchEntry"
                                            Margin="10,0"
-                                           Placeholder="Find sessions"
+                                           Placeholder="Find host / full URL"
                                            PlaceholderColor="#8A9AA1"
                                            FontFamily="Bahnschrift"
                                            FontSize="14"
@@ -1157,9 +1167,13 @@
                                         <CollectionView.ItemTemplate>
                                             <DataTemplate>
                                                 <Grid Padding="14,0"
-                                                      HeightRequest="46"
+                                                      HeightRequest="58"
                                                       ColumnDefinitions="52,74,72,*,68,68"
                                                       ColumnSpacing="10">
+                                                    <Grid.GestureRecognizers>
+                                                        <TapGestureRecognizer Buttons="Secondary"
+                                                                              Tapped="OnWebViewNetworkItemSecondaryTapped" />
+                                                    </Grid.GestureRecognizers>
                                                     <Label Grid.Column="0"
                                                            Text="{Binding IndexDisplay}"
                                                            FontFamily="Consolas"
@@ -1184,7 +1198,7 @@
                                                            VerticalTextAlignment="Center" />
                                                     <Grid Grid.Column="3"
                                                           RowDefinitions="Auto,Auto"
-                                                          RowSpacing="1"
+                                                          RowSpacing="2"
                                                           VerticalOptions="Center">
                                                         <Label Grid.Row="0"
                                                                Text="{Binding HostDisplay}"
@@ -1194,7 +1208,7 @@
                                                                LineBreakMode="TailTruncation"
                                                                MaxLines="1" />
                                                         <Label Grid.Row="1"
-                                                               Text="{Binding PathDisplay}"
+                                                               Text="{Binding FullUrlDisplay}"
                                                                FontFamily="Consolas"
                                                                FontSize="10"
                                                                TextColor="#71858E"

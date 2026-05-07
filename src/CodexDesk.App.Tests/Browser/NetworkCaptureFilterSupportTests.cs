@@ -56,20 +56,25 @@ public sealed class NetworkCaptureFilterSupportTests
     }
 
     [TestMethod]
-    [DataRow("", "GET", "200", "www.youtube.com", "/watch?v=1", "xhr", "application/json", true)]
-    [DataRow("youtube", "GET", "200", "www.youtube.com", "/watch?v=1", "xhr", "application/json", true)]
-    [DataRow("POST", "POST", "200", "api.example.com", "/v1/log_event", "fetch", "application/json", true)]
-    [DataRow("404", "GET", "404", "cdn.example.com", "/missing.png", "image", "image/png", true)]
-    [DataRow("json", "POST", "200", "api.example.com", "/v1/log_event", "fetch", "application/json", true)]
-    [DataRow("missing", "GET", "200", "www.youtube.com", "/watch?v=1", "xhr", "application/json", false)]
+    [DataRow("", "GET", "200", "www.youtube.com", "/watch?v=1", "https://www.youtube.com/watch?v=1", "xhr", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: text/html", true)]
+    [DataRow("youtube", "GET", "200", "www.youtube.com", "/watch?v=1", "https://www.youtube.com/watch?v=1", "xhr", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: text/html", true)]
+    [DataRow("POST", "POST", "200", "api.example.com", "/v1/log_event", "https://api.example.com/v1/log_event", "fetch", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: application/json", true)]
+    [DataRow("404", "GET", "404", "cdn.example.com", "/missing.png", "https://cdn.example.com/missing.png", "image", "image/png", "HEADERS:\nAccept: image/png", "HEADERS:\nContent-Type: image/png", true)]
+    [DataRow("json", "POST", "200", "api.example.com", "/v1/log_event", "https://api.example.com/v1/log_event", "fetch", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: application/json", true)]
+    [DataRow("https://seller-acs.aliexpress.com/h5/mtop.aliexpress.seller.iopnotify.defence.pull/1.0/?jsv=2.7.2", "GET", "200", "seller-acs.aliexpress.com", "/h5/mtop.aliexpress.seller.iopnotify.defence.pull/1.0/?jsv=2.7.2", "https://seller-acs.aliexpress.com/h5/mtop.aliexpress.seller.iopnotify.defence.pull/1.0/?jsv=2.7.2", "fetch", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: application/json", true)]
+    [DataRow("sec", "GET", "200", "www.youtube.com", "/watch?v=1", "https://www.youtube.com/watch?v=1", "xhr", "application/json", "HEADERS:\nSec-Fetch-Site: same-origin", "HEADERS:\nServer: test", true)]
+    [DataRow("missing", "GET", "200", "www.youtube.com", "/watch?v=1", "https://www.youtube.com/watch?v=1", "xhr", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: text/html", false)]
     public void MatchesSearch_MatchesVisibleNetworkFields(
         string query,
         string method,
         string status,
         string host,
         string path,
+        string fullUrl,
         string resourceType,
         string mimeType,
+        string requestDetails,
+        string responseDetails,
         bool expected)
     {
         NetworkCaptureFilterSupport.MatchesSearch(
@@ -78,8 +83,11 @@ public sealed class NetworkCaptureFilterSupportTests
                 status,
                 host,
                 path,
+                fullUrl,
                 resourceType,
-                mimeType)
+                mimeType,
+                requestDetails,
+                responseDetails)
             .Should().Be(expected);
     }
 

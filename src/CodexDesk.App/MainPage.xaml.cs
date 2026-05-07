@@ -47,6 +47,8 @@ public partial class MainPage : ContentPage
     private static readonly Color SplitterActiveColor = Color.FromArgb("#1D5C74");
     private readonly List<WebViewNetworkLogEntry> _webViewNetworkEntries = [];
     private readonly ObservableCollection<WebViewNetworkLogEntry> _filteredWebViewNetworkEntries = [];
+    private WebViewNetworkLogEntry? _selectedWebViewNetworkEntry;
+    private bool _isRefreshingNetworkSelection;
     private const int MaxWebViewNetworkEntries = NetworkCaptureFilterSupport.MaxEntries;
     private const int MaxNetworkAnalysisPromptLength = 52000;
     private int _webViewNetworkSequence;
@@ -102,6 +104,7 @@ public partial class MainPage : ContentPage
         string MethodDisplay,
         string HostDisplay,
         string PathDisplay,
+        string FullUrlDisplay,
         string SchemeDisplay,
         string ResourceTypeDisplay,
         string MimeTypeDisplay,
@@ -149,6 +152,7 @@ public partial class MainPage : ContentPage
     private bool _webViewNetworkDomainEnabled;
     private bool _webViewNewWindowHandlerAttached;
     private bool _webViewInspectorScriptRegistered;
+    private bool _savedDomainCookieSnapshotsRestored;
     private string? _lastAppliedWebViewUserAgent;
     private CoreWebView2? _networkReceiversAttachedCore;
     private CoreWebView2DevToolsProtocolEventReceiver? _networkRequestWillBeSentReceiver;
@@ -483,10 +487,14 @@ public partial class MainPage : ContentPage
 
         RefreshFilteredNetworkEntries(preserveSelection: true);
 
-        if (WebViewNetworkListView.SelectedItem is null && _filteredWebViewNetworkEntries.Count > 0)
+        if (_selectedWebViewNetworkEntry is null &&
+            WebViewNetworkListView.SelectedItem is null &&
+            _filteredWebViewNetworkEntries.Count > 0)
         {
-            WebViewNetworkListView.SelectedItem = _filteredWebViewNetworkEntries[0];
-            ApplyNetworkDetails(_filteredWebViewNetworkEntries[0]);
+            var firstEntry = _filteredWebViewNetworkEntries[0];
+            _selectedWebViewNetworkEntry = firstEntry;
+            WebViewNetworkListView.SelectedItem = firstEntry;
+            ApplyNetworkDetails(firstEntry);
         }
 
         UpdateNetworkCount();
@@ -505,11 +513,18 @@ public partial class MainPage : ContentPage
 
         if (e.CurrentSelection.FirstOrDefault() is WebViewNetworkLogEntry selected)
         {
+            _selectedWebViewNetworkEntry = selected;
             UpdateNetworkPanelScrollbars(NetworkScrollTarget.LogList);
             ApplyNetworkDetails(selected);
             return;
         }
 
+        if (_isRefreshingNetworkSelection)
+        {
+            return;
+        }
+
+        _selectedWebViewNetworkEntry = null;
         WebViewNetworkRequestHeadersLabel.Text = string.Empty;
         WebViewNetworkRequestBodyLabel.Text = string.Empty;
         WebViewNetworkResponseHeadersLabel.Text = string.Empty;
@@ -547,6 +562,7 @@ public partial class MainPage : ContentPage
     {
         _webViewNetworkEntries.Clear();
         _filteredWebViewNetworkEntries.Clear();
+        _selectedWebViewNetworkEntry = null;
         _webViewNetworkSequence = 0;
         if (WebViewNetworkListView is not null)
         {
@@ -829,10 +845,9 @@ public partial class MainPage : ContentPage
 
     private void RefreshFilteredNetworkEntries(bool preserveSelection)
     {
-        var currentSelection = preserveSelection
-            ? WebViewNetworkListView?.SelectedItem as WebViewNetworkLogEntry
-            : null;
+        var currentSelection = WebViewNetworkListView?.SelectedItem as WebViewNetworkLogEntry;
 
+        _isRefreshingNetworkSelection = true;
         _filteredWebViewNetworkEntries.Clear();
         foreach (var entry in _webViewNetworkEntries.Where(entry =>
                      NetworkCaptureFilterSupport.Matches(_networkCaptureFilter, entry.FilterKind) &&
@@ -842,27 +857,42 @@ public partial class MainPage : ContentPage
                          entry.StatusDisplay,
                          entry.HostDisplay,
                          entry.PathDisplay,
+                         entry.FullUrlDisplay,
                          entry.ResourceTypeDisplay,
-                         entry.MimeTypeDisplay)))
+                         entry.MimeTypeDisplay,
+                         entry.RequestDetails,
+                         entry.ResponseDetails)))
         {
             _filteredWebViewNetworkEntries.Add(entry);
         }
 
         if (WebViewNetworkListView is null)
         {
+            _isRefreshingNetworkSelection = false;
             return;
         }
 
-        if (currentSelection is not null && _filteredWebViewNetworkEntries.Contains(currentSelection))
+        var resolution = NetworkCaptureSelectionSupport.ResolveSelectionAfterRefresh(
+            currentSelection,
+            _selectedWebViewNetworkEntry,
+            _filteredWebViewNetworkEntries,
+            preserveSelection);
+
+        WebViewNetworkListView.SelectedItem = resolution.SelectedEntry;
+
+        if (resolution.SelectedEntry is not null)
         {
-            WebViewNetworkListView.SelectedItem = currentSelection;
+            _selectedWebViewNetworkEntry = resolution.SelectedEntry;
+            ApplyNetworkDetails(resolution.SelectedEntry);
+            _isRefreshingNetworkSelection = false;
             return;
         }
 
-        WebViewNetworkListView.SelectedItem = _filteredWebViewNetworkEntries.FirstOrDefault();
-        if (WebViewNetworkListView.SelectedItem is WebViewNetworkLogEntry selected)
+        _isRefreshingNetworkSelection = false;
+
+        if (!resolution.KeepCurrentDetails)
         {
-            ApplyNetworkDetails(selected);
+            _selectedWebViewNetworkEntry = null;
         }
     }
 
@@ -989,6 +1019,89 @@ public partial class MainPage : ContentPage
     private void OnWebViewNetworkListUnfocused(object? sender, FocusEventArgs e)
     {
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
+    }
+
+    private async void OnWebViewNetworkItemSecondaryTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not BindableObject bindable ||
+            bindable.BindingContext is not WebViewNetworkLogEntry entry)
+        {
+            return;
+        }
+
+        if (WebViewNetworkListView is not null)
+        {
+            _selectedWebViewNetworkEntry = entry;
+            WebViewNetworkListView.SelectedItem = entry;
+        }
+
+        ApplyNetworkDetails(entry);
+
+        var action = await DisplayActionSheetAsync(
+            "Network Copy",
+            "Cancel",
+            null,
+            "Copy URL",
+            "Copy Session");
+
+        if (string.Equals(action, "Copy URL", StringComparison.Ordinal))
+        {
+            await CopyNetworkUrlAsync(entry);
+            return;
+        }
+
+        if (string.Equals(action, "Copy Session", StringComparison.Ordinal))
+        {
+            await CopyNetworkSessionAsync(entry);
+        }
+    }
+
+    private async Task CopyNetworkUrlAsync(WebViewNetworkLogEntry entry)
+    {
+        var url = ExtractSection(entry.RequestDetails, "URL:", "TYPE:");
+        if (string.IsNullOrWhiteSpace(url) || url == "-")
+        {
+            _naverTalkBrowser.SetStatus("선택한 세션에 복사할 URL이 없습니다.");
+            return;
+        }
+
+        try
+        {
+            await Clipboard.Default.SetTextAsync(url);
+            _naverTalkBrowser.SetStatus("세션 URL을 클립보드에 복사했습니다.");
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"세션 URL 복사 실패: {ex.Message}");
+        }
+    }
+
+    private async Task CopyNetworkSessionAsync(WebViewNetworkLogEntry entry)
+    {
+        var url = ExtractSection(entry.RequestDetails, "URL:", "TYPE:");
+        if (string.IsNullOrWhiteSpace(url) || url == "-")
+        {
+            _naverTalkBrowser.SetStatus("선택한 세션에 복사할 요청 URL이 없습니다.");
+            return;
+        }
+
+        var raw = WebViewNetworkSessionExportSupport.BuildRawSessionText(
+            entry.MethodDisplay,
+            url,
+            entry.StatusDisplay,
+            "-",
+            entry.RequestDetails,
+            entry.ResponseDetails);
+
+        try
+        {
+            await Clipboard.Default.SetTextAsync(raw);
+            _naverTalkBrowser.SetStatus("세션 전체를 클립보드에 복사했습니다.");
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"세션 복사 실패: {ex.Message}");
+        }
     }
 
     private void OnRequestHeadersPanelTapped(object? sender, TappedEventArgs e)
@@ -1118,17 +1231,20 @@ public partial class MainPage : ContentPage
         var sizeDisplay = FormatNetworkSize(encodedDataLength);
         var hostDisplay = "-";
         var pathDisplay = normalizedSummary;
+        var fullUrlDisplay = "-";
         var schemeDisplay = "-";
 
         if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
         {
             hostDisplay = uri.Host;
             pathDisplay = string.IsNullOrWhiteSpace(uri.PathAndQuery) ? "/" : uri.PathAndQuery;
+            fullUrlDisplay = uri.AbsoluteUri;
             schemeDisplay = string.IsNullOrWhiteSpace(uri.Scheme) ? "-" : uri.Scheme;
         }
         else if (!string.IsNullOrWhiteSpace(url))
         {
             pathDisplay = url.Trim();
+            fullUrlDisplay = url.Trim();
         }
 
         var resourceTypeDisplay = string.IsNullOrWhiteSpace(resourceType) ? "-" : resourceType.Trim();
@@ -1150,6 +1266,7 @@ public partial class MainPage : ContentPage
             methodDisplay,
             hostDisplay,
             pathDisplay,
+            fullUrlDisplay,
             schemeDisplay,
             resourceTypeDisplay,
             mimeTypeDisplay,

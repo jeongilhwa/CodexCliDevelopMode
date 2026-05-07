@@ -40,6 +40,7 @@ public partial class MainPage : ContentPage
                     _ = EnsureWebViewInspectorScriptRegisteredAsync(webView2.CoreWebView2);
                     _ = ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
                     _ = ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
+                    _ = TryRestoreSavedDomainCookieSnapshotsAsync();
                 }
             }
         }
@@ -63,6 +64,7 @@ public partial class MainPage : ContentPage
         _ = EnsureWebViewInspectorScriptRegisteredAsync(sender.CoreWebView2);
         _ = ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
         _ = ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
+        _ = TryRestoreSavedDomainCookieSnapshotsAsync();
     }
 
     private void AttachWebViewNewWindowHandler(CoreWebView2 coreWebView2)
@@ -1946,7 +1948,12 @@ public partial class MainPage : ContentPage
             var cookiesToImport = WebViewCookieExportSupport.ParseCookieImportText(CookieHeaderEditor?.Text, targetOrigin);
             if (cookiesToImport.Count == 0)
             {
-                SetCookieImportStatus("붙여넣은 텍스트에서 유효한 쿠키 항목을 찾지 못했습니다.", isError: true);
+                if (CookieDetailsEditor is not null)
+                {
+                    CookieDetailsEditor.Text = WebViewCookieExportSupport.BuildCookieImportDiagnostics(CookieHeaderEditor?.Text, targetOrigin);
+                }
+
+                SetCookieImportStatus("붙여넣은 텍스트에서 유효한 쿠키 항목을 찾지 못했습니다. 아래 진단 로그를 확인하세요.", isError: true);
                 return;
             }
 
@@ -2120,6 +2127,63 @@ public partial class MainPage : ContentPage
         }
 #else
         SetCookieImportStatus("쿠키 가져오기는 Windows WebView2에서만 지원됩니다.", isError: true);
+#endif
+    }
+
+    private async void OnSaveCookiesClicked(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        try
+        {
+            if (!TryResolveCookieTargetUri(out var targetOrigin, out var targetUri))
+            {
+                SetCookieImportStatus("저장할 쿠키의 도메인을 먼저 입력하거나 페이지에 접속하세요.", isError: true);
+                return;
+            }
+
+            var coreWebView2 = await TryEnsureCoreWebView2Async();
+            if (coreWebView2 is null)
+            {
+                SetCookieImportStatus("WebView2가 아직 준비되지 않았습니다. 페이지를 한 번 연 뒤 다시 시도하세요.", isError: true);
+                return;
+            }
+
+            var allCookies = await coreWebView2.CookieManager.GetCookiesAsync(string.Empty);
+            var cookiesToSave = allCookies
+                .Where(cookie => WebViewCookieExportSupport.MatchesHost(targetUri.Host, cookie.Domain))
+                .GroupBy(cookie => $"{cookie.Name}|{cookie.Domain}|{cookie.Path}", StringComparer.Ordinal)
+                .Select(group => group.Last())
+                .Select(cookie => new NaverTalkPersistedCookie(
+                    cookie.Name,
+                    cookie.Value,
+                    cookie.Domain,
+                    cookie.Path,
+                    cookie.Expires <= 0 ? null : cookie.Expires,
+                    cookie.IsSecure,
+                    cookie.IsHttpOnly,
+                    cookie.SameSite.ToString()))
+                .OrderBy(cookie => cookie.Domain, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(cookie => cookie.Path, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(cookie => cookie.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (cookiesToSave.Count == 0)
+            {
+                SetCookieImportStatus($"{targetUri.Host}에서 저장할 쿠키가 없습니다.", isError: true);
+                return;
+            }
+
+            await _naverTalkBrowser.SaveDomainCookieSnapshotAsync(targetOrigin, cookiesToSave);
+            SetCookieImportStatus(
+                $"{targetUri.Host} 쿠키 {cookiesToSave.Count}개를 저장했습니다. 다음 실행 때 자동으로 로드됩니다.",
+                isError: false);
+        }
+        catch (Exception ex)
+        {
+            SetCookieImportStatus($"쿠키 저장 실패: {ex.Message}", isError: true);
+        }
+#else
+        SetCookieImportStatus("쿠키 저장은 Windows WebView2에서만 지원됩니다.", isError: true);
 #endif
     }
 

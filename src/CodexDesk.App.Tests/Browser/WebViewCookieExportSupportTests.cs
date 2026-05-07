@@ -171,6 +171,78 @@ public sealed class WebViewCookieExportSupportTests
     }
 
     [TestMethod]
+    public void ParseCookieImportText_ParsesSparseDevToolsCookieTableBlocks()
+    {
+        var cookies = WebViewCookieExportSupport.ParseCookieImportText(
+            NormalizeLineEndings(
+                """
+                __cf_bm
+                xqXxCR.sample
+                .11st.co.kr
+                /
+                Session
+                206
+                
+                
+                Lax
+                
+                
+                Medium
+                TMALL_AUTH
+                auth-value
+                .11st.co.kr
+                /
+                Session
+                1350
+                
+                
+                Lax
+                
+                
+                Medium
+                TS01cdb22c
+                0125a73e24
+                .11st.co.kr
+                /
+                Session
+                596
+                
+                
+                
+                
+                Medium
+                """),
+            "https://11st.co.kr");
+
+        cookies.Should().BeEquivalentTo(
+            [
+                new WebViewCookieImportItem("__cf_bm", "xqXxCR.sample", ".11st.co.kr", "/", false, false, "Lax"),
+                new WebViewCookieImportItem("TMALL_AUTH", "auth-value", ".11st.co.kr", "/", false, false, "Lax"),
+                new WebViewCookieImportItem("TS01cdb22c", "0125a73e24", ".11st.co.kr", "/", false, false, null)
+            ]);
+    }
+
+    [TestMethod]
+    public void ParseCookieImportText_ParsesRowBasedDevToolsCookieTable()
+    {
+        var cookies = WebViewCookieExportSupport.ParseCookieImportText(
+            NormalizeLineEndings(
+                """
+                __cf_bm	xqXxCR.sample	.11st.co.kr	/	Session	206	✓	✓			Medium
+                TMALL_AUTH	auth-value	.11st.co.kr	/	Session	1350			Lax		Medium
+                TS01cdb22c	0125a73e24	.11st.co.kr	/	Session	596					Medium
+                """),
+            "https://11st.co.kr");
+
+        cookies.Should().BeEquivalentTo(
+            [
+                new WebViewCookieImportItem("__cf_bm", "xqXxCR.sample", ".11st.co.kr", "/", true, true, null),
+                new WebViewCookieImportItem("TMALL_AUTH", "auth-value", ".11st.co.kr", "/", false, false, "Lax"),
+                new WebViewCookieImportItem("TS01cdb22c", "0125a73e24", ".11st.co.kr", "/", false, false, null)
+            ]);
+    }
+
+    [TestMethod]
     public void ExtractTargetOrigin_UsesFirstDevToolsCookieDomain()
     {
         var origin = WebViewCookieExportSupport.ExtractTargetOrigin(
@@ -185,6 +257,25 @@ public sealed class WebViewCookieExportSupportTests
                 """));
 
         origin.Should().Be("https://aliexpress.com");
+    }
+
+    [TestMethod]
+    public void BuildCookieImportDiagnostics_ExplainsWhyNoCookieWasParsed()
+    {
+        var diagnostics = WebViewCookieExportSupport.BuildCookieImportDiagnostics(
+            NormalizeLineEndings(
+                """
+                __cf_bm
+                
+                .11st.co.kr
+                /
+                Session
+                """),
+            "https://11st.co.kr");
+
+        diagnostics.Should().Contain("No parser matched any cookie items.");
+        diagnostics.Should().Contain("candidate at line 1");
+        diagnostics.Should().Contain("value line is empty");
     }
 
     [TestMethod]
