@@ -49,6 +49,7 @@ public partial class MainPage : ContentPage
     private readonly ObservableCollection<WebViewNetworkLogEntry> _filteredWebViewNetworkEntries = [];
     private WebViewNetworkLogEntry? _selectedWebViewNetworkEntry;
     private bool _isRefreshingNetworkSelection;
+    private bool _isNetworkListPinnedToBottom = true;
     private const int MaxWebViewNetworkEntries = NetworkCaptureFilterSupport.MaxEntries;
     private const int MaxNetworkAnalysisPromptLength = 52000;
     private int _webViewNetworkSequence;
@@ -479,11 +480,9 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        _webViewNetworkEntries.Insert(0, entry);
-        while (_webViewNetworkEntries.Count > MaxWebViewNetworkEntries)
-        {
-            _webViewNetworkEntries.RemoveAt(_webViewNetworkEntries.Count - 1);
-        }
+        var shouldAutoScroll = _isNetworkListPinnedToBottom;
+
+        NetworkCaptureListSupport.AppendEntry(_webViewNetworkEntries, entry, MaxWebViewNetworkEntries);
 
         RefreshFilteredNetworkEntries(preserveSelection: true);
 
@@ -491,10 +490,18 @@ public partial class MainPage : ContentPage
             WebViewNetworkListView.SelectedItem is null &&
             _filteredWebViewNetworkEntries.Count > 0)
         {
-            var firstEntry = _filteredWebViewNetworkEntries[0];
-            _selectedWebViewNetworkEntry = firstEntry;
-            WebViewNetworkListView.SelectedItem = firstEntry;
-            ApplyNetworkDetails(firstEntry);
+            var lastEntry = NetworkCaptureListSupport.ResolveAutoSelectedEntryAfterAppend(_filteredWebViewNetworkEntries);
+            if (lastEntry is not null)
+            {
+                _selectedWebViewNetworkEntry = lastEntry;
+                WebViewNetworkListView.SelectedItem = lastEntry;
+                ApplyNetworkDetails(lastEntry);
+            }
+        }
+
+        if (shouldAutoScroll)
+        {
+            ScrollWebViewNetworkListToBottom();
         }
 
         UpdateNetworkCount();
@@ -1016,6 +1023,13 @@ public partial class MainPage : ContentPage
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.LogList);
     }
 
+    private void OnWebViewNetworkListScrolled(object? sender, ItemsViewScrolledEventArgs e)
+    {
+        _isNetworkListPinnedToBottom = NetworkCaptureListSupport.IsPinnedToBottom(
+            e.LastVisibleItemIndex,
+            _filteredWebViewNetworkEntries.Count);
+    }
+
     private void OnWebViewNetworkListUnfocused(object? sender, FocusEventArgs e)
     {
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
@@ -1173,6 +1187,18 @@ public partial class MainPage : ContentPage
                 ? $"{_webViewNetworkEntries.Count} items"
                 : $"{_filteredWebViewNetworkEntries.Count} / {_webViewNetworkEntries.Count} items";
         }
+    }
+
+    private void ScrollWebViewNetworkListToBottom()
+    {
+        if (WebViewNetworkListView is null || _filteredWebViewNetworkEntries.Count == 0)
+        {
+            return;
+        }
+
+        _isNetworkListPinnedToBottom = true;
+        var lastEntry = _filteredWebViewNetworkEntries[^1];
+        Dispatcher.Dispatch(() => WebViewNetworkListView.ScrollTo(lastEntry, position: ScrollToPosition.End, animate: false));
     }
 
     private static string ExtractSection(string source, string startMarker, string? endMarker)

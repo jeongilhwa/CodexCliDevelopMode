@@ -1160,6 +1160,7 @@
                                                     x:Name="WebViewNetworkListView"
                                                     SelectionMode="Single"
                                                     SelectionChanged="OnWebViewNetworkSelectionChanged"
+                                                    Scrolled="OnWebViewNetworkListScrolled"
                                                     Focused="OnWebViewNetworkListFocused"
                                                     Unfocused="OnWebViewNetworkListUnfocused"
                                                     VerticalScrollBarVisibility="Default"
