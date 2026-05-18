@@ -1,6 +1,8 @@
 ﻿namespace CodexDesk;
 
 using CodexDesk.Services;
+using InterceptKit.Core;
+using InterceptKit.Presentation;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -34,6 +36,7 @@ public partial class MainPage : ContentPage
                 webView2.CoreWebView2Initialized += OnCoreWebView2Initialized;
                 if (webView2.CoreWebView2 is not null)
                 {
+                    _ = EnsureWebViewInterceptAttachedAsync(webView2.CoreWebView2);
                     _ = ApplyWebViewUserAgentAsync(webView2.CoreWebView2);
                     AttachWebViewNewWindowHandler(webView2.CoreWebView2);
                     AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
@@ -57,6 +60,7 @@ public partial class MainPage : ContentPage
             return;
         }
 
+        _ = EnsureWebViewInterceptAttachedAsync(sender.CoreWebView2);
         _naverTalkBrowser.SetStatus("WebView2 is ready.");
         _ = ApplyWebViewUserAgentAsync(sender.CoreWebView2);
         AttachWebViewNewWindowHandler(sender.CoreWebView2);
@@ -1284,6 +1288,7 @@ public partial class MainPage : ContentPage
     {
         _naverTalkBrowser.StateChanged -= OnBrowserStateChanged;
         _naverTalkBrowser.CommandRequested -= OnBrowserCommandRequested;
+        _webViewInterceptPanelState.Changed -= OnWebViewInterceptPanelChanged;
         BrowserPane.SizeChanged -= OnBrowserPaneSizeChanged;
 #if WINDOWS
         DetachWebViewNetworkDevToolsHook();
@@ -1375,6 +1380,204 @@ public partial class MainPage : ContentPage
     private async void OnBrowserAddressGoClicked(object? sender, EventArgs e)
     {
         await NavigateFromAddressBarAsync();
+    }
+
+    private void OnWebViewInterceptPanelChanged(object? sender, EventArgs e)
+    {
+        _ = MainThread.InvokeOnMainThreadAsync(UpdateWebViewInterceptPanel);
+    }
+
+    private void UpdateWebViewInterceptPanel()
+    {
+        var pendingItems = _webViewInterceptPanelState.GetPendingItems();
+        if (InterceptStatusLabel is not null)
+        {
+            InterceptStatusLabel.Text = _webViewInterceptPanelState.StatusText;
+        }
+
+        if (InterceptDetailLabel is not null)
+        {
+            InterceptDetailLabel.Text = _webViewInterceptPanelState.DetailText;
+        }
+
+        if (InterceptCountLabel is not null)
+        {
+            InterceptCountLabel.Text = _webViewInterceptPanelState.CountText;
+        }
+
+        if (InterceptToggleButton is not null)
+        {
+            InterceptToggleButton.Text = _webViewInterceptPanelState.ToggleButtonText;
+            InterceptToggleButton.BackgroundColor = _webViewInterceptPanelState.IsEnabled
+                ? Color.FromArgb("#1F6780")
+                : Color.FromArgb("#EEF3F6");
+            InterceptToggleButton.TextColor = _webViewInterceptPanelState.IsEnabled
+                ? Colors.White
+                : Color.FromArgb("#31474F");
+        }
+
+        if (WebBrowserTabCountLabel is not null)
+        {
+            WebBrowserTabCountLabel.Text = _webViewInterceptPanelState.CountText;
+        }
+
+        if (InterceptQueueCollection is not null)
+        {
+            InterceptQueueCollection.ItemsSource = pendingItems;
+            InterceptQueueCollection.SelectedItem = pendingItems.FirstOrDefault(item => item.SessionId == _webViewInterceptPanelState.SelectedSessionId);
+        }
+
+        ApplySelectedInterceptSession(_webViewInterceptPanelState.GetSelectedSession());
+    }
+
+    private async void OnInterceptToggleClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            await _webViewInterceptController.SetEnabledAsync(!_webViewInterceptPanelState.IsEnabled);
+            UpdateWebViewInterceptPanel();
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Intercept toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+
+    private void OnInterceptQueueSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (e.CurrentSelection.FirstOrDefault() is InterceptQueueItemViewModel selected)
+        {
+            _webViewInterceptPanelState.SelectSession(selected.SessionId);
+            ApplySelectedInterceptSession(_webViewInterceptPanelState.GetSelectedSession());
+            return;
+        }
+
+        ApplySelectedInterceptSession(null);
+    }
+
+    private async void OnInterceptForwardClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            await _webViewInterceptPanelState.ForwardSelectedAsync();
+            UpdateWebViewInterceptPanel();
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Intercept forward failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+
+    private async void OnInterceptForwardAllClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            _webViewInterceptController.BeginTemporaryPassThrough(TimeSpan.FromSeconds(8));
+            await _webViewInterceptPanelState.ForwardAllAsync();
+            UpdateWebViewInterceptPanel();
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Intercept forward-all failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+
+    private async void OnInterceptDropClicked(object? sender, EventArgs e)
+    {
+        try
+        {
+            await _webViewInterceptPanelState.DropSelectedAsync();
+            UpdateWebViewInterceptPanel();
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"Intercept drop failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+
+    private async void OnCopyInterceptSummaryClicked(object? sender, EventArgs e)
+    {
+        var summaryText = _webViewInterceptPanelState.SelectedSummaryText;
+        if (string.IsNullOrWhiteSpace(summaryText) || summaryText == "선택된 요청 없음")
+        {
+            _naverTalkBrowser.SetStatus("복사할 요청 요약이 없습니다.", _naverTalkBrowser.CurrentUrl);
+            return;
+        }
+
+        try
+        {
+            await Clipboard.Default.SetTextAsync(summaryText);
+            _naverTalkBrowser.SetStatus("요청 Method / URL을 클립보드에 복사했습니다.", _naverTalkBrowser.CurrentUrl);
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"요청 요약 복사 실패: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+
+    private void ApplySelectedInterceptSession(InterceptSession? session)
+    {
+        if (InterceptSelectedSummaryLabel is not null)
+        {
+            InterceptSelectedSummaryLabel.Text = _webViewInterceptPanelState.SelectedSummaryText;
+        }
+
+        if (InterceptSelectedHeadersEditor is not null)
+        {
+            InterceptSelectedHeadersEditor.Text = session is null
+                ? string.Empty
+                : FormatInterceptHeaders(session.OriginalRequest.Headers);
+        }
+
+        if (InterceptSelectedBodyEditor is not null)
+        {
+            InterceptSelectedBodyEditor.Text = session?.OriginalRequest.Body ?? string.Empty;
+        }
+
+        if (InterceptForwardButton is not null)
+        {
+            InterceptForwardButton.IsEnabled = session is not null;
+        }
+
+        if (InterceptDropButton is not null)
+        {
+            InterceptDropButton.IsEnabled = session is not null;
+        }
+
+        if (InterceptForwardAllButton is not null)
+        {
+            InterceptForwardAllButton.IsEnabled = _webViewInterceptPanelState.GetPendingItems().Count > 0;
+        }
+
+        if (InterceptCopySummaryButton is not null)
+        {
+            InterceptCopySummaryButton.IsEnabled = session is not null;
+        }
+    }
+
+#if WINDOWS
+    private async Task EnsureWebViewInterceptAttachedAsync(CoreWebView2 coreWebView2)
+    {
+        try
+        {
+            await _webViewInterceptController.AttachAsync(coreWebView2);
+            await MainThread.InvokeOnMainThreadAsync(UpdateWebViewInterceptPanel);
+        }
+        catch (Exception ex)
+        {
+            _naverTalkBrowser.SetStatus($"WebView intercept attach failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+        }
+    }
+#endif
+
+    private static string FormatInterceptHeaders(IReadOnlyDictionary<string, string> headers)
+    {
+        if (headers.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join(Environment.NewLine, headers.Select(header => $"{header.Key}: {header.Value}"));
     }
 
     private void OnBrowserBackClicked(object? sender, EventArgs e)

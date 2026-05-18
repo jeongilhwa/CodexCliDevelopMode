@@ -1,6 +1,7 @@
 ﻿namespace CodexDesk;
 
 using CodexDesk.Services;
+using InterceptKit.WebView.Windows;
 using System.Globalization;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -19,6 +20,8 @@ public partial class MainPage : ContentPage
     private readonly NaverTalkBrowserService _naverTalkBrowser;
     private readonly CompletedChatsCollector _completedChatsCollector;
     private readonly CodexPromptMacroService _codexPromptMacroService;
+    private readonly WebView2InterceptController _webViewInterceptController;
+    private readonly CodexDeskWebViewInterceptPanelState _webViewInterceptPanelState;
     private static readonly JsonSerializerOptions AppJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -218,15 +221,20 @@ public partial class MainPage : ContentPage
     public MainPage(
         NaverTalkBrowserService naverTalkBrowser,
         CompletedChatsCollector completedChatsCollector,
-        CodexPromptMacroService codexPromptMacroService)
+        CodexPromptMacroService codexPromptMacroService,
+        WebView2InterceptController webViewInterceptController,
+        CodexDeskWebViewInterceptPanelState webViewInterceptPanelState)
     {
         InitializeComponent();
 
         _naverTalkBrowser = naverTalkBrowser;
         _completedChatsCollector = completedChatsCollector;
         _codexPromptMacroService = codexPromptMacroService;
+        _webViewInterceptController = webViewInterceptController;
+        _webViewInterceptPanelState = webViewInterceptPanelState;
         _naverTalkBrowser.StateChanged += OnBrowserStateChanged;
         _naverTalkBrowser.CommandRequested += OnBrowserCommandRequested;
+        _webViewInterceptPanelState.Changed += OnWebViewInterceptPanelChanged;
 
         BrowserPane.SizeChanged += OnBrowserPaneSizeChanged;
 
@@ -256,7 +264,13 @@ public partial class MainPage : ContentPage
             WebViewNetworkListView.ItemsSource = _filteredWebViewNetworkEntries;
         }
 
+        if (InterceptQueueCollection is not null)
+        {
+            InterceptQueueCollection.ItemsSource = _webViewInterceptPanelState.GetPendingItems();
+        }
+
         InitializeWorkspaceShell();
+        UpdateWebViewInterceptPanel();
         UpdateNetworkCount();
         UpdateNetworkFilterButtons();
         UpdateNetworkAnalysisButtons();
@@ -316,8 +330,8 @@ public partial class MainPage : ContentPage
             WebBrowserTabTitleLabel,
             WebBrowserTabCountLabel,
             tab == WorkspaceTab.WebBrowser,
-            activeCount: "active",
-            inactiveCount: "tab");
+            activeCount: _webViewInterceptPanelState.CountText,
+            inactiveCount: _webViewInterceptPanelState.CountText);
         ApplyTabStyle(
             NetworkCaptureTabBorder,
             NetworkCaptureTabIcon,

@@ -375,11 +375,13 @@
                                 Stroke="#14142324"
                                 StrokeThickness="1"
                                 StrokeShape="RoundRectangle 24">
-                            <Grid>
-                                <Border Margin="0"
+                            <Grid ColumnDefinitions="2.35*,0.95*"
+                                  ColumnSpacing="0">
+                                <Border Grid.Column="0"
+                                        Margin="0"
                                         BackgroundColor="#BFFFFFFF"
                                         StrokeThickness="0"
-                                        StrokeShape="RoundRectangle 24">
+                                        StrokeShape="RoundRectangle 24,0,0,24">
                                     <Grid>
                                         <WebView x:Name="NaverTalkWebView"
                                                  Navigating="OnNaverTalkNavigating"
@@ -392,6 +394,180 @@
                                                    Text="WebView is idle." />
                                             <Label x:Name="BrowserUrlLabel"
                                                    Text="about:blank" />
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+
+                                <Border Grid.Column="1"
+                                        BackgroundColor="#F7FBFC"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 0,24,24,0">
+                                    <Grid RowDefinitions="Auto,Auto,*,Auto"
+                                          RowSpacing="0">
+                                        <VerticalStackLayout Padding="16,16,16,10"
+                                                             Spacing="6">
+                                            <Label Text="Intercept Queue"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="16"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#173844" />
+                                            <Label x:Name="InterceptStatusLabel"
+                                                   Text="Waiting for WebView2 attach."
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="12"
+                                                   TextColor="#30505D" />
+                                            <Label x:Name="InterceptDetailLabel"
+                                                   Text="0 pending | 0 paused | none"
+                                                   FontFamily="Consolas"
+                                                   FontSize="11"
+                                                   TextColor="#6A818A"
+                                                   LineBreakMode="TailTruncation" />
+                                        </VerticalStackLayout>
+
+                                        <Grid Grid.Row="1"
+                                              Margin="16,0,16,12"
+                                              ColumnDefinitions="Auto,*"
+                                              ColumnSpacing="10">
+                                            <Button x:Name="InterceptToggleButton"
+                                                    Text="Intercept OFF"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="12"
+                                                    Padding="14,8"
+                                                    CornerRadius="12"
+                                                    BackgroundColor="#EEF3F6"
+                                                    TextColor="#31474F"
+                                                    Clicked="OnInterceptToggleClicked" />
+                                            <Border Grid.Column="1"
+                                                    Padding="10,8"
+                                                    BackgroundColor="#1220252C"
+                                                    StrokeThickness="0"
+                                                    StrokeShape="RoundRectangle 12">
+                                                <Label x:Name="InterceptCountLabel"
+                                                       Text="0 pending"
+                                                       FontFamily="Bahnschrift"
+                                                       FontSize="12"
+                                                       TextColor="#35515D" />
+                                            </Border>
+                                        </Grid>
+
+                                        <Grid Grid.Row="2"
+                                              Padding="16,0,16,12"
+                                              RowDefinitions="140,Auto,Auto,Auto,*,Auto"
+                                              RowSpacing="10">
+                                            <CollectionView x:Name="InterceptQueueCollection"
+                                                            SelectionMode="Single"
+                                                            SelectionChanged="OnInterceptQueueSelectionChanged">
+                                                <CollectionView.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border Margin="0,0,0,8"
+                                                                Padding="12"
+                                                                BackgroundColor="#FFFFFFFF"
+                                                                Stroke="#1420252C"
+                                                                StrokeThickness="1"
+                                                                StrokeShape="RoundRectangle 14">
+                                                            <VerticalStackLayout Spacing="4">
+                                                                <Label Text="{Binding Method}"
+                                                                       FontFamily="Bahnschrift"
+                                                                       FontSize="11"
+                                                                       FontAttributes="Bold"
+                                                                       TextColor="#173844" />
+                                                                <Label Text="{Binding Url}"
+                                                                       FontFamily="Consolas"
+                                                                       FontSize="11"
+                                                                       TextColor="#50656F"
+                                                                       LineBreakMode="TailTruncation"
+                                                                       MaxLines="2" />
+                                                                <Label Text="{Binding Status}"
+                                                                       FontFamily="Bahnschrift"
+                                                                       FontSize="11"
+                                                                       TextColor="#768A93" />
+                                                            </VerticalStackLayout>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </CollectionView.ItemTemplate>
+                                            </CollectionView>
+
+                                            <Label Grid.Row="1"
+                                                   Text="Method / URL"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="11"
+                                                   TextColor="#667882" />
+                                            <Button Grid.Row="1"
+                                                    x:Name="InterceptCopySummaryButton"
+                                                    Text="Copy"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="11"
+                                                    Padding="10,4"
+                                                    HorizontalOptions="End"
+                                                    VerticalOptions="Center"
+                                                    CornerRadius="10"
+                                                    BackgroundColor="#EEF3F6"
+                                                    TextColor="#31474F"
+                                                    Clicked="OnCopyInterceptSummaryClicked" />
+                                            <Editor Grid.Row="2"
+                                                   x:Name="InterceptSelectedSummaryLabel"
+                                                   Text="선택된 요청 없음"
+                                                   FontFamily="Consolas"
+                                                   FontSize="11"
+                                                   TextColor="#22363F"
+                                                   IsReadOnly="True"
+                                                   AutoSize="TextChanges"
+                                                   BackgroundColor="#FFFFFFFF"
+                                                   Placeholder="선택된 요청 없음" />
+                                            <Label Grid.Row="3"
+                                                   Text="Headers"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="11"
+                                                   TextColor="#667882" />
+                                            <Editor Grid.Row="4"
+                                                    x:Name="InterceptSelectedHeadersEditor"
+                                                    IsReadOnly="True"
+                                                    AutoSize="TextChanges"
+                                                    FontFamily="Consolas"
+                                                    FontSize="11"
+                                                    TextColor="#30464F"
+                                                    BackgroundColor="#FFFFFFFF" />
+                                            <Editor Grid.Row="5"
+                                                    x:Name="InterceptSelectedBodyEditor"
+                                                    IsReadOnly="True"
+                                                    AutoSize="TextChanges"
+                                                    FontFamily="Consolas"
+                                                    FontSize="11"
+                                                    TextColor="#30464F"
+                                                    BackgroundColor="#FFFFFFFF"
+                                                    Placeholder="Body" />
+                                        </Grid>
+
+                                        <Grid Grid.Row="3"
+                                              Padding="16,0,16,16"
+                                              ColumnDefinitions="*,*,*"
+                                              ColumnSpacing="10">
+                                            <Button x:Name="InterceptForwardButton"
+                                                    Text="Forward"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="12"
+                                                    CornerRadius="12"
+                                                    BackgroundColor="#1F6780"
+                                                    TextColor="#FFFFFF"
+                                                    Clicked="OnInterceptForwardClicked" />
+                                            <Button Grid.Column="1"
+                                                    x:Name="InterceptForwardAllButton"
+                                                    Text="Forward All"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="12"
+                                                    CornerRadius="12"
+                                                    BackgroundColor="#35515D"
+                                                    TextColor="#FFFFFF"
+                                                    Clicked="OnInterceptForwardAllClicked" />
+                                            <Button Grid.Column="2"
+                                                    x:Name="InterceptDropButton"
+                                                    Text="Drop"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="12"
+                                                    CornerRadius="12"
+                                                    BackgroundColor="#A24646"
+                                                    TextColor="#FFFFFF"
+                                                    Clicked="OnInterceptDropClicked" />
                                         </Grid>
                                     </Grid>
                                 </Border>

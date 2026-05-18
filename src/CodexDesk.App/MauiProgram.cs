@@ -1,4 +1,8 @@
-﻿using Microsoft.Extensions.Logging;
+using InterceptKit.Core;
+using InterceptKit.Presentation;
+using InterceptKit.WebView;
+using InterceptKit.WebView.Windows;
+using Microsoft.Extensions.Logging;
 
 namespace CodexDesk;
 
@@ -19,6 +23,14 @@ public static class MauiProgram
 		builder.Services.AddSingleton<CodexDesk.Services.CodexInteractiveChatService>();
 		builder.Services.AddSingleton<CodexDesk.Services.CodexPromptMacroService>();
 		builder.Services.AddSingleton<CodexDesk.Services.NaverTalkBrowserService>();
+		builder.Services.AddSingleton<IInterceptSessionStore, InterceptSessionStore>();
+		builder.Services.AddSingleton<WebViewInterceptRuntimeState>();
+		builder.Services.AddSingleton<WebView2InterceptAdapter>();
+		builder.Services.AddSingleton<IWebViewInterceptPlatformAdapter>(static services => services.GetRequiredService<WebView2InterceptAdapter>());
+		builder.Services.AddSingleton<WebView2InterceptController>();
+		builder.Services.AddSingleton<IInterceptDecisionSink>(static services => services.GetRequiredService<WebView2InterceptController>());
+		builder.Services.AddSingleton<InterceptWorkspaceService>();
+		builder.Services.AddSingleton<CodexDeskWebViewInterceptPanelState>();
 		builder.Services.AddSingleton<MainPage>();
 		builder.Services.AddMauiBlazorWebView();
 

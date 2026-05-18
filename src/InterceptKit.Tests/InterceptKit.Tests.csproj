@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.2" />
+    <PackageReference Include="FluentAssertions" Version="8.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InterceptKit.Core\InterceptKit.Core.csproj" />
+    <ProjectReference Include="..\InterceptKit.Presentation\InterceptKit.Presentation.csproj" />
+    <ProjectReference Include="..\InterceptKit.WebView\InterceptKit.WebView.csproj" />
+    <ProjectReference Include="..\InterceptKit.WebView.Windows\InterceptKit.WebView.Windows.csproj" />
+    <ProjectReference Include="..\InterceptKit.WebView.Android\InterceptKit.WebView.Android.csproj" />
+    <ProjectReference Include="..\InterceptKit.WebView.iOS\InterceptKit.WebView.iOS.csproj" />
+    <ProjectReference Include="..\InterceptKit.WebView.MacCatalyst\InterceptKit.WebView.MacCatalyst.csproj" />
+    <ProjectReference Include="..\InterceptKit.Http\InterceptKit.Http.csproj" />
+  </ItemGroup>
+
+</Project>

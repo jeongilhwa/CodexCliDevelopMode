@@ -73,4 +73,11 @@
         <PackageReference Include="Microsoft.Playwright" Version="1.54.0" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\\InterceptKit.Core\\InterceptKit.Core.csproj" />
+        <ProjectReference Include="..\\InterceptKit.Presentation\\InterceptKit.Presentation.csproj" />
+        <ProjectReference Include="..\\InterceptKit.WebView\\InterceptKit.WebView.csproj" />
+        <ProjectReference Include="..\\InterceptKit.WebView.Windows\\InterceptKit.WebView.Windows.csproj" />
+    </ItemGroup>
+
 </Project>

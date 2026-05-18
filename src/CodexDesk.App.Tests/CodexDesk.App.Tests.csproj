@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\\CodexDesk.App\\CodexDesk.App.csproj" />
+    <ProjectReference Include="..\\InterceptKit.Core\\InterceptKit.Core.csproj" />
+    <ProjectReference Include="..\\InterceptKit.Presentation\\InterceptKit.Presentation.csproj" />
+    <ProjectReference Include="..\\InterceptKit.WebView\\InterceptKit.WebView.csproj" />
   </ItemGroup>
 
 </Project>
