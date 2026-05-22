@@ -1,6 +1,6 @@
 namespace CodexDesk.Services;
 
-public sealed record NaverTalkPersistedCookie(
+public record PersistedBrowserCookie(
     string Name,
     string Value,
     string Domain,

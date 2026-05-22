@@ -18,11 +18,9 @@ public static class MauiProgram
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
 			});
 
-		builder.Services.AddSingleton<CodexDesk.Services.CompletedChatsCollector>();
-		builder.Services.AddSingleton<CodexDesk.Services.PlaywrightCompletedChatsCollectionService>();
 		builder.Services.AddSingleton<CodexDesk.Services.CodexInteractiveChatService>();
 		builder.Services.AddSingleton<CodexDesk.Services.CodexPromptMacroService>();
-		builder.Services.AddSingleton<CodexDesk.Services.NaverTalkBrowserService>();
+		builder.Services.AddSingleton<CodexDesk.Services.BrowserStateService>();
 		builder.Services.AddSingleton<IInterceptSessionStore, InterceptSessionStore>();
 		builder.Services.AddSingleton<WebViewInterceptRuntimeState>();
 		builder.Services.AddSingleton<WebView2InterceptAdapter>();
@@ -30,7 +28,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<WebView2InterceptController>();
 		builder.Services.AddSingleton<IInterceptDecisionSink>(static services => services.GetRequiredService<WebView2InterceptController>());
 		builder.Services.AddSingleton<InterceptWorkspaceService>();
-		builder.Services.AddSingleton<CodexDeskWebViewInterceptPanelState>();
+		builder.Services.AddSingleton<WebViewInterceptPanelState>();
 		builder.Services.AddSingleton<MainPage>();
 		builder.Services.AddMauiBlazorWebView();
 

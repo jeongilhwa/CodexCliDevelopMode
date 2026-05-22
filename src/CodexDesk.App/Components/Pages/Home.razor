@@ -2,8 +2,6 @@
 
 @implements IDisposable
 @inject CodexInteractiveChatService CodexCli
-@inject NaverTalkBrowserService NaverTalkBrowser
-@inject PlaywrightCompletedChatsCollectionService PlaywrightCompletedChatsCollection
 @inject CodexPromptMacroService CodexPromptMacroService
 @inject IJSRuntime JS
 
@@ -158,11 +156,12 @@
                 </div>
 
                 <div class="settings-tab-bar">
+                    <button class="settings-tab @(SettingsTab == "session" ? "active" : "")" @onclick='() => SettingsTab = "session"'>Session</button>
                     <button class="settings-tab @(SettingsTab == "macros" ? "active" : "")" @onclick='() => SettingsTab = "macros"'>Macros</button>
-                    <button class="settings-tab @(SettingsTab == "naver" ? "active" : "")" @onclick='() => SettingsTab = "naver"'>Naver Talk</button>
+                    <button class="settings-tab @(SettingsTab == "tools" ? "active" : "")" @onclick='() => SettingsTab = "tools"'>Tools</button>
                 </div>
 
-                @if (SettingsTab == "codex")
+                @if (SettingsTab == "session")
                 {
                     <label class="field">
                         <span>Workspace Path</span>
@@ -281,80 +280,6 @@
                     }
                 }
 
-                @if (SettingsTab == "naver")
-                {
-                    <label class="field">
-                        <span>Target Url</span>
-                        <input @bind="NaverTalkUrl" @bind:event="oninput" placeholder="@NaverTalkSettings.DefaultTargetUrl" />
-                    </label>
-
-                    <label class="field">
-                        <span>Naver Id</span>
-                        <input @bind="NaverLoginId" @bind:event="oninput" placeholder="아이디를 입력하세요." />
-                    </label>
-
-                    <label class="field">
-                        <span>Password</span>
-                        <input type="password" @bind="NaverLoginPassword" @bind:event="oninput" placeholder="새 비밀번호를 입력하면 저장됩니다." />
-                    </label>
-
-                    <label class="toggle">
-                        <input type="checkbox" @bind="AutoNaverLoginEnabled" />
-                        <span>로그인 페이지가 나오면 자동 로그인 시도</span>
-                    </label>
-
-                    <label class="field">
-                        <span>WebView2 User-Agent Preset</span>
-                        <select value="@SelectedWebViewUserAgentPresetKey" @onchange="OnUserAgentPresetChanged">
-                            @foreach (var preset in WebViewUserAgentPresets)
-                            {
-                                <option value="@preset.Key">@preset.Label</option>
-                            }
-                        </select>
-                    </label>
-
-                    <label class="field">
-                        <span>WebView2 User-Agent (optional)</span>
-                        <input value="@WebViewUserAgent" @oninput="OnWebViewUserAgentInput" placeholder="비워두면 WebView2 기본 User-Agent를 사용합니다." />
-                    </label>
-
-                    <p class="hint">
-                        저장된 비밀번호: <strong>@(NaverTalkBrowser.HasStoredPassword ? "있음" : "없음")</strong>
-                        비밀번호 입력칸을 비워두고 저장하면 기존 저장값은 유지됩니다.
-                    </p>
-
-                    <div class="button-row">
-                        <button type="button" class="ghost" @onclick="SaveNaverTalkSettingsAsync">Save Naver Settings</button>
-                        <button type="button" class="primary" @onclick="OpenNaverTalkAsync">Open Naver Talk</button>
-                        <button type="button" class="ghost" @onclick="ReloadNaverTalkBrowserAsync">Reload WebView</button>
-                        <button type="button" class="ghost" @onclick="ClearNaverTalkPasswordAsync">Clear Saved Password</button>
-                        <button type="button" class="ghost" @onclick="StartCompletedChatsCollectionAsync" disabled="@NaverTalkBrowser.IsCollectingCompletedChats">채팅 수집하기</button>
-                    </div>
-
-                    <p class="hint">
-                        캡차, 추가 인증, 기기 등록 확인 같은 보안 단계가 나오면 그 부분은 수동으로 마무리해야 합니다.
-                    </p>
-
-                    <p class="hint">
-                        대화 수집은 기본적으로 <code>completed-chats.json</code> 안의 <code>exportedAt</code> 날짜를 기준으로 신규 route를 모읍니다. 저장된 대화내역이 없으면 최근 6개월 범위를 처음부터 수집합니다. 저장은 결과 모달의 <code>Save</code> 버튼에서 따로 반영합니다.
-                    </p>
-
-                    <div class="collection-status">
-                        <div class="status-row">
-                            <span>Collection Status</span>
-                            <strong>@NaverTalkBrowser.CompletedChatCollectionStatus</strong>
-                        </div>
-                        <div class="status-row">
-                            <span>Progress</span>
-                            <strong>@($"{NaverTalkBrowser.CompletedChatCollectionProcessedCount} / {NaverTalkBrowser.CompletedChatCollectionTotalCount}")</strong>
-                        </div>
-                        <div class="status-row">
-                            <span>completed-chats ExportedAt</span>
-                            <strong>@(NaverTalkBrowser.CompletedChatBaselineExportedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") ?? "-")</strong>
-                        </div>
-                    </div>
-                }
-
                 @if (SettingsTab == "tools")
                 {
                     <div class="button-row">
@@ -378,77 +303,6 @@
                 <p class="hint">
                     이 앱은 로컬에 <code>codex</code> CLI가 로그인되어 있고 네트워크에 접근 가능해야 정상 응답합니다.
                 </p>
-            </section>
-        </div>
-    }
-
-    @if (IsCollectionResultModalOpen && NaverTalkBrowser.LastCompletedChatCollectionResult is not null)
-    {
-        var result = NaverTalkBrowser.LastCompletedChatCollectionResult;
-        <div class="collection-result-modal-backdrop" @onclick="CloseCollectionResultModal">
-            <section class="collection-result-modal panel" @onclick:stopPropagation="true">
-                <div class="panel-header">
-                    <h2>Collection Result</h2>
-                    <p>@result.Summary</p>
-                </div>
-
-                <div class="collection-status">
-                    <div class="status-row">
-                        <span>Status</span>
-                        <strong>@(result.Succeeded ? "Collected" : "Failed")</strong>
-                    </div>
-                    <div class="status-row">
-                        <span>From Date</span>
-                        <strong>@result.FromDate</strong>
-                    </div>
-                    <div class="status-row">
-                        <span>Baseline File</span>
-                        <strong>@result.BaselinePath</strong>
-                    </div>
-                    <div class="status-row">
-                        <span>Output File</span>
-                        <strong>@result.OutputPath</strong>
-                    </div>
-                    <div class="status-row">
-                        <span>Applied To Baseline</span>
-                        <strong>@(result.UpdatedBaseline ? "Yes" : "No")</strong>
-                    </div>
-                    <div class="status-row">
-                        <span>New Routes</span>
-                        <strong>@result.NewRouteCount</strong>
-                    </div>
-                    <div class="status-row">
-                        <span>Saved</span>
-                        <strong>@result.SavedCount</strong>
-                    </div>
-                    <div class="status-row">
-                        <span>Skipped</span>
-                        <strong>@result.SkippedCount</strong>
-                    </div>
-                </div>
-
-                @if (result.SampleItems.Count > 0)
-                {
-                    <div class="collection-result-samples">
-                        <h3>Sample</h3>
-                        <pre>@string.Join(Environment.NewLine, result.SampleItems)</pre>
-                    </div>
-                }
-
-                <div class="collection-result-data">
-                    <h3>Collected Data</h3>
-                    <pre>@result.CollectedDataJson</pre>
-                </div>
-
-                @if (!string.IsNullOrWhiteSpace(CollectionResultActionStatus))
-                {
-                    <p class="hint">@CollectionResultActionStatus</p>
-                }
-
-                <div class="button-row">
-                    <button type="button" class="primary" @onclick="SaveCollectionResultToCompletedChatsAsync" disabled="@(!result.Succeeded || result.SavedCount == 0 || result.UpdatedBaseline)">Save To completed-chats.json</button>
-                    <button type="button" class="ghost" @onclick="CloseCollectionResultModal">Close</button>
-                </div>
             </section>
         </div>
     }
@@ -487,22 +341,11 @@
 
     private string Model { get; set; } = string.Empty;
 
-    private string NaverTalkUrl { get; set; } = NaverTalkSettings.DefaultTargetUrl;
-
-    private string NaverLoginId { get; set; } = string.Empty;
-
-    private string NaverLoginPassword { get; set; } = string.Empty;
-
-    private bool AutoNaverLoginEnabled { get; set; } = true;
-    private string WebViewUserAgent { get; set; } = string.Empty;
-    private string SelectedWebViewUserAgentPresetKey { get; set; } = UserAgentPresetDefaultKey;
-
     private bool AllowWorkspaceWrite { get; set; } = true;
 
     private bool IsSessionModalOpen { get; set; }
-    private string SettingsTab { get; set; } = "naver";
+    private string SettingsTab { get; set; } = "session";
     private bool IsHamburgerOpen { get; set; }
-    private bool IsCollectionResultModalOpen { get; set; }
     private IList<CodexPromptMacroItem> CodexPromptMacros { get; set; } = new List<CodexPromptMacroItem>();
     private string NewCodexMacroName { get; set; } = string.Empty;
     private string NewCodexMacroText { get; set; } = string.Empty;
@@ -519,19 +362,7 @@
     private const int MacroShortcutDebounceMilliseconds = 350;
     private string _lastObservedShortcut = string.Empty;
     private DateTime _lastObservedShortcutAt = DateTime.MinValue;
-    private DateTimeOffset? _lastSeenCollectionResultAt;
-    private string CollectionResultActionStatus { get; set; } = string.Empty;
-    private const string UserAgentPresetDefaultKey = "default";
-    private const string UserAgentPresetCustomKey = "custom";
-    private static readonly IReadOnlyList<UserAgentPresetOption> WebViewUserAgentPresets =
-    [
-        new(UserAgentPresetDefaultKey, "Default (WebView2)", string.Empty),
-        new("chrome136", "Chrome 136 (Windows)", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"),
-        new("edge136", "Edge 136 (Windows)", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0"),
-        new(UserAgentPresetCustomKey, "Custom (manual input)", null)
-    ];
     private bool IsMacrosSettingsVisible => IsSessionModalOpen && SettingsTab == "macros";
-    private bool IsNaverSettingsVisible => IsSessionModalOpen && SettingsTab == "naver";
     private string StatusLabel =>
         ActiveTab.IsBusy
             ? BusyIndicatorText
@@ -548,18 +379,11 @@
     {
         CommandPath = CodexCli.GetDefaultCommandPath();
         WorkspacePath = CodexCli.GetDefaultWorkspacePath();
-        NaverTalkBrowser.StateChanged += OnNaverTalkBrowserStateChanged;
         CodexPromptMacroService.KeyObserved += OnMacroKeyObserved;
         CodexPromptMacroService.PromptRequested += OnExternalPromptRequested;
         CodexPromptMacroService.Load();
         CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
         AddNewTab();
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
-        await NaverTalkBrowser.EnsureInitializedAsync();
-        RefreshNaverTalkSettingsFromService(clearPasswordInput: true);
     }
 
     private async Task SendAsync()
@@ -766,10 +590,8 @@
 
     private async Task<bool> TryApplyMacroByObservedMessageAsync(string keyDebugMessage)
     {
-        var fromWebView =
-            keyDebugMessage.Contains("webview key=", StringComparison.OrdinalIgnoreCase) ||
-            keyDebugMessage.Contains("webviewFocused=True", StringComparison.OrdinalIgnoreCase);
-        if (!fromWebView)
+        if (!keyDebugMessage.Contains("webview key=", StringComparison.OrdinalIgnoreCase) &&
+            !keyDebugMessage.Contains("webviewFocused=True", StringComparison.OrdinalIgnoreCase))
         {
             // WebView 포커스가 아닐 때 들어온 전역 훅(vk=...) 이벤트는 매크로 실행 트리거로 사용하지 않습니다.
             return false;
@@ -785,16 +607,9 @@
             return false;
         }
 
-        var matchedMacro = CodexPromptMacros.FirstOrDefault(m =>
-            string.Equals(m.Shortcut, shortcut, StringComparison.OrdinalIgnoreCase));
-
-        if (matchedMacro is null)
-        {
-            return false;
-        }
-
-        await ApplyCodexPromptMacroAsync(matchedMacro, fromWebView);
-        return true;
+        // Browser-side typing automation was removed with the Naver Talk workflow,
+        // so WebView-focused shortcut messages are no longer executed here.
+        return false;
     }
 
     private bool IsDuplicatedMacroShortcutTrigger(string shortcut)
@@ -1015,7 +830,7 @@
 
     private void OpenSessionModal()
     {
-        SettingsTab = "naver";
+        SettingsTab = "session";
         IsSessionModalOpen = true;
     }
 
@@ -1032,63 +847,6 @@
     private void CloseHamburger()
     {
         IsHamburgerOpen = false;
-    }
-
-    private void CloseCollectionResultModal()
-    {
-        IsCollectionResultModalOpen = false;
-    }
-
-    private async Task SaveCollectionResultToCompletedChatsAsync()
-    {
-        var result = NaverTalkBrowser.LastCompletedChatCollectionResult;
-        if (result is null)
-        {
-            CollectionResultActionStatus = "No collection result is available.";
-            await InvokeAsync(StateHasChanged);
-            return;
-        }
-
-        if (result.SavedCount == 0)
-        {
-            CollectionResultActionStatus = "There is no collected chat data to save.";
-            await InvokeAsync(StateHasChanged);
-            return;
-        }
-
-        var targetPath = CompletedChatsSupport.ResolveProjectDataPath("completed-chats.json");
-        var sourcePath = result.OutputPath;
-
-        try
-        {
-            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
-            {
-                CollectionResultActionStatus = $"Result file not found: {sourcePath}";
-                await InvokeAsync(StateHasChanged);
-                return;
-            }
-
-            if (string.Equals(
-                    Path.GetFullPath(sourcePath),
-                    Path.GetFullPath(targetPath),
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                CollectionResultActionStatus = "Already saved directly to completed-chats.json.";
-                await InvokeAsync(StateHasChanged);
-                return;
-            }
-
-            await CompletedChatsSupport.MergeCompletedChatsFilesAsync(sourcePath, targetPath);
-
-            CollectionResultActionStatus = $"Saved merged result to {targetPath}";
-            NaverTalkBrowser.MarkCompletedChatsSavedToBaseline(CollectionResultActionStatus, NaverTalkBrowser.CurrentUrl);
-            await InvokeAsync(StateHasChanged);
-        }
-        catch (Exception ex)
-        {
-            CollectionResultActionStatus = $"Save failed: {ex.Message}";
-            await InvokeAsync(StateHasChanged);
-        }
     }
 
     private async Task SelectApprovalOptionAsync(string selectedValue)
@@ -1323,7 +1081,7 @@
         PointerMacroDragIndex = null;
     }
 
-    private async Task ApplyCodexPromptMacroAsync(CodexPromptMacroItem macro, bool fromWebView = false)
+    private async Task ApplyCodexPromptMacroAsync(CodexPromptMacroItem macro)
     {
         if (string.IsNullOrWhiteSpace(macro.Text))
         {
@@ -1331,13 +1089,6 @@
         }
 
         var tab = ActiveTab;
-
-        if (fromWebView)
-        {
-            await NaverTalkBrowser.RunTypingMacroAsync(macro.Text, macro.AutoSend);
-            await InvokeAsync(StateHasChanged);
-            return;
-        }
 
         var insertedAtFocusedInput = await TryInsertMacroIntoFocusedInputAsync(macro.Text);
         if (!insertedAtFocusedInput)
@@ -1373,160 +1124,8 @@
         ActiveTab.RunCts?.Cancel();
     }
 
-    // 설정만 저장하고 브라우저 이동은 하지 않습니다.
-    private async Task SaveNaverTalkSettingsAsync()
-    {
-        await SaveNaverTalkBrowserSettingsAsync(navigateAfterSave: false);
-    }
-
-    // 설정 저장 후 즉시 네이버 톡 화면으로 이동합니다.
-    private async Task OpenNaverTalkAsync()
-    {
-        await SaveNaverTalkBrowserSettingsAsync(navigateAfterSave: true);
-    }
-
-    // 현재 WebView를 다시 로드해 로그인 상태나 화면 갱신을 유도합니다.
-    private async Task ReloadNaverTalkBrowserAsync()
-    {
-        await NaverTalkBrowser.ReloadBrowserAsync();
-    }
-
-    // 수집 시작 전에 최신 설정을 먼저 저장해, 다른 URL이나 계정 정보로 수집하는 실수를 막습니다.
-    private async Task StartCompletedChatsCollectionAsync()
-    {
-        IsCollectionResultModalOpen = false;
-        CollectionResultActionStatus = string.Empty;
-        await SaveNaverTalkBrowserSettingsAsync(navigateAfterSave: false);
-        await PlaywrightCompletedChatsCollection.CollectAsync();
-    }
-
-    // 안전 저장소에 남아 있는 비밀번호를 지우고 입력칸도 함께 초기화합니다.
-    private async Task ClearNaverTalkPasswordAsync()
-    {
-        await NaverTalkBrowser.ClearSavedPasswordAsync();
-        RefreshNaverTalkSettingsFromService(clearPasswordInput: true);
-    }
-
-    // 화면 입력값을 설정 DTO로 묶어 서비스에 전달합니다.
-    // 호출자가 원하면 저장 직후 지정 URL로 이동까지 이어집니다.
-    private async Task SaveNaverTalkBrowserSettingsAsync(bool navigateAfterSave)
-    {
-        var passwordToStore = string.IsNullOrWhiteSpace(NaverLoginPassword) ? null : NaverLoginPassword;
-        await NaverTalkBrowser.SaveBrowserSettingsAsync(new NaverTalkSettingsUpdate(
-            NaverTalkUrl,
-            NaverLoginId,
-            passwordToStore,
-            AutoNaverLoginEnabled,
-            WebViewUserAgent,
-            string.Empty,
-            false,
-            string.Empty));
-
-        RefreshNaverTalkSettingsFromService(clearPasswordInput: true);
-
-        if (navigateAfterSave)
-        {
-            await NaverTalkBrowser.NavigateAsync(NaverTalkUrl);
-        }
-    }
-
-    // 서비스가 보관 중인 최신 설정을 화면 상태로 다시 동기화합니다.
-    private void RefreshNaverTalkSettingsFromService(bool clearPasswordInput = false)
-    {
-        var settings = NaverTalkBrowser.Settings;
-        NaverTalkUrl = settings.TargetUrl;
-        NaverLoginId = settings.LoginId;
-        AutoNaverLoginEnabled = settings.AutoLoginEnabled;
-        WebViewUserAgent = settings.WebViewUserAgent;
-        SelectedWebViewUserAgentPresetKey = ResolveUserAgentPresetKey(WebViewUserAgent);
-        if (clearPasswordInput)
-        {
-            NaverLoginPassword = string.Empty;
-        }
-    }
-
-    private void OnUserAgentPresetChanged(ChangeEventArgs args)
-    {
-        var selectedKey = args.Value?.ToString() ?? UserAgentPresetDefaultKey;
-        SelectedWebViewUserAgentPresetKey = selectedKey;
-
-        var selectedPreset = WebViewUserAgentPresets.FirstOrDefault(preset =>
-            string.Equals(preset.Key, selectedKey, StringComparison.Ordinal));
-
-        if (selectedPreset?.Value is not null)
-        {
-            WebViewUserAgent = selectedPreset.Value;
-        }
-    }
-
-    private void OnWebViewUserAgentInput(ChangeEventArgs args)
-    {
-        WebViewUserAgent = args.Value?.ToString() ?? string.Empty;
-        SelectedWebViewUserAgentPresetKey = ResolveUserAgentPresetKey(WebViewUserAgent);
-    }
-
-    private static string ResolveUserAgentPresetKey(string? userAgent)
-    {
-        var normalized = userAgent?.Trim() ?? string.Empty;
-
-        foreach (var preset in WebViewUserAgentPresets)
-        {
-            if (preset.Value is null)
-            {
-                continue;
-            }
-
-            if (string.Equals(preset.Value, normalized, StringComparison.Ordinal))
-            {
-                return preset.Key;
-            }
-        }
-
-        return string.IsNullOrWhiteSpace(normalized)
-            ? UserAgentPresetDefaultKey
-            : UserAgentPresetCustomKey;
-    }
-
-    private sealed record UserAgentPresetOption(string Key, string Label, string? Value);
-
-    private void OnNaverTalkBrowserStateChanged()
-    {
-        var latestResult = NaverTalkBrowser.LastCompletedChatCollectionResult;
-        var shouldOpenCollectionResult =
-            latestResult is not null &&
-            (!_lastSeenCollectionResultAt.HasValue || latestResult.GeneratedAt > _lastSeenCollectionResultAt.Value);
-        if (!IsNaverSettingsVisible && !IsCollectionResultModalOpen && !shouldOpenCollectionResult)
-        {
-            return;
-        }
-
-        _ = InvokeAsync(() =>
-        {
-            var shouldRender = false;
-
-            if (shouldOpenCollectionResult && latestResult is not null)
-            {
-                _lastSeenCollectionResultAt = latestResult.GeneratedAt;
-                IsCollectionResultModalOpen = true;
-                CollectionResultActionStatus = string.Empty;
-                shouldRender = true;
-            }
-
-            if (IsNaverSettingsVisible || IsCollectionResultModalOpen)
-            {
-                shouldRender = true;
-            }
-
-            if (shouldRender)
-            {
-                StateHasChanged();
-            }
-        });
-    }
-
     public void Dispose()
     {
-        NaverTalkBrowser.StateChanged -= OnNaverTalkBrowserStateChanged;
         CodexPromptMacroService.KeyObserved -= OnMacroKeyObserved;
         CodexPromptMacroService.PromptRequested -= OnExternalPromptRequested;
         _loadingIndicatorTimer?.Dispose();

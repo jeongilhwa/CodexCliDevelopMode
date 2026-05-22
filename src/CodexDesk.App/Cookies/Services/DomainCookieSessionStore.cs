@@ -4,7 +4,7 @@ namespace CodexDesk.Services;
 
 internal sealed record SavedDomainCookieSnapshot(
     string TargetOrigin,
-    List<NaverTalkPersistedCookie> Cookies);
+    List<PersistedBrowserCookie> Cookies);
 
 internal static class DomainCookieSessionStore
 {
@@ -17,7 +17,7 @@ internal static class DomainCookieSessionStore
     public static string? UpsertSnapshot(
         string? existingJson,
         string targetOrigin,
-        IReadOnlyList<NaverTalkPersistedCookie> cookies)
+        IReadOnlyList<PersistedBrowserCookie> cookies)
     {
         var normalizedOrigin = NormalizeOrigin(targetOrigin);
         if (string.IsNullOrWhiteSpace(normalizedOrigin))

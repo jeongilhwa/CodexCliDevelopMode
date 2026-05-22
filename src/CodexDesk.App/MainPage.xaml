@@ -383,11 +383,11 @@
                                         StrokeThickness="0"
                                         StrokeShape="RoundRectangle 24,0,0,24">
                                     <Grid>
-                                        <WebView x:Name="NaverTalkWebView"
-                                                 Navigating="OnNaverTalkNavigating"
-                                                 Navigated="OnNaverTalkNavigated"
-                                                 Focused="OnNaverTalkWebViewFocused"
-                                                 Unfocused="OnNaverTalkWebViewUnfocused" />
+                                        <WebView x:Name="BrowserWebView"
+                                                 Navigating="OnBrowserWebViewNavigating"
+                                                 Navigated="OnBrowserWebViewNavigated"
+                                                 Focused="OnBrowserWebViewFocused"
+                                                 Unfocused="OnBrowserWebViewUnfocused" />
                                         <Grid IsVisible="False"
                                               HeightRequest="0">
                                             <Label x:Name="BrowserStatusLabel"

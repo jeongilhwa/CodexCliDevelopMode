@@ -20,7 +20,7 @@ using UI = Microsoft.UI.Xaml;
 public partial class MainPage : ContentPage
 {
 #if WINDOWS
-    private void OnNaverTalkWebViewHandlerChanged(object? sender, EventArgs e)
+    private void OnBrowserWebViewHandlerChanged(object? sender, EventArgs e)
     {
         ConfigureWebView2ForWindows();
     }
@@ -29,7 +29,7 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            var handler = NaverTalkWebView.Handler as Microsoft.Maui.Handlers.WebViewHandler;
+            var handler = BrowserWebView.Handler as Microsoft.Maui.Handlers.WebViewHandler;
             if (handler?.PlatformView is Microsoft.UI.Xaml.Controls.WebView2 webView2)
             {
                 webView2.CoreWebView2Initialized -= OnCoreWebView2Initialized;
@@ -37,7 +37,6 @@ public partial class MainPage : ContentPage
                 if (webView2.CoreWebView2 is not null)
                 {
                     _ = EnsureWebViewInterceptAttachedAsync(webView2.CoreWebView2);
-                    _ = ApplyWebViewUserAgentAsync(webView2.CoreWebView2);
                     AttachWebViewNewWindowHandler(webView2.CoreWebView2);
                     AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
                     _ = EnsureWebViewInspectorScriptRegisteredAsync(webView2.CoreWebView2);
@@ -49,7 +48,7 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Cookie configuration failed: {ex.Message}");
+            _browserState.SetStatus($"Cookie configuration failed: {ex.Message}");
         }
     }
 
@@ -61,8 +60,7 @@ public partial class MainPage : ContentPage
         }
 
         _ = EnsureWebViewInterceptAttachedAsync(sender.CoreWebView2);
-        _naverTalkBrowser.SetStatus("WebView2 is ready.");
-        _ = ApplyWebViewUserAgentAsync(sender.CoreWebView2);
+        _browserState.SetStatus("WebView2 is ready.");
         AttachWebViewNewWindowHandler(sender.CoreWebView2);
         AttachWebViewKeyboardDebugHandlers(sender.CoreWebView2);
         _ = EnsureWebViewInspectorScriptRegisteredAsync(sender.CoreWebView2);
@@ -87,17 +85,17 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            var target = string.IsNullOrWhiteSpace(e.Uri) ? _naverTalkBrowser.CurrentUrl : e.Uri;
+            var target = string.IsNullOrWhiteSpace(e.Uri) ? _browserState.CurrentUrl : e.Uri;
             e.Handled = true;
             _ = MainThread.InvokeOnMainThreadAsync(async () =>
             {
-                await _naverTalkBrowser.NavigateAsync(target);
-                _naverTalkBrowser.SetStatus("New window request was opened in the current WebView.", target);
+                await _browserState.NavigateAsync(target);
+                _browserState.SetStatus("New window request was opened in the current WebView.", target);
             });
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Failed to handle new-window request: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"Failed to handle new-window request: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -185,7 +183,7 @@ public partial class MainPage : ContentPage
 
             MainThread.BeginInvokeOnMainThread(() =>
             {
-                _naverTalkBrowser.SetStatus(status, _naverTalkBrowser.CurrentUrl);
+                _browserState.SetStatus(status, _browserState.CurrentUrl);
             });
             return;
         }
@@ -378,15 +376,15 @@ public partial class MainPage : ContentPage
             UpdateBrowserFocusButton();
             UpdateWebViewInspectorToggleButton();
             await ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
-            _naverTalkBrowser.SetStatus(
+            _browserState.SetStatus(
                 _webViewInspectorModeEnabled
                     ? "Focus mode turned on."
                     : "Focus mode turned off.",
-                _naverTalkBrowser.CurrentUrl);
+                _browserState.CurrentUrl);
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Focus mode toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"Focus mode toggle failed: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -397,15 +395,15 @@ public partial class MainPage : ContentPage
             _webViewNetworkCaptureEnabled = !_webViewNetworkCaptureEnabled;
             UpdateWebViewNetworkCaptureToggleButton();
             await ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
-            _naverTalkBrowser.SetStatus(
+            _browserState.SetStatus(
                 _webViewNetworkCaptureEnabled
                     ? "WebView network capture turned on."
                     : "WebView network capture turned off.",
-                _naverTalkBrowser.CurrentUrl);
+                _browserState.CurrentUrl);
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Network capture toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"Network capture toggle failed: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -1273,21 +1271,21 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"WebView2 initialization failed: {ex.Message}");
+            _browserState.SetStatus($"WebView2 initialization failed: {ex.Message}");
         }
 
         SetupWindowKeyboardHook();
 #endif
 
-        await _naverTalkBrowser.EnsureInitializedAsync();
+        await _browserState.EnsureInitializedAsync();
         UpdateBrowserChrome();
-        await _naverTalkBrowser.NavigateAsync("https://www.google.com");
+        await _browserState.NavigateAsync("https://www.google.com");
     }
 
     private void OnUnloaded(object? sender, EventArgs e)
     {
-        _naverTalkBrowser.StateChanged -= OnBrowserStateChanged;
-        _naverTalkBrowser.CommandRequested -= OnBrowserCommandRequested;
+        _browserState.StateChanged -= OnBrowserStateChanged;
+        _browserState.CommandRequested -= OnBrowserCommandRequested;
         _webViewInterceptPanelState.Changed -= OnWebViewInterceptPanelChanged;
         BrowserPane.SizeChanged -= OnBrowserPaneSizeChanged;
 #if WINDOWS
@@ -1299,76 +1297,38 @@ public partial class MainPage : ContentPage
 
     private void OnBrowserStateChanged()
     {
-#if WINDOWS
-        _ = MainThread.InvokeOnMainThreadAsync(async () =>
-        {
-            var coreWebView2 = await TryEnsureCoreWebView2Async();
-            if (coreWebView2 is not null)
-            {
-                await ApplyWebViewUserAgentAsync(coreWebView2);
-            }
-
-            UpdateBrowserChrome();
-        });
-#else
         _ = MainThread.InvokeOnMainThreadAsync(UpdateBrowserChrome);
-#endif
     }
 
-    private void OnNaverTalkWebViewFocused(object? sender, FocusEventArgs e)
+    private void OnBrowserWebViewFocused(object? sender, FocusEventArgs e)
     {
-        _isNaverTalkWebViewFocused = true;
+        _isBrowserWebViewFocused = true;
     }
 
-    private void OnNaverTalkWebViewUnfocused(object? sender, FocusEventArgs e)
+    private void OnBrowserWebViewUnfocused(object? sender, FocusEventArgs e)
     {
-        _isNaverTalkWebViewFocused = false;
+        _isBrowserWebViewFocused = false;
     }
-
-#if WINDOWS
-    private Task ApplyWebViewUserAgentAsync(CoreWebView2 coreWebView2)
-    {
-        var requestedUserAgent = _naverTalkBrowser.Settings.WebViewUserAgent?.Trim() ?? string.Empty;
-        if (string.Equals(_lastAppliedWebViewUserAgent, requestedUserAgent, StringComparison.Ordinal))
-        {
-            return Task.CompletedTask;
-        }
-
-        coreWebView2.Settings.UserAgent = requestedUserAgent;
-        _lastAppliedWebViewUserAgent = requestedUserAgent;
-        return Task.CompletedTask;
-    }
-#endif
 
     private void OnBrowserCommandRequested(BrowserCommand command)
     {
-        _ = MainThread.InvokeOnMainThreadAsync(async () =>
+        _ = MainThread.InvokeOnMainThreadAsync(() =>
         {
             switch (command.Type)
             {
                 case BrowserCommandType.Navigate:
-                    var targetUrl = string.IsNullOrWhiteSpace(command.Url)
-                        ? _naverTalkBrowser.Settings.TargetUrl
-                        : command.Url;
-
-                    NaverTalkWebView.Source = new UrlWebViewSource { Url = targetUrl };
+                    if (!string.IsNullOrWhiteSpace(command.Url))
+                    {
+                        BrowserWebView.Source = new UrlWebViewSource { Url = command.Url };
+                    }
                     break;
 
                 case BrowserCommandType.Reload:
-                    NaverTalkWebView.Reload();
-                    break;
-
-                case BrowserCommandType.TypeText:
-                    await TypeTextIntoNaverTalkAsync(command.Text, command.Submit);
-                    break;
-
-                case BrowserCommandType.CollectCompletedChats:
-                    _naverTalkBrowser.SetStatus("WebView completed chat collection is disabled. The app now uses Playwright for this action.");
+                    BrowserWebView.Reload();
                     break;
             }
 
             UpdateBrowserChrome();
-
         });
     }
 
@@ -1439,7 +1399,7 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Intercept toggle failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"Intercept toggle failed: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -1464,7 +1424,7 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Intercept forward failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"Intercept forward failed: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -1478,7 +1438,7 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Intercept forward-all failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"Intercept forward-all failed: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -1491,7 +1451,7 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Intercept drop failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"Intercept drop failed: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -1500,18 +1460,18 @@ public partial class MainPage : ContentPage
         var summaryText = _webViewInterceptPanelState.SelectedSummaryText;
         if (string.IsNullOrWhiteSpace(summaryText) || summaryText == "선택된 요청 없음")
         {
-            _naverTalkBrowser.SetStatus("복사할 요청 요약이 없습니다.", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus("복사할 요청 요약이 없습니다.", _browserState.CurrentUrl);
             return;
         }
 
         try
         {
             await Clipboard.Default.SetTextAsync(summaryText);
-            _naverTalkBrowser.SetStatus("요청 Method / URL을 클립보드에 복사했습니다.", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus("요청 Method / URL을 클립보드에 복사했습니다.", _browserState.CurrentUrl);
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"요청 요약 복사 실패: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"요청 요약 복사 실패: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 
@@ -1565,7 +1525,7 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"WebView intercept attach failed: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"WebView intercept attach failed: {ex.Message}", _browserState.CurrentUrl);
         }
     }
 #endif
@@ -1582,9 +1542,9 @@ public partial class MainPage : ContentPage
 
     private void OnBrowserBackClicked(object? sender, EventArgs e)
     {
-        if (NaverTalkWebView.CanGoBack)
+        if (BrowserWebView.CanGoBack)
         {
-            NaverTalkWebView.GoBack();
+            BrowserWebView.GoBack();
         }
 
         UpdateBrowserChrome();
@@ -1592,9 +1552,9 @@ public partial class MainPage : ContentPage
 
     private void OnBrowserForwardClicked(object? sender, EventArgs e)
     {
-        if (NaverTalkWebView.CanGoForward)
+        if (BrowserWebView.CanGoForward)
         {
-            NaverTalkWebView.GoForward();
+            BrowserWebView.GoForward();
         }
 
         UpdateBrowserChrome();
@@ -1605,14 +1565,14 @@ public partial class MainPage : ContentPage
         var input = BrowserAddressEntry?.Text;
         if (string.IsNullOrWhiteSpace(input))
         {
-            _naverTalkBrowser.SetStatus("주소를 입력해 주세요.", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus("주소를 입력해 주세요.", _browserState.CurrentUrl);
             return;
         }
 
         var normalizedUrl = NormalizeAddressInput(input);
         if (string.IsNullOrWhiteSpace(normalizedUrl))
         {
-            _naverTalkBrowser.SetStatus("유효한 주소를 입력해 주세요.", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus("유효한 주소를 입력해 주세요.", _browserState.CurrentUrl);
             return;
         }
 
@@ -1621,7 +1581,7 @@ public partial class MainPage : ContentPage
             BrowserAddressEntry.Text = normalizedUrl;
         }
 
-        await _naverTalkBrowser.NavigateAsync(normalizedUrl);
+        await _browserState.NavigateAsync(normalizedUrl);
     }
 
     private static string? NormalizeAddressInput(string input)
@@ -1717,19 +1677,19 @@ public partial class MainPage : ContentPage
         try
         {
             SetSnapshotButtonSavingState(isSaving: true);
-            _naverTalkBrowser.SetStatus("현재 WebView 페이지 스냅샷을 저장하는 중입니다...", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus("현재 WebView 페이지 스냅샷을 저장하는 중입니다...", _browserState.CurrentUrl);
 
             var raw = await RunBrowserScriptAsync(WebViewPageSnapshotScriptBuilder.Build());
             var snapshot = ParseScriptJson<WebViewPageSnapshotPayload>(raw);
             if (snapshot is null)
             {
-                _naverTalkBrowser.SetStatus("WebView 페이지 스냅샷 결과를 해석하지 못했습니다.", _naverTalkBrowser.CurrentUrl);
+                _browserState.SetStatus("WebView 페이지 스냅샷 결과를 해석하지 못했습니다.", _browserState.CurrentUrl);
                 return;
             }
 
             var result = await WebViewPageSnapshotWriter.SaveAsync(snapshot, AppContext.BaseDirectory);
             _pendingWebViewSnapshot = result;
-            _naverTalkBrowser.SetStatus($"WebView 페이지 스냅샷 저장 완료: {result.DirectoryPath}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"WebView 페이지 스냅샷 저장 완료: {result.DirectoryPath}", _browserState.CurrentUrl);
 
             SetSnapshotButtonSavingState(isSaving: false);
             HideBrowserWebViewForSnapshotModal();
@@ -1737,7 +1697,7 @@ public partial class MainPage : ContentPage
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"WebView 페이지 스냅샷 저장 실패: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus($"WebView 페이지 스냅샷 저장 실패: {ex.Message}", _browserState.CurrentUrl);
         }
         finally
         {
@@ -1747,12 +1707,12 @@ public partial class MainPage : ContentPage
 
     private void HideBrowserWebViewForSnapshotModal()
     {
-        if (NaverTalkWebView is null || !NaverTalkWebView.IsVisible)
+        if (BrowserWebView is null || !BrowserWebView.IsVisible)
         {
             return;
         }
 
-        NaverTalkWebView.IsVisible = false;
+        BrowserWebView.IsVisible = false;
         _snapshotModalHidWebView = true;
     }
 
@@ -1763,7 +1723,7 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        NaverTalkWebView.IsVisible = true;
+        BrowserWebView.IsVisible = true;
         _snapshotModalHidWebView = false;
     }
 
@@ -1895,7 +1855,7 @@ public partial class MainPage : ContentPage
             }
             catch (Exception ex)
             {
-                _naverTalkBrowser.SetStatus($"WinUI dialog failed. Trying native MessageBox: {ex.Message}", _naverTalkBrowser.CurrentUrl);
+                _browserState.SetStatus($"WinUI dialog failed. Trying native MessageBox: {ex.Message}", _browserState.CurrentUrl);
             }
         }
 
@@ -2035,7 +1995,7 @@ public partial class MainPage : ContentPage
 
         if (snapshot is null)
         {
-            _naverTalkBrowser.SetStatus("분석할 snapshot 정보가 없습니다.", _naverTalkBrowser.CurrentUrl);
+            _browserState.SetStatus("분석할 snapshot 정보가 없습니다.", _browserState.CurrentUrl);
             return;
         }
 
@@ -2075,7 +2035,7 @@ public partial class MainPage : ContentPage
     {
         ApplyWorkspaceTab(WorkspaceTab.Codex);
         _codexPromptMacroService.PublishPromptRequested(string.IsNullOrWhiteSpace(promptOverride) ? snapshot.Prompt : promptOverride);
-        _naverTalkBrowser.SetStatus($"Codex 분석 프롬프트 생성 완료: {Path.GetFileName(snapshot.DirectoryPath)}");
+        _browserState.SetStatus($"Codex 분석 프롬프트 생성 완료: {Path.GetFileName(snapshot.DirectoryPath)}");
     }
 
     private async void OnSendBrowserRequestClicked(object? sender, EventArgs e)
@@ -2269,7 +2229,7 @@ public partial class MainPage : ContentPage
                 BrowserAddressEntry.Text = WebViewCookieExportSupport.ExtractTargetOrigin(CookieHeaderEditor?.Text) ?? targetOrigin;
             }
 
-            NaverTalkWebView.Reload();
+            BrowserWebView.Reload();
         }
         catch (Exception ex)
         {
@@ -2356,7 +2316,7 @@ public partial class MainPage : ContentPage
                 .Where(cookie => WebViewCookieExportSupport.MatchesHost(targetUri.Host, cookie.Domain))
                 .GroupBy(cookie => $"{cookie.Name}|{cookie.Domain}|{cookie.Path}", StringComparer.Ordinal)
                 .Select(group => group.Last())
-                .Select(cookie => new NaverTalkPersistedCookie(
+                .Select(cookie => new PersistedBrowserCookie(
                     cookie.Name,
                     cookie.Value,
                     cookie.Domain,
@@ -2376,7 +2336,7 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            await _naverTalkBrowser.SaveDomainCookieSnapshotAsync(targetOrigin, cookiesToSave);
+            await _browserState.SaveDomainCookieSnapshotAsync(targetOrigin, cookiesToSave);
             SetCookieImportStatus(
                 $"{targetUri.Host} 쿠키 {cookiesToSave.Count}개를 저장했습니다. 다음 실행 때 자동으로 로드됩니다.",
                 isError: false);
@@ -2463,7 +2423,7 @@ public partial class MainPage : ContentPage
                 : Color.FromArgb("#2D8A63");
         }
 
-        _naverTalkBrowser.SetStatus(message, _naverTalkBrowser.CurrentUrl);
+        _browserState.SetStatus(message, _browserState.CurrentUrl);
     }
 
     private void SetBrowserRequestStatus(string message, bool isError)
@@ -2476,14 +2436,14 @@ public partial class MainPage : ContentPage
                 : Color.FromArgb("#2D8A63");
         }
 
-        _naverTalkBrowser.SetStatus(message, _naverTalkBrowser.CurrentUrl);
+        _browserState.SetStatus(message, _browserState.CurrentUrl);
     }
 
     private string? TryResolveCurrentBrowserOrigin()
     {
         var candidates = new[]
         {
-            _naverTalkBrowser.CurrentUrl,
+            _browserState.CurrentUrl,
             BrowserAddressEntry?.Text,
             BrowserUrlLabel?.Text
         };
@@ -2520,484 +2480,90 @@ public partial class MainPage : ContentPage
             : $"{uri.Scheme}://{uri.Host}:{uri.Port.ToString(CultureInfo.InvariantCulture)}";
     }
 
-    private async Task TypeTextIntoNaverTalkAsync(string? text, bool submit)
+    private void UpdateBrowserChrome()
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (BrowserStatusLabel is not null)
         {
-            _naverTalkBrowser.SetStatus("Typing macro text is empty.");
-            return;
+            BrowserStatusLabel.Text = _browserState.Status;
         }
 
-        try
+        if (BrowserUrlLabel is not null)
         {
-#if WINDOWS
-            if (NaverTalkWebView.Handler?.PlatformView is UI.Controls.WebView2 platformWebView)
-            {
-                //platformWebView.Focus(UI.FocusState.Programmatic);
-            }
-            var insertedByJs = await InsertTextIntoNaverTalkByJavaScriptAsync(text, submit);
-            if (insertedByJs)
-            {
-                _naverTalkBrowser.SetStatus(submit ? "Typing macro inserted by WebView JS and sent." : "Typing macro inserted by WebView JS.");
-                return;
-            }
-
-            ReleasePressedAltKeys();
-            await Task.Delay(40);
-
-            var pasted = await TryPasteTextIntoFocusedTargetAsync(text, submit);
-            if (pasted)
-            {
-                _naverTalkBrowser.SetStatus(submit ? "Typing macro pasted by clipboard." : "Typing macro pasted by clipboard.");
-                return;
-            }
-
-            var typed = SendUnicodeText(text);
-            var submitted = !submit || SendEnterKey();
-
-            if (typed && submitted)
-            {
-                _naverTalkBrowser.SetStatus(submit ? "Typing macro sent by SendInput." : "Typing macro typed by SendInput.");
-                return;
-            }
-
-            var devToolsTyped = await TryTypeTextIntoNaverTalkByDevToolsAsync(text, submit);
-            _naverTalkBrowser.SetStatus(devToolsTyped
-                ? (submit ? "Typing macro sent by WebView2 DevTools fallback." : "Typing macro typed by WebView2 DevTools fallback.")
-                : "Typing macro failed: SendInput/WebView2 DevTools both failed.");
-#else
-            _naverTalkBrowser.SetStatus("Typing macro failed: SendInput is only available on Windows.");
-#endif
+            BrowserUrlLabel.Text = _browserState.CurrentUrl;
         }
-        catch (Exception ex)
+
+        if (BrowserAddressEntry is not null &&
+            string.IsNullOrWhiteSpace(BrowserAddressEntry.Text))
         {
-            _naverTalkBrowser.SetStatus($"Typing macro failed: {ex.Message}");
+            BrowserAddressEntry.Text = _browserState.CurrentUrl;
+        }
+
+        if (BrowserBackButton is not null)
+        {
+            BrowserBackButton.IsEnabled = BrowserWebView?.CanGoBack ?? false;
+            BrowserBackButton.Opacity = BrowserBackButton.IsEnabled ? 1.0 : 0.45;
+        }
+
+        if (BrowserForwardButton is not null)
+        {
+            BrowserForwardButton.IsEnabled = BrowserWebView?.CanGoForward ?? false;
+            BrowserForwardButton.Opacity = BrowserForwardButton.IsEnabled ? 1.0 : 0.45;
         }
     }
 
-    private static async Task<bool> TryPasteTextIntoFocusedTargetAsync(string text, bool submit)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return false;
-        }
-
-        string? previousClipboard = null;
-        var clipboardCaptured = false;
-        try
-        {
-            previousClipboard = await Clipboard.Default.GetTextAsync();
-            clipboardCaptured = true;
-        }
-        catch
-        {
-            // 일부 환경에서는 기존 클립보드 읽기를 막을 수 있습니다.
-        }
-
-        try
-        {
-            await Clipboard.Default.SetTextAsync(text);
-            await Task.Delay(30);
-
-            var pasted = SendCtrlVKey();
-            var submitted = !submit || SendEnterKey();
-            return pasted && submitted;
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            if (clipboardCaptured)
-            {
-                try
-                {
-                    await Clipboard.Default.SetTextAsync(previousClipboard ?? string.Empty);
-                }
-                catch
-                {
-                    // 복원 실패 시 무시
-                }
-            }
-        }
-    }
-
-    private async Task<bool> FocusNaverTalkTypingTargetAsync()
+    private async Task<string> RunBrowserScriptAsync(string script)
     {
 #if WINDOWS
-        if (NaverTalkWebView.Handler?.PlatformView is UI.Controls.WebView2 platformWebView)
-        {
-            platformWebView.Focus(UI.FocusState.Programmatic);
-        }
-#endif
-
-        var focusScript = """
-(() => {
-    const isTypingTarget = (el) => !!el &&
-        (el.tagName === 'TEXTAREA' ||
-         (el.tagName === 'INPUT' && el.type !== 'password') ||
-         el.isContentEditable);
-
-    if (!window.__codexTypingFocusTrackerAttached) {
-        window.__codexTypingFocusTrackerAttached = true;
-        document.addEventListener('focusin', (e) => {
-            const focused = e.target;
-            if (isTypingTarget(focused)) {
-                window.__codexLastTypingTarget = focused;
-            }
-        }, true);
-    }
-
-    let target = document.activeElement;
-    if (!isTypingTarget(target)) {
-        const remembered = window.__codexLastTypingTarget;
-        if (isTypingTarget(remembered) && document.contains(remembered)) {
-            target = remembered;
-        }
-    }
-
-    if (!isTypingTarget(target)) {
-        const candidates = [
-            'div[role="textbox"][contenteditable="true"]',
-            '[contenteditable="true"][data-testid*="chat"]',
-            '[contenteditable="true"][aria-label*="메시지"]',
-            '[contenteditable="true"][aria-label*="message"]',
-            'textarea',
-            'input[type="text"]',
-            'input[type="search"]',
-            '[contenteditable="true"]'
-        ];
-
-        for (const selector of candidates) {
-            const found = document.querySelector(selector);
-            if (isTypingTarget(found)) {
-                target = found;
-                break;
-            }
-        }
-    }
-
-    if (!isTypingTarget(target)) {
-        return JSON.stringify({ success: false });
-    }
-
-    target.focus();
-    window.__codexLastTypingTarget = target;
-    return JSON.stringify({ success: true, tag: target.tagName });
-})();
-""";
-
-        var result = await RunBrowserScriptAsync(focusScript);
-        return !string.IsNullOrWhiteSpace(result) && result.Contains("\"success\":true", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private async Task<bool> InsertTextIntoNaverTalkByJavaScriptAsync(string text, bool submit)
-    {
-        var textJson = JsonSerializer.Serialize(text);
-        var script = $$"""
-(() => {
-    const text = {{textJson}};
-    if (!text) return JSON.stringify({ success: false });
-
-    const isTypingTarget = (el) => !!el &&
-        (el.tagName === 'TEXTAREA' ||
-         (el.tagName === 'INPUT' && el.type !== 'password') ||
-         el.isContentEditable);
-
-    let target = document.activeElement;
-    if (!isTypingTarget(target)) target = window.__codexLastTypingTarget;
-    if (!isTypingTarget(target)) {
-        target = document.querySelector('div[role="textbox"][contenteditable="true"], textarea, input[type="text"], input[type="search"], [contenteditable="true"]');
-    }
-    if (!isTypingTarget(target)) return JSON.stringify({ success: false });
-
-    target.focus();
-    window.__codexLastTypingTarget = target;
-
-    if (target.isContentEditable) {
-        const sel = window.getSelection?.();
-        const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
-        if (range && target.contains(range.startContainer)) {
-            range.deleteContents();
-            const node = document.createTextNode(text);
-            range.insertNode(node);
-            range.setStartAfter(node);
-            range.setEndAfter(node);
-            sel.removeAllRanges();
-            sel.addRange(range);
-        } else {
-            target.textContent = (target.textContent ?? '') + text;
-        }
-    } else {
-        const start = typeof target.selectionStart === 'number' ? target.selectionStart : (target.value ?? '').length;
-        const end = typeof target.selectionEnd === 'number' ? target.selectionEnd : start;
-        const current = target.value ?? '';
-        target.value = current.slice(0, start) + text + current.slice(end);
-        const next = start + text.length;
-        if (typeof target.setSelectionRange === 'function') target.setSelectionRange(next, next);
-    }
-
-    target.dispatchEvent(new Event('input', { bubbles: true }));
-    target.dispatchEvent(new Event('change', { bubbles: true }));
-
-    const submitNow = {{submit.ToString().ToLowerInvariant()}};
-    if (submitNow) {
-        const down = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
-        const up = new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true });
-        target.dispatchEvent(down);
-        target.dispatchEvent(up);
-        target.form?.requestSubmit?.();
-    }
-
-    return JSON.stringify({ success: true });
-})();
-""";
-
-        var result = await RunBrowserScriptAsync(script);
-        return !string.IsNullOrWhiteSpace(result) && result.Contains("\"success\":true", StringComparison.OrdinalIgnoreCase);
-    }
-
-    #if WINDOWS
-    private async Task<bool> TryTypeTextIntoNaverTalkByDevToolsAsync(string text, bool submit)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return false;
-        }
-
         var coreWebView2 = await TryEnsureCoreWebView2Async();
         if (coreWebView2 is null)
         {
-            return false;
+            throw new InvalidOperationException("WebView2 is not ready.");
         }
 
-        try
-        {
-            await coreWebView2.CallDevToolsProtocolMethodAsync(
-                "Input.insertText",
-                JsonSerializer.Serialize(new { text }));
-
-            if (submit)
-            {
-                var enterKeyDown = JsonSerializer.Serialize(new
-                {
-                    type = "keyDown",
-                    key = "Enter",
-                    code = "Enter",
-                    windowsVirtualKeyCode = 13
-                });
-                var enterKeyUp = JsonSerializer.Serialize(new
-                {
-                    type = "keyUp",
-                    key = "Enter",
-                    code = "Enter",
-                    windowsVirtualKeyCode = 13
-                });
-
-                await coreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", enterKeyDown);
-                await coreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", enterKeyUp);
-            }
-
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-    #endif
-
-#if WINDOWS
-    private static bool SendUnicodeText(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return false;
-        }
-
-        var inputs = new List<INPUT>(text.Length * 2);
-        foreach (var ch in text)
-        {
-            inputs.Add(CreateUnicodeKeyInput(ch, keyUp: false));
-            inputs.Add(CreateUnicodeKeyInput(ch, keyUp: true));
-        }
-
-        var sent = SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf<INPUT>());
-        return sent == inputs.Count;
-    }
-
-    private static bool SendEnterKey()
-    {
-        var down = new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = VK_RETURN,
-                    wScan = 0,
-                    dwFlags = 0,
-                    time = 0,
-                    dwExtraInfo = IntPtr.Zero
-                }
-            }
-        };
-
-        var up = down;
-        up.U.ki.dwFlags = KEYEVENTF_KEYUP;
-
-        var inputs = new[] { down, up };
-        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
-        return sent == inputs.Length;
-    }
-
-    private static bool SendCtrlVKey()
-    {
-        var ctrlDown = new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = VK_CONTROL,
-                    wScan = 0,
-                    dwFlags = 0,
-                    time = 0,
-                    dwExtraInfo = IntPtr.Zero
-                }
-            }
-        };
-
-        var vDown = new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = VK_V,
-                    wScan = 0,
-                    dwFlags = 0,
-                    time = 0,
-                    dwExtraInfo = IntPtr.Zero
-                }
-            }
-        };
-
-        var vUp = vDown;
-        vUp.U.ki.dwFlags = KEYEVENTF_KEYUP;
-
-        var ctrlUp = ctrlDown;
-        ctrlUp.U.ki.dwFlags = KEYEVENTF_KEYUP;
-
-        var inputs = new[] { ctrlDown, vDown, vUp, ctrlUp };
-        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
-        return sent == inputs.Length;
-    }
-
-    private static void ReleasePressedAltKeys()
-    {
-        if (IsVirtualKeyDown(VK_MENU) || IsVirtualKeyDown(VK_LMENU) || IsVirtualKeyDown(VK_RMENU))
-        {
-            SendVirtualKeyUp((ushort)VK_MENU);
-            SendVirtualKeyUp((ushort)VK_LMENU);
-            SendVirtualKeyUp((ushort)VK_RMENU);
-        }
-    }
-
-    private static void SendVirtualKeyUp(ushort virtualKey)
-    {
-        var keyUp = new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = virtualKey,
-                    wScan = 0,
-                    dwFlags = KEYEVENTF_KEYUP,
-                    time = 0,
-                    dwExtraInfo = IntPtr.Zero
-                }
-            }
-        };
-
-        _ = SendInput(1, new[] { keyUp }, Marshal.SizeOf<INPUT>());
-    }
-
-    private static INPUT CreateUnicodeKeyInput(char ch, bool keyUp)
-    {
-        return new INPUT
-        {
-            type = INPUT_KEYBOARD,
-            U = new InputUnion
-            {
-                ki = new KEYBDINPUT
-                {
-                    wVk = 0,
-                    wScan = ch,
-                    dwFlags = KEYEVENTF_UNICODE | (keyUp ? KEYEVENTF_KEYUP : 0),
-                    time = 0,
-                    dwExtraInfo = IntPtr.Zero
-                }
-            }
-        };
-    }
-
-    private const uint INPUT_KEYBOARD = 1;
-    private const uint KEYEVENTF_KEYUP = 0x0002;
-    private const uint KEYEVENTF_UNICODE = 0x0004;
-    private const ushort VK_RETURN = 0x0D;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct INPUT
-    {
-        public uint type;
-        public InputUnion U;
-    }
-
-    [StructLayout(LayoutKind.Explicit)]
-    private struct InputUnion
-    {
-        [FieldOffset(0)]
-        public KEYBDINPUT ki;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct KEYBDINPUT
-    {
-        public ushort wVk;
-        public ushort wScan;
-        public uint dwFlags;
-        public uint time;
-        public IntPtr dwExtraInfo;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+        return await coreWebView2.ExecuteScriptAsync(script);
+#else
+        throw new PlatformNotSupportedException("Browser script execution requires Windows WebView2.");
 #endif
-
-    private void OnNaverTalkNavigating(object? sender, WebNavigatingEventArgs e)
-    {
-        var nextUrl = string.IsNullOrWhiteSpace(e.Url) ? _naverTalkBrowser.CurrentUrl : e.Url;
-        _naverTalkBrowser.SetStatus("Opening page.", nextUrl);
     }
 
-    private async void OnNaverTalkNavigated(object? sender, WebNavigatedEventArgs e)
+    private static T ParseScriptJson<T>(string raw)
     {
-        var currentUrl = string.IsNullOrWhiteSpace(e.Url) ? _naverTalkBrowser.CurrentUrl : e.Url;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            throw new InvalidOperationException("Browser script returned an empty payload.");
+        }
+
+        var parsed = JsonNode.Parse(raw) ?? throw new InvalidOperationException("Browser script returned invalid JSON.");
+        var effectiveJson = parsed switch
+        {
+            JsonValue value when value.TryGetValue<string>(out var innerJson) => innerJson,
+            _ => parsed.ToJsonString()
+        };
+
+        var result = JsonSerializer.Deserialize<T>(effectiveJson, AppJsonOptions);
+        return result ?? throw new InvalidOperationException($"Failed to deserialize browser script payload to {typeof(T).Name}.");
+    }
+
+    private void OnBrowserWebViewNavigating(object? sender, WebNavigatingEventArgs e)
+    {
+        var nextUrl = string.IsNullOrWhiteSpace(e.Url) ? _browserState.CurrentUrl : e.Url;
+        _browserState.SetStatus("Opening page.", nextUrl);
+        UpdateBrowserChrome();
+    }
+
+    private async void OnBrowserWebViewNavigated(object? sender, WebNavigatedEventArgs e)
+    {
+        var currentUrl = string.IsNullOrWhiteSpace(e.Url) ? _browserState.CurrentUrl : e.Url;
 
         if (e.Result != WebNavigationResult.Success)
         {
-            _naverTalkBrowser.SetStatus($"Page load failed: {e.Result}", currentUrl);
+            _browserState.SetStatus($"Page load failed: {e.Result}", currentUrl);
+            UpdateBrowserChrome();
             return;
         }
 
-        _naverTalkBrowser.SetStatus("The WebView page is open.", currentUrl);
+        _browserState.SetStatus("The WebView page is open.", currentUrl);
+        UpdateBrowserChrome();
 
         await RefreshWebViewLayoutMetricsAsync();
         await ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
@@ -3008,92 +2574,6 @@ public partial class MainPage : ContentPage
 #if WINDOWS
         ApplyAdaptiveWebViewZoom();
 #endif
-    }
-
-    private async Task HandleLogoutPopupAsync(string currentUrl)
-    {
-        try
-        {
-            var script = _naverTalkBrowser.GetLogoutPopupCloseScript();
-            var result = await RunBrowserScriptAsync(script);
-
-            if (!string.IsNullOrWhiteSpace(result) && result.Contains("\"closed\":true"))
-            {
-                _naverTalkBrowser.SetStatus("Closed logout popup. Attempting to re-login.", currentUrl);
-
-                // 팝업 닫은 후 잠시 대기 후 로그인 시도
-                await Task.Delay(500);
-                await _naverTalkBrowser.NavigateAsync(forceLogin: true);
-            }
-        }
-        catch (Exception ex)
-        {
-            _naverTalkBrowser.SetStatus($"Logout popup handler failed: {ex.Message}", currentUrl);
-        }
-    }
-
-    private async Task AttemptAutoLoginAsync(string? currentUrl, bool force = false)
-    {
-        if (string.IsNullOrWhiteSpace(currentUrl))
-        {
-            return;
-        }
-
-        if (!force && !_naverTalkBrowser.CanAutoLoginAtUrl(currentUrl))
-        {
-            return;
-        }
-
-        if (!force && WasRecentAutoLoginAttempt(currentUrl))
-        {
-            return;
-        }
-
-        var scripts = await _naverTalkBrowser.BuildAutoLoginScriptsIfAvailableAsync(currentUrl, force);
-        if (scripts is null)
-        {
-            if (IsLoginPage(currentUrl))
-            {
-                _naverTalkBrowser.SetStatus("Auto-login needs a saved id and password.", currentUrl);
-            }
-
-            return;
-        }
-
-        RememberAutoLoginAttempt(currentUrl);
-
-        try
-        {
-            await Task.Delay(1000);
-
-            // Step 1: ID 입력
-            _naverTalkBrowser.SetStatus("Step 1: Entering login ID...", currentUrl);
-            var step1Result = await RunBrowserScriptAsync(scripts.Step1Script);
-
-            await Task.Delay(500);
-
-            // Step 2: 비밀번호 입력
-            _naverTalkBrowser.SetStatus("Step 2: Entering password...", currentUrl);
-            var step2Result = await RunBrowserScriptAsync(scripts.Step2Script);
-
-            await Task.Delay(500);
-
-            // Step 3: 비밀번호 필드 클릭하여 포커스 이동
-            _naverTalkBrowser.SetStatus("Step 3: Focusing password field...", currentUrl);
-            var step3Result = await RunBrowserScriptAsync(scripts.Step3Script);
-
-            await Task.Delay(500);
-
-            // Step 4: 로그인 버튼 클릭
-            _naverTalkBrowser.SetStatus("Step 4: Clicking login button...", currentUrl);
-            var step4Result = await RunBrowserScriptAsync(scripts.Step4Script);
-
-            _naverTalkBrowser.SetStatus("Auto-login completed. Finish any extra verification manually.", currentUrl);
-        }
-        catch (Exception ex)
-        {
-            _naverTalkBrowser.SetStatus($"Auto-login failed: {ex.Message}", currentUrl);
-        }
     }
 
 }

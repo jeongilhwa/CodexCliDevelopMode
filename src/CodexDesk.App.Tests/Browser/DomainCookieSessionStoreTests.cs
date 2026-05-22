@@ -12,16 +12,16 @@ public sealed class DomainCookieSessionStoreTests
         var initialJson = DomainCookieSessionStore.UpsertSnapshot(
             null,
             "https://www.example.com",
-            [new NaverTalkPersistedCookie("sid", "one", ".example.com", "/", null, true, false, "None")]);
+            [new PersistedBrowserCookie("sid", "one", ".example.com", "/", null, true, false, "None")]);
         var appendedJson = DomainCookieSessionStore.UpsertSnapshot(
             initialJson,
             "https://shop.example.com",
-            [new NaverTalkPersistedCookie("theme", "dark", "shop.example.com", "/", null, true, false, null)]);
+            [new PersistedBrowserCookie("theme", "dark", "shop.example.com", "/", null, true, false, null)]);
 
         var updatedJson = DomainCookieSessionStore.UpsertSnapshot(
             appendedJson,
             "https://www.example.com",
-            [new NaverTalkPersistedCookie("sid", "two", ".example.com", "/", null, true, true, "Lax")]);
+            [new PersistedBrowserCookie("sid", "two", ".example.com", "/", null, true, true, "Lax")]);
 
         var snapshots = DomainCookieSessionStore.ParseSnapshots(updatedJson);
 
@@ -30,7 +30,7 @@ public sealed class DomainCookieSessionStoreTests
         snapshots.Should().ContainSingle(snapshot => snapshot.TargetOrigin == "https://shop.example.com");
         snapshots.Single(snapshot => snapshot.TargetOrigin == "https://www.example.com")
             .Cookies.Should().BeEquivalentTo(
-                [new NaverTalkPersistedCookie("sid", "two", ".example.com", "/", null, true, true, "Lax")]);
+                [new PersistedBrowserCookie("sid", "two", ".example.com", "/", null, true, true, "Lax")]);
     }
 
     [TestMethod]

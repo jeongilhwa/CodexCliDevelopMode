@@ -17,20 +17,16 @@ using UI = Microsoft.UI.Xaml;
 
 public partial class MainPage : ContentPage
 {
-    private readonly NaverTalkBrowserService _naverTalkBrowser;
-    private readonly CompletedChatsCollector _completedChatsCollector;
+    private readonly BrowserStateService _browserState;
     private readonly CodexPromptMacroService _codexPromptMacroService;
     private readonly WebView2InterceptController _webViewInterceptController;
-    private readonly CodexDeskWebViewInterceptPanelState _webViewInterceptPanelState;
+    private readonly WebViewInterceptPanelState _webViewInterceptPanelState;
     private static readonly JsonSerializerOptions AppJsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = true
     };
-    private DateTimeOffset _lastAutoLoginAttemptAt;
-    private string? _lastAutoLoginAttemptUrl;
-    private string? _lastSavedCookieJarJson;
-    private volatile bool _isNaverTalkWebViewFocused;
+    private volatile bool _isBrowserWebViewFocused;
     private double _splitterDragStartPointerX = double.NaN;
     private double _splitterDragStartWebViewWidth;
     private double _splitterDragStartChatWidth;
@@ -157,7 +153,6 @@ public partial class MainPage : ContentPage
     private bool _webViewNewWindowHandlerAttached;
     private bool _webViewInspectorScriptRegistered;
     private bool _savedDomainCookieSnapshotsRestored;
-    private string? _lastAppliedWebViewUserAgent;
     private CoreWebView2? _networkReceiversAttachedCore;
     private CoreWebView2DevToolsProtocolEventReceiver? _networkRequestWillBeSentReceiver;
     private CoreWebView2DevToolsProtocolEventReceiver? _networkRequestWillBeSentExtraInfoReceiver;
@@ -219,28 +214,26 @@ public partial class MainPage : ContentPage
 #endif
 
     public MainPage(
-        NaverTalkBrowserService naverTalkBrowser,
-        CompletedChatsCollector completedChatsCollector,
+        BrowserStateService browserState,
         CodexPromptMacroService codexPromptMacroService,
         WebView2InterceptController webViewInterceptController,
-        CodexDeskWebViewInterceptPanelState webViewInterceptPanelState)
+        WebViewInterceptPanelState webViewInterceptPanelState)
     {
         InitializeComponent();
 
-        _naverTalkBrowser = naverTalkBrowser;
-        _completedChatsCollector = completedChatsCollector;
+        _browserState = browserState;
         _codexPromptMacroService = codexPromptMacroService;
         _webViewInterceptController = webViewInterceptController;
         _webViewInterceptPanelState = webViewInterceptPanelState;
-        _naverTalkBrowser.StateChanged += OnBrowserStateChanged;
-        _naverTalkBrowser.CommandRequested += OnBrowserCommandRequested;
+        _browserState.StateChanged += OnBrowserStateChanged;
+        _browserState.CommandRequested += OnBrowserCommandRequested;
         _webViewInterceptPanelState.Changed += OnWebViewInterceptPanelChanged;
 
         BrowserPane.SizeChanged += OnBrowserPaneSizeChanged;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        NaverTalkWebView.HandlerChanged += OnNaverTalkWebViewHandlerChanged;
+        BrowserWebView.HandlerChanged += OnBrowserWebViewHandlerChanged;
 
 #if WINDOWS
         // Loaded 시점에 다시 초기화됩니다.
@@ -421,7 +414,7 @@ public partial class MainPage : ContentPage
 #if WINDOWS
         await ToggleWebViewInspectorModeAsync();
 #else
-        _naverTalkBrowser.SetStatus("Focus mode is only available on Windows WebView2.");
+        _browserState.SetStatus("Focus mode is only available on Windows WebView2.");
 #endif
     }
 
@@ -479,7 +472,7 @@ public partial class MainPage : ContentPage
 #if WINDOWS
         await ToggleWebViewNetworkCaptureModeAsync();
 #else
-        _naverTalkBrowser.SetStatus("Network capture is only available on Windows WebView2.");
+        _browserState.SetStatus("Network capture is only available on Windows WebView2.");
 #endif
     }
 
@@ -694,7 +687,7 @@ public partial class MainPage : ContentPage
         var entries = ResolveNetworkAnalysisEntries();
         if (entries.Count == 0)
         {
-            _naverTalkBrowser.SetStatus(_networkAnalysisScope == NetworkAnalysisScope.Selected
+            _browserState.SetStatus(_networkAnalysisScope == NetworkAnalysisScope.Selected
                 ? "분석할 네트워크 요청을 먼저 선택하세요."
                 : "분석할 네트워크 캡쳐 목록이 없습니다.");
             return;
@@ -712,11 +705,11 @@ public partial class MainPage : ContentPage
 
             _pendingNetworkCaptureSnapshot = result;
             ShowNetworkCaptureSnapshotConfirmModal(result);
-            _naverTalkBrowser.SetStatus($"Network capture 저장 완료: {result.DirectoryPath}");
+            _browserState.SetStatus($"Network capture 저장 완료: {result.DirectoryPath}");
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"Network capture 저장 실패: {ex.Message}");
+            _browserState.SetStatus($"Network capture 저장 실패: {ex.Message}");
         }
         finally
         {
@@ -794,7 +787,7 @@ public partial class MainPage : ContentPage
         var snapshot = _pendingNetworkCaptureSnapshot;
         if (snapshot is null)
         {
-            _naverTalkBrowser.SetStatus("분석할 network capture snapshot 정보가 없습니다.");
+            _browserState.SetStatus("분석할 network capture snapshot 정보가 없습니다.");
             return;
         }
 
@@ -806,7 +799,7 @@ public partial class MainPage : ContentPage
         var prompt = NetworkCaptureSnapshotPromptEditor?.Text;
         ApplyWorkspaceTab(WorkspaceTab.Codex);
         _codexPromptMacroService.PublishPromptRequested(string.IsNullOrWhiteSpace(prompt) ? snapshot.Prompt : prompt);
-        _naverTalkBrowser.SetStatus($"Codex 분석 프롬프트 생성 완료: {Path.GetFileName(snapshot.DirectoryPath)}");
+        _browserState.SetStatus($"Codex 분석 프롬프트 생성 완료: {Path.GetFileName(snapshot.DirectoryPath)}");
     }
 
     private void UpdateNetworkAnalysisButtons()
@@ -1089,18 +1082,18 @@ public partial class MainPage : ContentPage
         var url = ExtractSection(entry.RequestDetails, "URL:", "TYPE:");
         if (string.IsNullOrWhiteSpace(url) || url == "-")
         {
-            _naverTalkBrowser.SetStatus("선택한 세션에 복사할 URL이 없습니다.");
+            _browserState.SetStatus("선택한 세션에 복사할 URL이 없습니다.");
             return;
         }
 
         try
         {
             await Clipboard.Default.SetTextAsync(url);
-            _naverTalkBrowser.SetStatus("세션 URL을 클립보드에 복사했습니다.");
+            _browserState.SetStatus("세션 URL을 클립보드에 복사했습니다.");
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"세션 URL 복사 실패: {ex.Message}");
+            _browserState.SetStatus($"세션 URL 복사 실패: {ex.Message}");
         }
     }
 
@@ -1109,7 +1102,7 @@ public partial class MainPage : ContentPage
         var url = ExtractSection(entry.RequestDetails, "URL:", "TYPE:");
         if (string.IsNullOrWhiteSpace(url) || url == "-")
         {
-            _naverTalkBrowser.SetStatus("선택한 세션에 복사할 요청 URL이 없습니다.");
+            _browserState.SetStatus("선택한 세션에 복사할 요청 URL이 없습니다.");
             return;
         }
 
@@ -1124,11 +1117,11 @@ public partial class MainPage : ContentPage
         try
         {
             await Clipboard.Default.SetTextAsync(raw);
-            _naverTalkBrowser.SetStatus("세션 전체를 클립보드에 복사했습니다.");
+            _browserState.SetStatus("세션 전체를 클립보드에 복사했습니다.");
         }
         catch (Exception ex)
         {
-            _naverTalkBrowser.SetStatus($"세션 복사 실패: {ex.Message}");
+            _browserState.SetStatus($"세션 복사 실패: {ex.Message}");
         }
     }
 

@@ -179,111 +179,6 @@ public partial class MainPage : ContentPage
         int cbAttribute);
 #endif
 
-    private async Task PersistCookieLoginSessionAsync()
-    {
-#if WINDOWS
-        var coreWebView2 = await TryEnsureCoreWebView2Async();
-        if (coreWebView2 is null)
-        {
-            return;
-        }
-
-        var cookieManager = coreWebView2.CookieManager;
-        var loginCookies = await cookieManager.GetCookiesAsync("https://nid.naver.com");
-        var talkCookies = await cookieManager.GetCookiesAsync("https://partner.talk.naver.com");
-
-        var persistedCookies = loginCookies
-            .Concat(talkCookies)
-            .GroupBy(static cookie => $"{cookie.Name}|{cookie.Domain}|{cookie.Path}", StringComparer.Ordinal)
-            .Select(static group => group.Last())
-            .Select(static cookie => new NaverTalkPersistedCookie(
-                cookie.Name,
-                cookie.Value,
-                cookie.Domain,
-                cookie.Path,
-                cookie.Expires <= 0 ? null : cookie.Expires,
-                cookie.IsSecure,
-                cookie.IsHttpOnly,
-                cookie.SameSite.ToString()))
-            .ToList();
-
-        if (persistedCookies.Count == 0)
-        {
-            return;
-        }
-
-        var serialized = JsonSerializer.Serialize(persistedCookies);
-        if (string.Equals(_lastSavedCookieJarJson, serialized, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _lastSavedCookieJarJson = serialized;
-        await _naverTalkBrowser.SaveCookieSessionAsync(serialized);
-#endif
-    }
-
-    private async Task TryRestoreCookieLoginSessionAsync()
-    {
-#if WINDOWS
-        var serialized = await _naverTalkBrowser.TryGetSavedCookieSessionAsync();
-        if (string.IsNullOrWhiteSpace(serialized))
-        {
-            return;
-        }
-
-        List<NaverTalkPersistedCookie>? persistedCookies;
-        try
-        {
-            persistedCookies = JsonSerializer.Deserialize<List<NaverTalkPersistedCookie>>(serialized);
-        }
-        catch
-        {
-            return;
-        }
-
-        if (persistedCookies is null || persistedCookies.Count == 0)
-        {
-            return;
-        }
-
-        var coreWebView2 = await TryEnsureCoreWebView2Async();
-        if (coreWebView2 is null)
-        {
-            return;
-        }
-
-        var cookieManager = coreWebView2.CookieManager;
-
-        foreach (var persistedCookie in persistedCookies)
-        {
-            var cookie = cookieManager.CreateCookie(
-                persistedCookie.Name,
-                persistedCookie.Value,
-                persistedCookie.Domain,
-                persistedCookie.Path);
-
-            cookie.IsSecure = persistedCookie.IsSecure;
-            cookie.IsHttpOnly = persistedCookie.IsHttpOnly;
-
-            if (persistedCookie.ExpiresAtUnixSeconds is { } expiresAtUnixSeconds)
-            {
-                cookie.Expires = expiresAtUnixSeconds;
-            }
-
-            if (TryMapSameSite(persistedCookie.SameSite, out var sameSite))
-            {
-                cookie.SameSite = sameSite;
-            }
-
-            cookieManager.AddOrUpdateCookie(cookie);
-        }
-
-        _lastSavedCookieJarJson = serialized;
-        _naverTalkBrowser.SetStatus("Saved cookie session restored.");
-#endif
-    }
-
     private async Task TryRestoreSavedDomainCookieSnapshotsAsync()
     {
 #if WINDOWS
@@ -292,7 +187,7 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        var snapshots = await _naverTalkBrowser.TryGetSavedDomainCookieSnapshotsAsync();
+        var snapshots = await _browserState.TryGetSavedDomainCookieSnapshotsAsync();
         _savedDomainCookieSnapshotsRestored = true;
         if (snapshots.Count == 0)
         {
@@ -344,7 +239,7 @@ public partial class MainPage : ContentPage
             }
         }
 
-        _naverTalkBrowser.SetStatus(
+        _browserState.SetStatus(
             failed == 0
                 ? $"저장된 도메인 쿠키 {restored}개를 자동 로드했습니다."
                 : $"저장된 도메인 쿠키 {restored}개 로드, {failed}개 실패했습니다.");
@@ -354,7 +249,7 @@ public partial class MainPage : ContentPage
 #if WINDOWS
     private async Task<CoreWebView2?> TryEnsureCoreWebView2Async()
     {
-        if (NaverTalkWebView.Handler is not Microsoft.Maui.Handlers.WebViewHandler handler ||
+        if (BrowserWebView.Handler is not Microsoft.Maui.Handlers.WebViewHandler handler ||
             handler.PlatformView is not Microsoft.UI.Xaml.Controls.WebView2 webView2)
         {
             return null;
@@ -481,7 +376,7 @@ public partial class MainPage : ContentPage
         var altPressed = IsVirtualKeyDown(VK_MENU);
         var lwinPressed = IsVirtualKeyDown(VK_LWIN);
         var rwinPressed = IsVirtualKeyDown(VK_RWIN);
-        var webViewFocused = _isNaverTalkWebViewFocused;
+        var webViewFocused = _isBrowserWebViewFocused;
         var keyDebugMessage =
             $"{DateTime.Now:HH:mm:ss} vk=0x{vkCode:X2}({vkCode}), ctrl={ctrlPressed}, shift={shiftPressed}, alt={altPressed}, lwin={lwinPressed}, rwin={rwinPressed}, webviewFocused={webViewFocused}";
 
@@ -490,7 +385,7 @@ public partial class MainPage : ContentPage
             _codexPromptMacroService.PublishKeyObserved(keyDebugMessage);
         });
 
-        if (_isNaverTalkWebViewFocused && altPressed && !ctrlPressed && !lwinPressed && !rwinPressed && IsMacroNumberVirtualKey(vkCode))
+        if (_isBrowserWebViewFocused && altPressed && !ctrlPressed && !lwinPressed && !rwinPressed && IsMacroNumberVirtualKey(vkCode))
         {
             // WebView 포커스일 때만 Alt+숫자 매크로 단축키 전파를 차단
             return (IntPtr)1;

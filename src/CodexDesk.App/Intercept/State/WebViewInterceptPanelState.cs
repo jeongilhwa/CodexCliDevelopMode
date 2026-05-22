@@ -4,12 +4,12 @@ using InterceptKit.Core;
 using InterceptKit.Presentation;
 using InterceptKit.WebView;
 
-public sealed class CodexDeskWebViewInterceptPanelState
+public class WebViewInterceptPanelState
 {
     private readonly InterceptWorkspaceService _workspace;
     private readonly WebViewInterceptRuntimeState _runtimeState;
 
-    public CodexDeskWebViewInterceptPanelState(
+    public WebViewInterceptPanelState(
         InterceptWorkspaceService workspace,
         WebViewInterceptRuntimeState runtimeState)
     {

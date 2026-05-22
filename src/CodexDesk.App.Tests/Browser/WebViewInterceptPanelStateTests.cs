@@ -6,7 +6,7 @@ using InterceptKit.Presentation;
 using InterceptKit.WebView;
 
 [TestClass]
-public sealed class CodexDeskWebViewInterceptPanelStateTests
+public sealed class WebViewInterceptPanelStateTests
 {
     [TestMethod]
     public void PanelState_DefaultsToDisabledStatus()
@@ -14,7 +14,7 @@ public sealed class CodexDeskWebViewInterceptPanelStateTests
         var store = new InterceptSessionStore();
         var runtimeState = new WebViewInterceptRuntimeState();
         var workspace = new InterceptWorkspaceService(store);
-        var panelState = new CodexDeskWebViewInterceptPanelState(workspace, runtimeState);
+        var panelState = new WebViewInterceptPanelState(workspace, runtimeState);
 
         panelState.IsEnabled.Should().BeFalse();
         panelState.StatusText.Should().Be("Intercept OFF.");
@@ -27,7 +27,7 @@ public sealed class CodexDeskWebViewInterceptPanelStateTests
         var store = new InterceptSessionStore();
         var runtimeState = new WebViewInterceptRuntimeState();
         var workspace = new InterceptWorkspaceService(store);
-        var panelState = new CodexDeskWebViewInterceptPanelState(workspace, runtimeState);
+        var panelState = new WebViewInterceptPanelState(workspace, runtimeState);
 
         runtimeState.MarkWaitingForAttach();
         runtimeState.MarkAttached();
@@ -59,7 +59,7 @@ public sealed class CodexDeskWebViewInterceptPanelStateTests
         var store = new InterceptSessionStore();
         var runtimeState = new WebViewInterceptRuntimeState();
         var workspace = new InterceptWorkspaceService(store);
-        var panelState = new CodexDeskWebViewInterceptPanelState(workspace, runtimeState);
+        var panelState = new WebViewInterceptPanelState(workspace, runtimeState);
         var first = store.CreatePending(new InterceptedRequest(
             "request-1",
             "GET",
@@ -93,7 +93,7 @@ public sealed class CodexDeskWebViewInterceptPanelStateTests
         var runtimeState = new WebViewInterceptRuntimeState();
         var sink = new FakeDecisionSink();
         var workspace = new InterceptWorkspaceService(store, sink);
-        var panelState = new CodexDeskWebViewInterceptPanelState(workspace, runtimeState);
+        var panelState = new WebViewInterceptPanelState(workspace, runtimeState);
         var session = store.CreatePending(new InterceptedRequest(
             "request-1",
             "GET",
@@ -117,7 +117,7 @@ public sealed class CodexDeskWebViewInterceptPanelStateTests
         var runtimeState = new WebViewInterceptRuntimeState();
         var sink = new ResolvingDecisionSink(store);
         var workspace = new InterceptWorkspaceService(store, sink);
-        var panelState = new CodexDeskWebViewInterceptPanelState(workspace, runtimeState);
+        var panelState = new WebViewInterceptPanelState(workspace, runtimeState);
 
         var first = store.CreatePending(new InterceptedRequest(
             "request-1",
@@ -150,7 +150,7 @@ public sealed class CodexDeskWebViewInterceptPanelStateTests
         var runtimeState = new WebViewInterceptRuntimeState();
         var sink = new FakeDecisionSink();
         var workspace = new InterceptWorkspaceService(store, sink);
-        var panelState = new CodexDeskWebViewInterceptPanelState(workspace, runtimeState);
+        var panelState = new WebViewInterceptPanelState(workspace, runtimeState);
 
         store.CreatePending(new InterceptedRequest(
             "request-1",
@@ -180,7 +180,7 @@ public sealed class CodexDeskWebViewInterceptPanelStateTests
         var runtimeState = new WebViewInterceptRuntimeState();
         var sink = new CascadingDecisionSink(store);
         var workspace = new InterceptWorkspaceService(store, sink);
-        var panelState = new CodexDeskWebViewInterceptPanelState(workspace, runtimeState);
+        var panelState = new WebViewInterceptPanelState(workspace, runtimeState);
 
         store.CreatePending(new InterceptedRequest(
             "request-1",

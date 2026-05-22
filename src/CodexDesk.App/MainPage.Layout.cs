@@ -413,7 +413,7 @@ public partial class MainPage : ContentPage
         MainLayoutGrid.InvalidateMeasure();
         BrowserPane.InvalidateMeasure();
         ChatPane.InvalidateMeasure();
-        NaverTalkWebView.InvalidateMeasure();
+        BrowserWebView.InvalidateMeasure();
 
 #if WINDOWS
         if (MainLayoutGrid.Handler?.PlatformView is UI.FrameworkElement gridElement)
@@ -434,7 +434,7 @@ public partial class MainPage : ContentPage
             chatPaneElement.UpdateLayout();
         }
 
-        if (NaverTalkWebView.Handler?.PlatformView is UI.FrameworkElement webViewElement)
+        if (BrowserWebView.Handler?.PlatformView is UI.FrameworkElement webViewElement)
         {
             webViewElement.InvalidateMeasure();
             webViewElement.UpdateLayout();
@@ -531,13 +531,13 @@ public partial class MainPage : ContentPage
 
     private void ApplyAdaptiveWebViewZoom()
     {
-        if (NaverTalkWebView.Handler?.PlatformView is not UI.Controls.WebView2 platformWebView)
+        if (BrowserWebView.Handler?.PlatformView is not UI.Controls.WebView2 platformWebView)
         {
             return;
         }
 
-        var availableWidth = NaverTalkWebView.Width > 0
-            ? NaverTalkWebView.Width
+        var availableWidth = BrowserWebView.Width > 0
+            ? BrowserWebView.Width
             : BrowserPane.Width;
 
         if (availableWidth <= 0)
