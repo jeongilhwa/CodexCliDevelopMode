@@ -1431,6 +1431,17 @@
                                                TextColor="#1D3440"
                                                LineBreakMode="TailTruncation"
                                                MaxLines="2" />
+                                        <Button Grid.Column="1"
+                                                x:Name="CopySelectedNetworkDetailsButton"
+                                                Text="전체 복사"
+                                                FontFamily="Bahnschrift"
+                                                FontSize="12"
+                                                Padding="12,8"
+                                                CornerRadius="12"
+                                                BackgroundColor="#EEF3F6"
+                                                TextColor="#31474F"
+                                                IsEnabled="False"
+                                                Clicked="OnCopySelectedNetworkDetailsClicked" />
                                     </Grid>
 
                                     <Grid Grid.Row="1"
@@ -1567,7 +1578,7 @@
                                                     <TapGestureRecognizer Tapped="OnRequestHeadersPanelTapped" />
                                                 </Border.GestureRecognizers>
                                                 <ScrollView Orientation="Vertical" x:Name="WebViewNetworkRequestHeadersScrollView" VerticalScrollBarVisibility="Default">
-                                                    <Label x:Name="WebViewNetworkRequestHeadersLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Request headers" />
+                                                    <Label x:Name="WebViewNetworkRequestHeadersLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Request headers" HandlerChanged="OnNetworkDetailLabelHandlerChanged" />
                                                 </ScrollView>
                                             </Border>
 
@@ -1577,7 +1588,7 @@
                                                     <TapGestureRecognizer Tapped="OnRequestBodyPanelTapped" />
                                                 </Border.GestureRecognizers>
                                                 <ScrollView Orientation="Vertical" x:Name="WebViewNetworkRequestBodyScrollView" VerticalScrollBarVisibility="Default">
-                                                    <Label x:Name="WebViewNetworkRequestBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Request body" />
+                                                    <Label x:Name="WebViewNetworkRequestBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Request body" HandlerChanged="OnNetworkDetailLabelHandlerChanged" />
                                                 </ScrollView>
                                             </Border>
 
@@ -1587,7 +1598,7 @@
                                                     <TapGestureRecognizer Tapped="OnResponseHeadersPanelTapped" />
                                                 </Border.GestureRecognizers>
                                                 <ScrollView Orientation="Vertical" x:Name="WebViewNetworkResponseHeadersScrollView" VerticalScrollBarVisibility="Default">
-                                                    <Label x:Name="WebViewNetworkResponseHeadersLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response headers" />
+                                                    <Label x:Name="WebViewNetworkResponseHeadersLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response headers" HandlerChanged="OnNetworkDetailLabelHandlerChanged" />
                                                 </ScrollView>
                                             </Border>
 
@@ -1597,7 +1608,7 @@
                                                     <TapGestureRecognizer Tapped="OnResponseBodyPanelTapped" />
                                                 </Border.GestureRecognizers>
                                                 <ScrollView Orientation="Vertical" x:Name="WebViewNetworkResponseBodyScrollView" VerticalScrollBarVisibility="Default">
-                                                    <Label x:Name="WebViewNetworkResponseBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response body" />
+                                                    <Label x:Name="WebViewNetworkResponseBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response body" HandlerChanged="OnNetworkDetailLabelHandlerChanged" />
                                                 </ScrollView>
                                             </Border>
                                         </VerticalStackLayout>

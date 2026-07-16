@@ -1,0 +1,170 @@
+@page "/"
+@implements IDisposable
+@inject InterceptKit.Presentation.InterceptWorkspaceService Workspace
+@inject InterceptKit.WebView.WebViewInterceptRuntimeState RuntimeState
+
+<PageTitle>InterceptKit</PageTitle>
+
+@{
+    var pendingItems = Workspace.GetPendingItems();
+    var selectedItem = pendingItems.FirstOrDefault(item => item.SessionId == Workspace.SelectedSessionId);
+    var selectedSession = Workspace.GetSelectedSession();
+}
+
+<div class="workspace-shell">
+    <section class="workspace-hero">
+        <div>
+            <p class="eyebrow">InterceptKit v1</p>
+            <h1>WebView2 Intercept Workspace</h1>
+            <p class="hero-copy">
+                The native Windows WebView runs in the left host pane. Every paused request appears here, where you can inspect
+                it and decide whether to forward it or drop it.
+            </p>
+        </div>
+        <div class="hero-status">
+            <span class="status-pill">@(RuntimeState.IsAttached ? "WebView2 attached" : "Waiting for attach")</span>
+            <span class="status-pill muted">Android / iOS / Mac / HttpClient placeholders preserved</span>
+        </div>
+    </section>
+
+    <div class="workspace-grid">
+        <section class="workspace-column">
+            <div class="panel-header">
+                <h2>Pending Queue</h2>
+                <span>@pendingItems.Count item(s)</span>
+            </div>
+            <div class="panel-body queue-list">
+                @if (pendingItems.Count == 0)
+                {
+                    <p class="empty-state">Open or refresh the native browser pane to generate paused requests.</p>
+                }
+                else
+                {
+                    @foreach (var item in pendingItems)
+                    {
+                        <button class="queue-card @(item == selectedItem ? "active" : null)"
+                                type="button"
+                                @onclick="() => SelectSession(item.SessionId)">
+                            <div class="queue-method">@item.Method</div>
+                            <div class="queue-url">@item.Url</div>
+                            <div class="queue-status">@item.Status</div>
+                        </button>
+                    }
+                }
+            </div>
+        </section>
+
+        <section class="workspace-column emphasis">
+            <div class="panel-header">
+                <h2>Request Editor</h2>
+                <span>Live selection</span>
+            </div>
+            <div class="panel-body editor-stack">
+                <div class="editor-block">
+                    <label>Method</label>
+                    <input value="@selectedSession?.OriginalRequest.Method" readonly />
+                </div>
+                <div class="editor-block">
+                    <label>URL</label>
+                    <textarea rows="3" readonly>@selectedSession?.OriginalRequest.Url</textarea>
+                </div>
+                <div class="editor-block">
+                    <label>Headers</label>
+                    <textarea rows="8" readonly>@FormatHeaders(selectedSession?.OriginalRequest.Headers)</textarea>
+                </div>
+                <div class="editor-block">
+                    <label>Body</label>
+                    <textarea rows="8" readonly>@(selectedSession?.OriginalRequest.Body ?? string.Empty)</textarea>
+                </div>
+                <div class="action-row">
+                    <button class="action-button primary"
+                            type="button"
+                            disabled="@(selectedSession is null)"
+                            @onclick="ForwardSelectedAsync">
+                        Forward
+                    </button>
+                    <button class="action-button danger"
+                            type="button"
+                            disabled="@(selectedSession is null)"
+                            @onclick="DropSelectedAsync">
+                        Drop
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <section class="workspace-column">
+            <div class="panel-header">
+                <h2>Runtime Notes</h2>
+                <span>Windows v1</span>
+            </div>
+            <div class="panel-body browser-placeholder">
+                <div class="browser-surface">
+                    <div class="browser-toolbar">
+                        <span class="browser-dot"></span>
+                        <span class="browser-dot"></span>
+                        <span class="browser-dot"></span>
+                        <span class="browser-url">Current scope</span>
+                    </div>
+                    <div class="browser-content">
+                        <strong>Status:</strong> @RuntimeState.StatusText
+                        <br />
+                        <strong>Paused count:</strong> @RuntimeState.PausedRequestCount
+                        <br />
+                        <strong>Last URL:</strong> @(RuntimeState.LastPausedRequestUrl ?? "none")
+                        @if (!string.IsNullOrWhiteSpace(RuntimeState.LastError))
+                        {
+                            <br />
+                            <strong>Error:</strong> @RuntimeState.LastError
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Workspace.Changed += OnWorkspaceChanged;
+        RuntimeState.Changed += OnWorkspaceChanged;
+        _ = Workspace.GetPendingItems();
+    }
+
+    public void Dispose()
+    {
+        Workspace.Changed -= OnWorkspaceChanged;
+        RuntimeState.Changed -= OnWorkspaceChanged;
+    }
+
+    private void SelectSession(Guid sessionId)
+    {
+        Workspace.SelectSession(sessionId);
+    }
+
+    private Task ForwardSelectedAsync()
+    {
+        return Workspace.ForwardSelectedAsync();
+    }
+
+    private Task DropSelectedAsync()
+    {
+        return Workspace.DropSelectedAsync();
+    }
+
+    private void OnWorkspaceChanged(object? sender, EventArgs e)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private static string FormatHeaders(IReadOnlyDictionary<string, string>? headers)
+    {
+        if (headers is null || headers.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        return string.Join(Environment.NewLine, headers.Select(header => $"{header.Key}: {header.Value}"));
+    }
+}

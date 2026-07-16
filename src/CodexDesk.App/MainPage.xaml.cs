@@ -569,6 +569,11 @@ public partial class MainPage : ContentPage
             SelectedNetworkTimeLabel.Text = "-";
         }
 
+        if (CopySelectedNetworkDetailsButton is not null)
+        {
+            CopySelectedNetworkDetailsButton.IsEnabled = false;
+        }
+
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
     }
 
@@ -627,6 +632,11 @@ public partial class MainPage : ContentPage
         if (SelectedNetworkTimeLabel is not null)
         {
             SelectedNetworkTimeLabel.Text = "-";
+        }
+
+        if (CopySelectedNetworkDetailsButton is not null)
+        {
+            CopySelectedNetworkDetailsButton.IsEnabled = false;
         }
 
         UpdateNetworkCount();
@@ -1125,9 +1135,52 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private async void OnCopySelectedNetworkDetailsClicked(object? sender, EventArgs e)
+    {
+        if (_selectedWebViewNetworkEntry is not { } entry)
+        {
+            _browserState.SetStatus("복사할 네트워크 요청을 먼저 선택하세요.");
+            return;
+        }
+
+        var details = new System.Text.StringBuilder()
+            .Append("SUMMARY: ").AppendLine(entry.Summary)
+            .Append("METHOD: ").AppendLine(entry.MethodDisplay)
+            .Append("STATUS: ").AppendLine(entry.StatusDisplay)
+            .Append("SIZE: ").AppendLine(entry.SizeDisplay)
+            .Append("TIME: ").AppendLine(entry.TimeDisplay)
+            .AppendLine()
+            .AppendLine("REQUEST DETAILS:")
+            .AppendLine(entry.RequestDetails)
+            .AppendLine()
+            .AppendLine("RESPONSE DETAILS:")
+            .Append(entry.ResponseDetails)
+            .ToString();
+
+        try
+        {
+            await Clipboard.Default.SetTextAsync(details);
+            _browserState.SetStatus("선택한 네트워크 상세 전체를 클립보드에 복사했습니다.");
+        }
+        catch (Exception ex)
+        {
+            _browserState.SetStatus($"네트워크 상세 복사 실패: {ex.Message}");
+        }
+    }
+
     private void OnRequestHeadersPanelTapped(object? sender, TappedEventArgs e)
     {
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.RequestHeaders);
+    }
+
+    private static void OnNetworkDetailLabelHandlerChanged(object? sender, EventArgs e)
+    {
+#if WINDOWS
+        if (sender is Label label && label.Handler?.PlatformView is UI.Controls.TextBlock textBlock)
+        {
+            textBlock.IsTextSelectionEnabled = true;
+        }
+#endif
     }
 
     private void OnRequestBodyPanelTapped(object? sender, TappedEventArgs e)
@@ -1182,6 +1235,11 @@ public partial class MainPage : ContentPage
         if (SelectedNetworkTimeLabel is not null)
         {
             SelectedNetworkTimeLabel.Text = entry.TimeDisplay;
+        }
+
+        if (CopySelectedNetworkDetailsButton is not null)
+        {
+            CopySelectedNetworkDetailsButton.IsEnabled = true;
         }
     }
 
