@@ -292,6 +292,8 @@
                                                ClearButtonVisibility="WhileEditing"
                                                ReturnType="Go"
                                                Completed="OnBrowserAddressEntryCompleted"
+                                               Focused="OnBrowserAddressEntryFocused"
+                                               Unfocused="OnBrowserAddressEntryUnfocused"
                                                VerticalOptions="Center" />
                                         <Button Grid.Column="2"
                                                 x:Name="BrowserGoButton"
@@ -375,8 +377,13 @@
                                 Stroke="#14142324"
                                 StrokeThickness="1"
                                 StrokeShape="RoundRectangle 24">
-                            <Grid ColumnDefinitions="2.35*,0.95*"
-                                  ColumnSpacing="0">
+                            <Grid ColumnSpacing="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="20" />
+                                    <ColumnDefinition x:Name="InterceptQueuePanelColumn"
+                                                      Width="0" />
+                                </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0"
                                         Margin="0"
                                         BackgroundColor="#BFFFFFFF"
@@ -399,6 +406,53 @@
                                 </Border>
 
                                 <Border Grid.Column="1"
+                                        BackgroundColor="#F4FAFB"
+                                        StrokeThickness="0"
+                                        StrokeShape="RoundRectangle 0">
+                                    <Grid RowDefinitions="Auto,*,Auto"
+                                          Padding="0,10">
+                                        <BoxView Grid.RowSpan="3"
+                                                 WidthRequest="1"
+                                                 HorizontalOptions="Start"
+                                                 Color="#1820252C" />
+                                        <Border x:Name="InterceptRailCountBadge"
+                                                Grid.Row="0"
+                                                WidthRequest="16"
+                                                HeightRequest="16"
+                                                Margin="2,0,2,0"
+                                                Padding="0"
+                                                BackgroundColor="#1F6780"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 8">
+                                            <Label x:Name="InterceptRailCountLabel"
+                                                   Text="0"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="9"
+                                                   FontAttributes="Bold"
+                                                   HorizontalTextAlignment="Center"
+                                                   VerticalTextAlignment="Center"
+                                                   TextColor="#FFFFFF" />
+                                        </Border>
+                                        <Grid Grid.Row="1"
+                                              HorizontalOptions="Center"
+                                              VerticalOptions="Center">
+                                            <Button x:Name="InterceptSideToggleButton"
+                                                    Text="&gt;"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="14"
+                                                    WidthRequest="20"
+                                                    HeightRequest="88"
+                                                    Padding="0"
+                                                    CornerRadius="0"
+                                                    BackgroundColor="#00FFFFFF"
+                                                    TextColor="#50656F"
+                                                    Clicked="OnInterceptSideToggleClicked" />
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+
+                                <Border Grid.Column="2"
+                                        x:Name="InterceptQueuePanel"
                                         BackgroundColor="#F7FBFC"
                                         StrokeThickness="0"
                                         StrokeShape="RoundRectangle 0,24,24,0">
@@ -1523,47 +1577,109 @@
 
                                     <Grid Grid.Row="2"
                                           Padding="10,10,10,0"
-                                          ColumnDefinitions="Auto,Auto,Auto,Auto"
+                                          ColumnDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
                                           ColumnSpacing="4"
                                           BackgroundColor="#84FFFFFF">
-                                        <Border BackgroundColor="#D6FFFFFF"
+                                        <Border x:Name="NetworkDetailHeadersButton"
+                                                ClassId="Headers"
+                                                Padding="12,9"
+                                                BackgroundColor="#D6FFFFFF"
                                                 StrokeThickness="0"
-                                                StrokeShape="RoundRectangle 12,12,0,0"
-                                                Padding="12,9">
-                                            <Label Text="Headers"
+                                                StrokeShape="RoundRectangle 12">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnNetworkDetailTabTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label x:Name="NetworkDetailHeadersLabel"
+                                                   Text="Headers"
                                                    FontFamily="Bahnschrift"
                                                    FontSize="13"
                                                    FontAttributes="Bold"
+                                                   InputTransparent="True"
                                                    TextColor="#18252C" />
                                         </Border>
                                         <Border Grid.Column="1"
+                                                x:Name="NetworkDetailBodyButton"
+                                                ClassId="Body"
+                                                Padding="12,9"
                                                 BackgroundColor="#1220252C"
                                                 StrokeThickness="0"
-                                                StrokeShape="RoundRectangle 12,12,0,0"
-                                                Padding="12,9">
-                                            <Label Text="Raw"
+                                                StrokeShape="RoundRectangle 12">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnNetworkDetailTabTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label x:Name="NetworkDetailBodyLabel"
+                                                   Text="Body"
                                                    FontFamily="Bahnschrift"
                                                    FontSize="13"
+                                                   InputTransparent="True"
                                                    TextColor="#667882" />
                                         </Border>
                                         <Border Grid.Column="2"
+                                                x:Name="NetworkDetailRawButton"
+                                                ClassId="Raw"
+                                                Padding="12,9"
                                                 BackgroundColor="#1220252C"
                                                 StrokeThickness="0"
-                                                StrokeShape="RoundRectangle 12,12,0,0"
-                                                Padding="12,9">
-                                            <Label Text="JSON"
+                                                StrokeShape="RoundRectangle 12">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnNetworkDetailTabTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label x:Name="NetworkDetailRawLabel"
+                                                   Text="Raw"
                                                    FontFamily="Bahnschrift"
                                                    FontSize="13"
+                                                   InputTransparent="True"
                                                    TextColor="#667882" />
                                         </Border>
                                         <Border Grid.Column="3"
+                                                x:Name="NetworkDetailJsonButton"
+                                                ClassId="Json"
+                                                Padding="12,9"
                                                 BackgroundColor="#1220252C"
                                                 StrokeThickness="0"
-                                                StrokeShape="RoundRectangle 12,12,0,0"
-                                                Padding="12,9">
-                                            <Label Text="Timeline"
+                                                StrokeShape="RoundRectangle 12">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnNetworkDetailTabTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label x:Name="NetworkDetailJsonLabel"
+                                                   Text="JSON"
                                                    FontFamily="Bahnschrift"
                                                    FontSize="13"
+                                                   InputTransparent="True"
+                                                   TextColor="#667882" />
+                                        </Border>
+                                        <Border Grid.Column="4"
+                                                x:Name="NetworkDetailTimelineButton"
+                                                ClassId="Timeline"
+                                                Padding="12,9"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 12">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnNetworkDetailTabTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label x:Name="NetworkDetailTimelineLabel"
+                                                   Text="Timeline"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   InputTransparent="True"
+                                                   TextColor="#667882" />
+                                        </Border>
+                                        <Border Grid.Column="5"
+                                                x:Name="NetworkDetailCookiesButton"
+                                                ClassId="Cookies"
+                                                Padding="12,9"
+                                                BackgroundColor="#1220252C"
+                                                StrokeThickness="0"
+                                                StrokeShape="RoundRectangle 12">
+                                            <Border.GestureRecognizers>
+                                                <TapGestureRecognizer Tapped="OnNetworkDetailTabTapped" />
+                                            </Border.GestureRecognizers>
+                                            <Label x:Name="NetworkDetailCookiesLabel"
+                                                   Text="Cookies"
+                                                   FontFamily="Bahnschrift"
+                                                   FontSize="13"
+                                                   InputTransparent="True"
                                                    TextColor="#667882" />
                                         </Border>
                                     </Grid>
@@ -1572,8 +1688,19 @@
                                                 Orientation="Vertical">
                                         <VerticalStackLayout Spacing="12"
                                                              Padding="12">
-                                            <Label Text="Request Headers" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
-                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="120">
+                                            <Button x:Name="NetworkUrlDecodeToggleButton"
+                                                    Text="URL Decode"
+                                                    FontFamily="Bahnschrift"
+                                                    FontSize="12"
+                                                    Padding="12,8"
+                                                    CornerRadius="12"
+                                                    BackgroundColor="#EEF3F6"
+                                                    TextColor="#31474F"
+                                                    HorizontalOptions="Start"
+                                                    IsEnabled="False"
+                                                    Clicked="OnNetworkUrlDecodeToggleClicked" />
+                                            <Label x:Name="WebViewNetworkPrimaryDetailTitleLabel" Text="Request Headers" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="180">
                                                 <Border.GestureRecognizers>
                                                     <TapGestureRecognizer Tapped="OnRequestHeadersPanelTapped" />
                                                 </Border.GestureRecognizers>
@@ -1582,33 +1709,13 @@
                                                 </ScrollView>
                                             </Border>
 
-                                            <Label Text="Request Body" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
-                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="120">
+                                            <Label x:Name="WebViewNetworkSecondaryDetailTitleLabel" Text="Response Headers" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
+                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="180">
                                                 <Border.GestureRecognizers>
                                                     <TapGestureRecognizer Tapped="OnRequestBodyPanelTapped" />
                                                 </Border.GestureRecognizers>
                                                 <ScrollView Orientation="Vertical" x:Name="WebViewNetworkRequestBodyScrollView" VerticalScrollBarVisibility="Default">
                                                     <Label x:Name="WebViewNetworkRequestBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Request body" HandlerChanged="OnNetworkDetailLabelHandlerChanged" />
-                                                </ScrollView>
-                                            </Border>
-
-                                            <Label Text="Response Headers" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
-                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="120">
-                                                <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Tapped="OnResponseHeadersPanelTapped" />
-                                                </Border.GestureRecognizers>
-                                                <ScrollView Orientation="Vertical" x:Name="WebViewNetworkResponseHeadersScrollView" VerticalScrollBarVisibility="Default">
-                                                    <Label x:Name="WebViewNetworkResponseHeadersLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response headers" HandlerChanged="OnNetworkDetailLabelHandlerChanged" />
-                                                </ScrollView>
-                                            </Border>
-
-                                            <Label Text="Response Body" FontFamily="Bahnschrift" FontSize="11" TextColor="#667882" />
-                                            <Border BackgroundColor="#D6FFFFFF" Stroke="#12142324" StrokeThickness="1" StrokeShape="RoundRectangle 12" MinimumHeightRequest="140">
-                                                <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Tapped="OnResponseBodyPanelTapped" />
-                                                </Border.GestureRecognizers>
-                                                <ScrollView Orientation="Vertical" x:Name="WebViewNetworkResponseBodyScrollView" VerticalScrollBarVisibility="Default">
-                                                    <Label x:Name="WebViewNetworkResponseBodyLabel" Margin="10,8" FontFamily="Consolas" FontSize="11" TextColor="#14313A" LineBreakMode="CharacterWrap" Text="Response body" HandlerChanged="OnNetworkDetailLabelHandlerChanged" />
                                                 </ScrollView>
                                             </Border>
                                         </VerticalStackLayout>

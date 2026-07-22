@@ -39,6 +39,7 @@ public partial class MainPage : ContentPage
     private const double RightSplitterColumnWidth = 10.0;
     private const double MinPaneWidth = 280.0;
     private const double MinRightPaneWidth = 240.0;
+    private const double InterceptQueuePanelWidth = 340.0;
     private const double FallbackWebViewContentWidth = 1100.0;
     private const double MinWebViewZoomFactor = 0.65;
     private static readonly Color SplitterIdleColor = Color.FromArgb("#B0BEC5");
@@ -49,11 +50,14 @@ public partial class MainPage : ContentPage
     private WebViewNetworkLogEntry? _selectedWebViewNetworkEntry;
     private bool _isRefreshingNetworkSelection;
     private bool _isNetworkListPinnedToBottom = true;
+    private NetworkDetailTab _activeNetworkDetailTab = NetworkDetailTab.Headers;
+    private bool _isNetworkUrlDecoded;
     private const int MaxWebViewNetworkEntries = NetworkCaptureFilterSupport.MaxEntries;
     private const int MaxNetworkAnalysisPromptLength = 52000;
     private int _webViewNetworkSequence;
     private NetworkCaptureFilterKind _networkCaptureFilter = NetworkCaptureFilterKind.All;
     private string _networkSearchText = string.Empty;
+    private bool _isBrowserAddressEntryFocused;
     private NetworkAnalysisScope _networkAnalysisScope = NetworkAnalysisScope.Selected;
     private NetworkAnalysisDetailMode _networkAnalysisDetailMode = NetworkAnalysisDetailMode.Summary;
     private WorkspaceTab _activeWorkspaceTab = WorkspaceTab.Codex;
@@ -63,6 +67,7 @@ public partial class MainPage : ContentPage
     private TaskCompletionSource<bool>? _pendingSnapshotAnalyzeChoice;
     private string? _pendingSnapshotUserQuestion;
     private bool _snapshotModalHidWebView;
+    private bool _isInterceptQueuePanelOpen;
 
     private enum WorkspaceTab
     {
@@ -79,6 +84,16 @@ public partial class MainPage : ContentPage
         RequestBody,
         ResponseHeaders,
         ResponseBody
+    }
+
+    private enum NetworkDetailTab
+    {
+        Headers,
+        Body,
+        Raw,
+        Json,
+        Timeline,
+        Cookies
     }
 
     private enum NetworkAnalysisScope
@@ -256,6 +271,9 @@ public partial class MainPage : ContentPage
         {
             WebViewNetworkListView.ItemsSource = _filteredWebViewNetworkEntries;
         }
+
+        UpdateNetworkDetailTabButtons();
+        UpdateNetworkUrlDecodeToggleButton();
 
         if (InterceptQueueCollection is not null)
         {
@@ -480,9 +498,7 @@ public partial class MainPage : ContentPage
     {
         if (WebViewNetworkListView is null ||
             WebViewNetworkRequestHeadersLabel is null ||
-            WebViewNetworkRequestBodyLabel is null ||
-            WebViewNetworkResponseHeadersLabel is null ||
-            WebViewNetworkResponseBodyLabel is null)
+            WebViewNetworkRequestBodyLabel is null)
         {
             return;
         }
@@ -518,9 +534,7 @@ public partial class MainPage : ContentPage
     private void OnWebViewNetworkSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (WebViewNetworkRequestHeadersLabel is null ||
-            WebViewNetworkRequestBodyLabel is null ||
-            WebViewNetworkResponseHeadersLabel is null ||
-            WebViewNetworkResponseBodyLabel is null)
+            WebViewNetworkRequestBodyLabel is null)
         {
             return;
         }
@@ -539,10 +553,7 @@ public partial class MainPage : ContentPage
         }
 
         _selectedWebViewNetworkEntry = null;
-        WebViewNetworkRequestHeadersLabel.Text = string.Empty;
-        WebViewNetworkRequestBodyLabel.Text = string.Empty;
-        WebViewNetworkResponseHeadersLabel.Text = string.Empty;
-        WebViewNetworkResponseBodyLabel.Text = string.Empty;
+        ClearNetworkDetailContent();
         if (SelectedNetworkSummaryLabel is not null)
         {
             SelectedNetworkSummaryLabel.Text = "선택된 요청 없음";
@@ -574,6 +585,7 @@ public partial class MainPage : ContentPage
             CopySelectedNetworkDetailsButton.IsEnabled = false;
         }
 
+        UpdateNetworkUrlDecodeToggleButton();
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
     }
 
@@ -598,15 +610,7 @@ public partial class MainPage : ContentPage
             WebViewNetworkRequestBodyLabel.Text = "Request body";
         }
 
-        if (WebViewNetworkResponseHeadersLabel is not null)
-        {
-            WebViewNetworkResponseHeadersLabel.Text = "Response headers";
-        }
-
-        if (WebViewNetworkResponseBodyLabel is not null)
-        {
-            WebViewNetworkResponseBodyLabel.Text = "Response body";
-        }
+        ClearNetworkDetailContent();
 
         if (SelectedNetworkSummaryLabel is not null)
         {
@@ -639,6 +643,7 @@ public partial class MainPage : ContentPage
             CopySelectedNetworkDetailsButton.IsEnabled = false;
         }
 
+        UpdateNetworkUrlDecodeToggleButton();
         UpdateNetworkCount();
         UpdateNetworkPanelScrollbars(NetworkScrollTarget.None);
     }
@@ -664,6 +669,43 @@ public partial class MainPage : ContentPage
         RefreshFilteredNetworkEntries(preserveSelection: false);
         UpdateNetworkFilterButtons();
         UpdateNetworkCount();
+    }
+
+    private void OnNetworkDetailTabTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not Element element ||
+            string.IsNullOrWhiteSpace(element.ClassId) ||
+            !Enum.TryParse<NetworkDetailTab>(element.ClassId, ignoreCase: true, out var tab))
+        {
+            return;
+        }
+
+        ApplyNetworkDetailTab(tab);
+    }
+
+    private void OnNetworkUrlDecodeToggleClicked(object? sender, EventArgs e)
+    {
+        _isNetworkUrlDecoded = !_isNetworkUrlDecoded;
+        UpdateNetworkUrlDecodeToggleButton();
+
+        if (_selectedWebViewNetworkEntry is { } selected)
+        {
+            ApplyNetworkDetails(selected);
+        }
+    }
+
+    private void ApplyNetworkDetailTab(NetworkDetailTab tab)
+    {
+        _activeNetworkDetailTab = tab;
+        UpdateNetworkDetailTabButtons();
+
+        if (_selectedWebViewNetworkEntry is { } selected)
+        {
+            ApplyNetworkDetails(selected);
+            return;
+        }
+
+        ClearNetworkDetailContent();
     }
 
     private void OnNetworkSearchTextChanged(object? sender, TextChangedEventArgs e)
@@ -846,6 +888,56 @@ public partial class MainPage : ContentPage
             button.BackgroundColor = selected ? Color.FromArgb("#1F6780") : Color.FromArgb("#EEF3F6");
             button.TextColor = selected ? Colors.White : Color.FromArgb("#31474F");
         }
+    }
+
+    private void UpdateNetworkDetailTabButtons()
+    {
+        foreach (var (border, label) in ResolveNetworkDetailTabButtons())
+        {
+            if (!Enum.TryParse<NetworkDetailTab>(border.ClassId, ignoreCase: true, out var tab))
+            {
+                continue;
+            }
+
+            var selected = tab == _activeNetworkDetailTab;
+            border.BackgroundColor = selected ? Color.FromArgb("#D6FFFFFF") : Color.FromArgb("#1220252C");
+            label.TextColor = selected ? Color.FromArgb("#18252C") : Color.FromArgb("#667882");
+            label.FontAttributes = selected ? FontAttributes.Bold : FontAttributes.None;
+        }
+    }
+
+    private void UpdateNetworkUrlDecodeToggleButton()
+    {
+        if (NetworkUrlDecodeToggleButton is null)
+        {
+            return;
+        }
+
+        NetworkUrlDecodeToggleButton.Text = _isNetworkUrlDecoded ? "URL Decoded" : "URL Decode";
+        NetworkUrlDecodeToggleButton.BackgroundColor = _isNetworkUrlDecoded
+            ? Color.FromArgb("#1F6780")
+            : Color.FromArgb("#EEF3F6");
+        NetworkUrlDecodeToggleButton.TextColor = _isNetworkUrlDecoded
+            ? Colors.White
+            : Color.FromArgb("#31474F");
+        NetworkUrlDecodeToggleButton.IsEnabled = _selectedWebViewNetworkEntry is not null;
+    }
+
+    private IEnumerable<(Border Border, Label Label)> ResolveNetworkDetailTabButtons()
+    {
+        var buttons = new[]
+        {
+            (NetworkDetailHeadersButton, NetworkDetailHeadersLabel),
+            (NetworkDetailBodyButton, NetworkDetailBodyLabel),
+            (NetworkDetailRawButton, NetworkDetailRawLabel),
+            (NetworkDetailJsonButton, NetworkDetailJsonLabel),
+            (NetworkDetailTimelineButton, NetworkDetailTimelineLabel),
+            (NetworkDetailCookiesButton, NetworkDetailCookiesLabel)
+        };
+
+        return buttons
+            .Where(static item => item.Item1 is not null && item.Item2 is not null)
+            .Select(static item => (item.Item1!, item.Item2!));
     }
 
     private IEnumerable<Button> ResolveNetworkFilterButtons()
@@ -1205,12 +1297,54 @@ public partial class MainPage : ContentPage
         var responseHeaders = ExtractSection(entry.ResponseDetails, "HEADERS:", "BODY:");
         var responseBody = ExtractSection(entry.ResponseDetails, "BODY:", null);
 
-        WebViewNetworkRequestHeadersLabel!.Text = string.Create(
-            CultureInfo.InvariantCulture,
-            $"SUMMARY: {entry.Summary}{Environment.NewLine}{Environment.NewLine}{requestHeaders}");
-        WebViewNetworkRequestBodyLabel!.Text = requestBody;
-        WebViewNetworkResponseHeadersLabel!.Text = responseHeaders;
-        WebViewNetworkResponseBodyLabel!.Text = responseBody;
+        var (primaryTitle, primaryText, secondaryTitle, secondaryText) = _activeNetworkDetailTab switch
+        {
+            NetworkDetailTab.Raw => (
+                "Request Raw",
+                FormatNetworkRawBlock(entry.Summary, entry.RequestDetails),
+                "Response Raw",
+                FormatNetworkRawBlock(entry.Summary, entry.ResponseDetails)),
+            NetworkDetailTab.Body => (
+                "Request Body",
+                requestBody,
+                "Response Body",
+                responseBody),
+            NetworkDetailTab.Json => (
+                "Request JSON",
+                FormatJsonDetail(requestBody),
+                "Response JSON",
+                FormatJsonDetail(responseBody)),
+            NetworkDetailTab.Timeline => (
+                "Timing",
+                FormatNetworkTimeline(entry),
+                "Resource",
+                FormatNetworkResourceDetails(entry)),
+            NetworkDetailTab.Cookies => (
+                "Request Cookies",
+                ExtractCookieHeaderLines(requestHeaders, includeResponseCookies: false),
+                "Response Cookies",
+                ExtractCookieHeaderLines(responseHeaders, includeResponseCookies: true)),
+            _ => (
+                "Request Headers",
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"SUMMARY: {entry.Summary}{Environment.NewLine}{Environment.NewLine}{requestHeaders}"),
+                "Response Headers",
+                responseHeaders)
+        };
+
+        if (WebViewNetworkPrimaryDetailTitleLabel is not null)
+        {
+            WebViewNetworkPrimaryDetailTitleLabel.Text = primaryTitle;
+        }
+
+        if (WebViewNetworkSecondaryDetailTitleLabel is not null)
+        {
+            WebViewNetworkSecondaryDetailTitleLabel.Text = secondaryTitle;
+        }
+
+        WebViewNetworkRequestHeadersLabel!.Text = FormatNetworkDecodedDisplay(primaryText);
+        WebViewNetworkRequestBodyLabel!.Text = FormatNetworkDecodedDisplay(secondaryText);
         if (SelectedNetworkSummaryLabel is not null)
         {
             SelectedNetworkSummaryLabel.Text = entry.Summary;
@@ -1240,6 +1374,62 @@ public partial class MainPage : ContentPage
         if (CopySelectedNetworkDetailsButton is not null)
         {
             CopySelectedNetworkDetailsButton.IsEnabled = true;
+        }
+
+        UpdateNetworkUrlDecodeToggleButton();
+    }
+
+    private void ClearNetworkDetailContent()
+    {
+        if (WebViewNetworkPrimaryDetailTitleLabel is not null)
+        {
+            WebViewNetworkPrimaryDetailTitleLabel.Text = FormatNetworkDetailTitle(_activeNetworkDetailTab, isPrimary: true);
+        }
+
+        if (WebViewNetworkSecondaryDetailTitleLabel is not null)
+        {
+            WebViewNetworkSecondaryDetailTitleLabel.Text = FormatNetworkDetailTitle(_activeNetworkDetailTab, isPrimary: false);
+        }
+
+        if (WebViewNetworkRequestHeadersLabel is not null)
+        {
+            WebViewNetworkRequestHeadersLabel.Text = "선택된 요청 없음";
+        }
+
+        if (WebViewNetworkRequestBodyLabel is not null)
+        {
+            WebViewNetworkRequestBodyLabel.Text = "선택된 요청 없음";
+        }
+    }
+
+    private static string FormatNetworkDetailTitle(NetworkDetailTab tab, bool isPrimary)
+    {
+        return tab switch
+        {
+            NetworkDetailTab.Body => isPrimary ? "Request Body" : "Response Body",
+            NetworkDetailTab.Raw => isPrimary ? "Request Raw" : "Response Raw",
+            NetworkDetailTab.Json => isPrimary ? "Request JSON" : "Response JSON",
+            NetworkDetailTab.Timeline => isPrimary ? "Timing" : "Resource",
+            NetworkDetailTab.Cookies => isPrimary ? "Request Cookies" : "Response Cookies",
+            _ => isPrimary ? "Request Headers" : "Response Headers"
+        };
+    }
+
+    private string FormatNetworkDecodedDisplay(string text)
+    {
+        if (!_isNetworkUrlDecoded || string.IsNullOrWhiteSpace(text) || text == "-")
+        {
+            return text;
+        }
+
+        try
+        {
+            var decoded = System.Net.WebUtility.UrlDecode(text);
+            return string.IsNullOrWhiteSpace(decoded) ? text : decoded;
+        }
+        catch
+        {
+            return text;
         }
     }
 
@@ -1295,6 +1485,105 @@ public partial class MainPage : ContentPage
 
         var trimmed = chunk.Trim();
         return string.IsNullOrWhiteSpace(trimmed) ? "-" : trimmed;
+    }
+
+    private static string FormatNetworkRawBlock(string summary, string details)
+    {
+        return new System.Text.StringBuilder()
+            .Append("SUMMARY: ").AppendLine(string.IsNullOrWhiteSpace(summary) ? "-" : summary)
+            .AppendLine()
+            .Append(string.IsNullOrWhiteSpace(details) ? "-" : details)
+            .ToString();
+    }
+
+    private static string FormatJsonDetail(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body) || body == "-")
+        {
+            return "JSON body 없음";
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(body);
+            return node?.ToJsonString(AppJsonOptions) ?? "JSON body 없음";
+        }
+        catch
+        {
+            return "JSON으로 파싱할 수 없는 body입니다." + Environment.NewLine + Environment.NewLine + body;
+        }
+    }
+
+    private static string FormatNetworkTimeline(WebViewNetworkLogEntry entry)
+    {
+        return string.Join(
+            Environment.NewLine,
+            $"Index: {entry.IndexDisplay}",
+            $"Status: {entry.StatusDisplay}",
+            $"Duration: {entry.TimeDisplay}",
+            $"Size: {entry.SizeDisplay}");
+    }
+
+    private static string FormatNetworkResourceDetails(WebViewNetworkLogEntry entry)
+    {
+        return string.Join(
+            Environment.NewLine,
+            $"Method: {entry.MethodDisplay}",
+            $"Scheme: {entry.SchemeDisplay}",
+            $"Host: {entry.HostDisplay}",
+            $"Path: {entry.PathDisplay}",
+            $"Type: {entry.ResourceTypeDisplay}",
+            $"MIME: {entry.MimeTypeDisplay}",
+            $"URL: {entry.FullUrlDisplay}");
+    }
+
+    private static string ExtractCookieHeaderLines(string headers, bool includeResponseCookies)
+    {
+        if (string.IsNullOrWhiteSpace(headers) || headers == "-")
+        {
+            return includeResponseCookies ? "Set-Cookie 없음" : "Cookie 없음";
+        }
+
+        var matches = headers
+            .Split(new[] { Environment.NewLine, "\n" }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => includeResponseCookies
+                ? line.StartsWith("set-cookie:", StringComparison.OrdinalIgnoreCase)
+                : line.StartsWith("cookie:", StringComparison.OrdinalIgnoreCase))
+            .Select(line => FormatCookieHeaderLine(line, includeResponseCookies))
+            .Where(static line => !string.IsNullOrWhiteSpace(line))
+            .ToList();
+
+        if (matches.Count == 0)
+        {
+            return includeResponseCookies ? "Set-Cookie 없음" : "Cookie 없음";
+        }
+
+        return string.Join(Environment.NewLine, matches);
+    }
+
+    private static string FormatCookieHeaderLine(string line, bool includeResponseCookies)
+    {
+        var separatorIndex = line.IndexOf(':', StringComparison.Ordinal);
+        var value = separatorIndex >= 0 ? line[(separatorIndex + 1)..].Trim() : line.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        if (includeResponseCookies)
+        {
+            return string.Join(
+                Environment.NewLine,
+                value
+                    .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select((part, index) => index == 0 ? part : $"  {part}"));
+        }
+
+        return string.Join(
+            Environment.NewLine,
+            value
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(static part => part.Trim()));
     }
 
     private static WebViewNetworkLogEntry BuildWebViewNetworkEntry(
@@ -1440,17 +1729,6 @@ public partial class MainPage : ContentPage
                 target == NetworkScrollTarget.RequestBody ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
         }
 
-        if (WebViewNetworkResponseHeadersScrollView is not null)
-        {
-            WebViewNetworkResponseHeadersScrollView.VerticalScrollBarVisibility =
-                target == NetworkScrollTarget.ResponseHeaders ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
-        }
-
-        if (WebViewNetworkResponseBodyScrollView is not null)
-        {
-            WebViewNetworkResponseBodyScrollView.VerticalScrollBarVisibility =
-                target == NetworkScrollTarget.ResponseBody ? ScrollBarVisibility.Always : ScrollBarVisibility.Default;
-        }
     }
 
     private static InspectorSelectionSnapshot? ParseInspectorSelection(string details)

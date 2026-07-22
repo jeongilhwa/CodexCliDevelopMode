@@ -1342,6 +1342,17 @@ public partial class MainPage : ContentPage
         await NavigateFromAddressBarAsync();
     }
 
+    private void OnBrowserAddressEntryFocused(object? sender, FocusEventArgs e)
+    {
+        _isBrowserAddressEntryFocused = true;
+    }
+
+    private void OnBrowserAddressEntryUnfocused(object? sender, FocusEventArgs e)
+    {
+        _isBrowserAddressEntryFocused = false;
+        UpdateBrowserChrome();
+    }
+
     private void OnWebViewInterceptPanelChanged(object? sender, EventArgs e)
     {
         _ = MainThread.InvokeOnMainThreadAsync(UpdateWebViewInterceptPanel);
@@ -1363,6 +1374,16 @@ public partial class MainPage : ContentPage
         if (InterceptCountLabel is not null)
         {
             InterceptCountLabel.Text = _webViewInterceptPanelState.CountText;
+        }
+
+        if (InterceptRailCountLabel is not null)
+        {
+            InterceptRailCountLabel.Text = pendingItems.Count.ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (InterceptRailCountBadge is not null)
+        {
+            InterceptRailCountBadge.IsVisible = pendingItems.Count > 0;
         }
 
         if (InterceptToggleButton is not null)
@@ -1387,7 +1408,40 @@ public partial class MainPage : ContentPage
             InterceptQueueCollection.SelectedItem = pendingItems.FirstOrDefault(item => item.SessionId == _webViewInterceptPanelState.SelectedSessionId);
         }
 
+        ApplyInterceptQueuePanelState();
         ApplySelectedInterceptSession(_webViewInterceptPanelState.GetSelectedSession());
+    }
+
+    private void OnInterceptSideToggleClicked(object? sender, EventArgs e)
+    {
+        _isInterceptQueuePanelOpen = !_isInterceptQueuePanelOpen;
+        ApplyInterceptQueuePanelState();
+    }
+
+    private void ApplyInterceptQueuePanelState()
+    {
+        if (InterceptQueuePanelColumn is not null)
+        {
+            InterceptQueuePanelColumn.Width = _isInterceptQueuePanelOpen
+                ? new GridLength(InterceptQueuePanelWidth)
+                : new GridLength(0);
+        }
+
+        if (InterceptQueuePanel is not null)
+        {
+            InterceptQueuePanel.IsVisible = _isInterceptQueuePanelOpen;
+        }
+
+        if (InterceptSideToggleButton is not null)
+        {
+            InterceptSideToggleButton.Text = _isInterceptQueuePanelOpen ? "<" : ">";
+            InterceptSideToggleButton.BackgroundColor = _isInterceptQueuePanelOpen
+                ? Color.FromArgb("#E2EFF2")
+                : Color.FromArgb("#00FFFFFF");
+            InterceptSideToggleButton.TextColor = _isInterceptQueuePanelOpen
+                ? Color.FromArgb("#1F6780")
+                : Color.FromArgb("#50656F");
+        }
     }
 
     private async void OnInterceptToggleClicked(object? sender, EventArgs e)
@@ -2493,7 +2547,8 @@ public partial class MainPage : ContentPage
         }
 
         if (BrowserAddressEntry is not null &&
-            string.IsNullOrWhiteSpace(BrowserAddressEntry.Text))
+            !_isBrowserAddressEntryFocused &&
+            !string.Equals(BrowserAddressEntry.Text, _browserState.CurrentUrl, StringComparison.Ordinal))
         {
             BrowserAddressEntry.Text = _browserState.CurrentUrl;
         }
