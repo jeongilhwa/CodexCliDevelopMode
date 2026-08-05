@@ -73,6 +73,11 @@ body {
     display: grid;
     grid-template-columns: 0.9fr 1.2fr 1fr;
     gap: 18px;
+    transition: grid-template-columns 180ms ease;
+}
+
+.workspace-grid.queue-collapsed {
+    grid-template-columns: 64px minmax(0, 1.35fr) minmax(0, 1fr);
 }
 
 .workspace-column {
@@ -94,8 +99,13 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     padding: 18px 20px;
     border-bottom: 1px solid rgba(22, 55, 68, 0.08);
+}
+
+.panel-title {
+    min-width: 0;
 }
 
 .panel-header h2 {
@@ -111,6 +121,52 @@ body {
 .panel-body {
     padding: 18px;
     flex: 1;
+}
+
+.queue-column {
+    transition: min-height 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.queue-column.collapsed {
+    min-height: 620px;
+}
+
+.queue-column.collapsed .panel-header {
+    min-height: 620px;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 14px 10px;
+}
+
+.queue-column.collapsed .panel-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+}
+
+.queue-column.collapsed .panel-title span {
+    display: none;
+}
+
+.queue-toggle {
+    width: 34px;
+    height: 34px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid rgba(22, 55, 68, 0.12);
+    border-radius: 999px;
+    background: rgba(22, 55, 68, 0.07);
+    color: #274c5a;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.queue-toggle:hover {
+    background: rgba(22, 55, 68, 0.12);
 }
 
 .queue-list {
@@ -263,6 +319,25 @@ body {
 @media (max-width: 1100px) {
     .workspace-grid {
         grid-template-columns: 1fr;
+    }
+
+    .workspace-grid.queue-collapsed {
+        grid-template-columns: 1fr;
+    }
+
+    .queue-column.collapsed {
+        min-height: auto;
+    }
+
+    .queue-column.collapsed .panel-header {
+        min-height: auto;
+        flex-direction: row;
+        padding: 18px 20px;
+    }
+
+    .queue-column.collapsed .panel-title {
+        display: block;
+        writing-mode: horizontal-tb;
     }
 
     .workspace-hero {

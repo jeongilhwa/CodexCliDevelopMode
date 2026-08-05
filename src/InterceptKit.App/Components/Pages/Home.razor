@@ -27,31 +27,44 @@
         </div>
     </section>
 
-    <div class="workspace-grid">
-        <section class="workspace-column">
+    <div class="workspace-grid @(IsQueueCollapsed ? "queue-collapsed" : null)">
+        <section class="workspace-column queue-column @(IsQueueCollapsed ? "collapsed" : null)">
             <div class="panel-header">
-                <h2>Pending Queue</h2>
-                <span>@pendingItems.Count item(s)</span>
+                <div class="panel-title">
+                    <h2>Intercept Queue</h2>
+                    <span>@pendingItems.Count item(s)</span>
+                </div>
+                <button class="queue-toggle"
+                        type="button"
+                        title="@(IsQueueCollapsed ? "Expand Intercept Queue" : "Collapse Intercept Queue")"
+                        aria-label="@(IsQueueCollapsed ? "Expand Intercept Queue" : "Collapse Intercept Queue")"
+                        aria-expanded="@(!IsQueueCollapsed)"
+                        @onclick="ToggleQueuePanel">
+                    @(IsQueueCollapsed ? ">" : "<")
+                </button>
             </div>
-            <div class="panel-body queue-list">
-                @if (pendingItems.Count == 0)
-                {
-                    <p class="empty-state">Open or refresh the native browser pane to generate paused requests.</p>
-                }
-                else
-                {
-                    @foreach (var item in pendingItems)
+            @if (!IsQueueCollapsed)
+            {
+                <div class="panel-body queue-list">
+                    @if (pendingItems.Count == 0)
                     {
-                        <button class="queue-card @(item == selectedItem ? "active" : null)"
-                                type="button"
-                                @onclick="() => SelectSession(item.SessionId)">
-                            <div class="queue-method">@item.Method</div>
-                            <div class="queue-url">@item.Url</div>
-                            <div class="queue-status">@item.Status</div>
-                        </button>
+                        <p class="empty-state">Open or refresh the native browser pane to generate paused requests.</p>
                     }
-                }
-            </div>
+                    else
+                    {
+                        @foreach (var item in pendingItems)
+                        {
+                            <button class="queue-card @(item == selectedItem ? "active" : null)"
+                                    type="button"
+                                    @onclick="() => SelectSession(item.SessionId)">
+                                <div class="queue-method">@item.Method</div>
+                                <div class="queue-url">@item.Url</div>
+                                <div class="queue-status">@item.Status</div>
+                            </button>
+                        }
+                    }
+                </div>
+            }
         </section>
 
         <section class="workspace-column emphasis">
@@ -125,6 +138,8 @@
 </div>
 
 @code {
+    private bool IsQueueCollapsed { get; set; }
+
     protected override void OnInitialized()
     {
         Workspace.Changed += OnWorkspaceChanged;
@@ -141,6 +156,11 @@
     private void SelectSession(Guid sessionId)
     {
         Workspace.SelectSession(sessionId);
+    }
+
+    private void ToggleQueuePanel()
+    {
+        IsQueueCollapsed = !IsQueueCollapsed;
     }
 
     private Task ForwardSelectedAsync()

@@ -72,7 +72,7 @@ public partial class MainPage : ContentPage
         _splitterDragStartWebViewWidth = paneWidths.Value.WebViewWidth;
         _splitterDragStartChatWidth = paneWidths.Value.ChatWidth;
         UpdateSplitterVisual(isDragging: true, isHovering: true);
-        TryCaptureSplitterPointer(e, isRightSplitter: false);
+        TryCaptureSplitterPointer(e, isRightSplitter: false);                                           
     }
 
     private void OnSplitterPointerMoved(object? sender, PointerEventArgs e)

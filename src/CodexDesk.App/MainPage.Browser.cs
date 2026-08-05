@@ -20,6 +20,8 @@ using UI = Microsoft.UI.Xaml;
 public partial class MainPage : ContentPage
 {
 #if WINDOWS
+    private const int WebViewNetworkMaxPostDataPreviewBytes = 256 * 1024;
+
     private void OnBrowserWebViewHandlerChanged(object? sender, EventArgs e)
     {
         ConfigureWebView2ForWindows();
@@ -709,7 +711,7 @@ public partial class MainPage : ContentPage
         {
             if (!_webViewNetworkDomainEnabled)
             {
-                await coreWebView2.CallDevToolsProtocolMethodAsync("Network.enable", "{}");
+                await coreWebView2.CallDevToolsProtocolMethodAsync("Network.enable", BuildNetworkEnableArgs());
                 _webViewNetworkDomainEnabled = true;
             }
             return;
@@ -1040,6 +1042,11 @@ public partial class MainPage : ContentPage
                 : (DateTimeOffset.Now - captured.StartedAt).TotalMilliseconds;
 
             captured.EncodedDataLength = encodedDataLength;
+            if (string.IsNullOrWhiteSpace(captured.RequestBodyPreview))
+            {
+                captured.RequestBodyPreview = await TryGetRequestPostDataPreviewAsync(captured.RequestId);
+            }
+
             var shouldReadBody = ShouldReadResponseBody(captured.ResourceType, captured.MimeType, captured.EncodedDataLength);
             var responseBodyPreview = shouldReadBody
                 ? await TryGetResponseBodyPreviewAsync(captured.RequestId, captured.MimeType)
@@ -1190,6 +1197,35 @@ public partial class MainPage : ContentPage
         }
     }
 
+    private async Task<string> TryGetRequestPostDataPreviewAsync(string requestId)
+    {
+        var coreWebView2 = _networkReceiversAttachedCore;
+        if (coreWebView2 is null || string.IsNullOrWhiteSpace(requestId))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var args = JsonSerializer.Serialize(new { requestId });
+            var raw = await coreWebView2.CallDevToolsProtocolMethodAsync("Network.getRequestPostData", args);
+            var payload = JsonNode.Parse(raw)?.AsObject();
+            return payload?["postData"]?.GetValue<string>() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string BuildNetworkEnableArgs()
+    {
+        return JsonSerializer.Serialize(new
+        {
+            maxPostDataSize = WebViewNetworkMaxPostDataPreviewBytes
+        });
+    }
+
     private static bool IsLikelyTextMimeType(string? mimeType)
     {
         if (string.IsNullOrWhiteSpace(mimeType))
@@ -1207,51 +1243,12 @@ public partial class MainPage : ContentPage
 
     private static string ToHeaderLines(JsonNode? headersNode)
     {
-        if (headersNode is not JsonObject headersObject || headersObject.Count == 0)
-        {
-            return "-";
-        }
-
-        var lines = new List<string>();
-        foreach (var pair in headersObject.OrderBy(static p => p.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            var value = pair.Value switch
-            {
-                JsonValue jsonValue => jsonValue.ToString(),
-                null => string.Empty,
-                _ => pair.Value.ToJsonString()
-            };
-
-            lines.Add($"{pair.Key}: {value}");
-        }
-
-        return lines.Count == 0 ? "-" : string.Join("\n", lines);
+        return WebViewNetworkHeaderPreviewSupport.ToHeaderLines(headersNode);
     }
 
     private static string MergeHeaderPreviews(string? primary, string? secondary)
     {
-        var lines = new List<string>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        static void AddLines(List<string> target, HashSet<string> dedupe, string? source)
-        {
-            if (string.IsNullOrWhiteSpace(source) || source.Trim() == "-")
-            {
-                return;
-            }
-
-            foreach (var line in source.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (dedupe.Add(line))
-                {
-                    target.Add(line);
-                }
-            }
-        }
-
-        AddLines(lines, seen, primary);
-        AddLines(lines, seen, secondary);
-        return lines.Count == 0 ? "-" : string.Join('\n', lines);
+        return WebViewNetworkHeaderPreviewSupport.MergeHeaderPreviews(primary, secondary);
     }
 
 #endif

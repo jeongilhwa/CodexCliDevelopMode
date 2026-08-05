@@ -1,4 +1,8 @@
 <Solution>
   <Project Path="src/CodexDesk.App/CodexDesk.App.csproj" />
   <Project Path="src/CodexDesk.App.Tests/CodexDesk.App.Tests.csproj" />
+  <Project Path="src/InterceptKit.Core/InterceptKit.Core.csproj" />
+  <Project Path="src/InterceptKit.Presentation/InterceptKit.Presentation.csproj" />
+  <Project Path="src/InterceptKit.WebView/InterceptKit.WebView.csproj" />
+  <Project Path="src/InterceptKit.WebView.Windows/InterceptKit.WebView.Windows.csproj" />
 </Solution>
