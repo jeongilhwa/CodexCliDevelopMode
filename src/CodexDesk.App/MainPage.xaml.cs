@@ -183,6 +183,8 @@ public partial class MainPage : ContentPage
     private Microsoft.UI.Xaml.Input.Pointer? _capturedRightSplitterPointer;
     private double _measuredWebViewContentWidth;
     private double _lastAppliedWebViewZoomFactor = 1.0;
+    private string? _defaultWebViewUserAgent;
+    private string? _lastAppliedWebViewUserAgent;
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;

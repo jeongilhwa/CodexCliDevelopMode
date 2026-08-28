@@ -132,12 +132,14 @@ h1 {
 
 input,
 textarea,
+select,
 button {
     font: inherit;
 }
 
 input,
-textarea {
+textarea,
+select {
     width: 100%;
     border: 1px solid rgba(22, 56, 71, 0.14);
     border-radius: 1rem;
@@ -148,7 +150,8 @@ textarea {
 }
 
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
     outline: none;
     border-color: rgba(33, 112, 139, 0.45);
     box-shadow: 0 0 0 0.22rem rgba(70, 140, 163, 0.16);
@@ -830,7 +833,8 @@ button:disabled {
     }
 
     input,
-    textarea {
+    textarea,
+    select {
         background: rgba(16, 27, 31, 0.88);
         border-color: rgba(183, 221, 232, 0.14);
         color: inherit;

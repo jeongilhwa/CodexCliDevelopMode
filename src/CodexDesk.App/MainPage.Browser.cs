@@ -38,6 +38,7 @@ public partial class MainPage : ContentPage
                 webView2.CoreWebView2Initialized += OnCoreWebView2Initialized;
                 if (webView2.CoreWebView2 is not null)
                 {
+                    _ = ApplyBrowserUserAgentAsync(webView2.CoreWebView2, reload: false);
                     _ = EnsureWebViewInterceptAttachedAsync(webView2.CoreWebView2);
                     AttachWebViewNewWindowHandler(webView2.CoreWebView2);
                     AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
@@ -62,6 +63,7 @@ public partial class MainPage : ContentPage
         }
 
         _ = EnsureWebViewInterceptAttachedAsync(sender.CoreWebView2);
+        _ = ApplyBrowserUserAgentAsync(sender.CoreWebView2, reload: false);
         _browserState.SetStatus("WebView2 is ready.");
         AttachWebViewNewWindowHandler(sender.CoreWebView2);
         AttachWebViewKeyboardDebugHandlers(sender.CoreWebView2);
@@ -1309,7 +1311,7 @@ public partial class MainPage : ContentPage
 
     private void OnBrowserCommandRequested(BrowserCommand command)
     {
-        _ = MainThread.InvokeOnMainThreadAsync(() =>
+        _ = MainThread.InvokeOnMainThreadAsync(async () =>
         {
             switch (command.Type)
             {
@@ -1323,11 +1325,93 @@ public partial class MainPage : ContentPage
                 case BrowserCommandType.Reload:
                     BrowserWebView.Reload();
                     break;
+
+                case BrowserCommandType.ApplyUserAgent:
+#if WINDOWS
+                    var coreWebView2 = await TryEnsureCoreWebView2Async();
+                    if (coreWebView2 is not null)
+                    {
+                        await ApplyBrowserUserAgentAsync(coreWebView2, reload: true);
+                    }
+#else
+                    _browserState.SetStatus("User-Agent switching is only available on Windows WebView2.");
+#endif
+                    break;
             }
 
             UpdateBrowserChrome();
         });
     }
+
+#if WINDOWS
+    private async Task ApplyBrowserUserAgentAsync(CoreWebView2 coreWebView2, bool reload)
+    {
+        await _browserState.EnsureInitializedAsync();
+        var defaultUserAgent = await CaptureDefaultWebViewUserAgentAsync(coreWebView2);
+        var preference = _browserState.UserAgentPreference;
+        var requestedUserAgent = preference.PresetKey switch
+        {
+            BrowserUserAgentPreference.ChromePresetKey => CreateChromeCompatibleUserAgent(defaultUserAgent),
+            BrowserUserAgentPreference.CustomPresetKey when !string.IsNullOrWhiteSpace(preference.CustomUserAgent) =>
+                preference.CustomUserAgent,
+            _ => defaultUserAgent
+        };
+
+        if (!string.Equals(_lastAppliedWebViewUserAgent, requestedUserAgent, StringComparison.Ordinal))
+        {
+            coreWebView2.Settings.UserAgent = requestedUserAgent;
+            _lastAppliedWebViewUserAgent = requestedUserAgent;
+        }
+
+        if (reload)
+        {
+            BrowserWebView.Reload();
+            _browserState.SetStatus("User-Agent applied. The current page was reloaded.", _browserState.CurrentUrl);
+        }
+    }
+
+    private async Task<string> CaptureDefaultWebViewUserAgentAsync(CoreWebView2 coreWebView2)
+    {
+        if (!string.IsNullOrWhiteSpace(_defaultWebViewUserAgent))
+        {
+            return _defaultWebViewUserAgent;
+        }
+
+        var settingsUserAgent = coreWebView2.Settings.UserAgent;
+        if (!string.IsNullOrWhiteSpace(settingsUserAgent))
+        {
+            _defaultWebViewUserAgent = settingsUserAgent;
+            return settingsUserAgent;
+        }
+
+        try
+        {
+            var rawUserAgent = await coreWebView2.ExecuteScriptAsync("navigator.userAgent");
+            var evaluatedUserAgent = JsonSerializer.Deserialize<string>(rawUserAgent);
+            if (!string.IsNullOrWhiteSpace(evaluatedUserAgent))
+            {
+                _defaultWebViewUserAgent = evaluatedUserAgent;
+                return evaluatedUserAgent;
+            }
+        }
+        catch
+        {
+            // An empty value instructs WebView2 to use its runtime default.
+        }
+
+        _defaultWebViewUserAgent = string.Empty;
+        return string.Empty;
+    }
+
+    private static string CreateChromeCompatibleUserAgent(string defaultUserAgent)
+    {
+        return Regex.Replace(
+            defaultUserAgent,
+            @"\s(?:Edg|Edge)/[^\s]+",
+            string.Empty,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Trim();
+    }
+#endif
 
     private async void OnBrowserAddressEntryCompleted(object? sender, EventArgs e)
     {

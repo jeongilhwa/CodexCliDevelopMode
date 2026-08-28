@@ -3,6 +3,7 @@
 @implements IDisposable
 @inject CodexInteractiveChatService CodexCli
 @inject CodexPromptMacroService CodexPromptMacroService
+@inject BrowserStateService BrowserState
 @inject IJSRuntime JS
 
 <PageTitle>CodexDesk</PageTitle>
@@ -152,13 +153,14 @@
             <section class="session-modal panel" @onclick:stopPropagation="true">
                 <div class="panel-header">
                     <h2>설정</h2>
-                    <p>Codex CLI 실행 조건을 설정합니다.</p>
+                    <p>Codex CLI와 내장 브라우저 실행 조건을 설정합니다.</p>
                 </div>
 
-                <div class="settings-tab-bar">
-                    <button class="settings-tab @(SettingsTab == "session" ? "active" : "")" @onclick='() => SettingsTab = "session"'>Session</button>
-                    <button class="settings-tab @(SettingsTab == "macros" ? "active" : "")" @onclick='() => SettingsTab = "macros"'>Macros</button>
-                    <button class="settings-tab @(SettingsTab == "tools" ? "active" : "")" @onclick='() => SettingsTab = "tools"'>Tools</button>
+                <div class="settings-tab-bar" role="tablist" aria-label="설정 분류">
+                    <button type="button" role="tab" aria-selected="@(SettingsTab == "session")" class="settings-tab @(SettingsTab == "session" ? "active" : "")" @onclick='() => SettingsTab = "session"'>Session</button>
+                    <button type="button" role="tab" aria-selected="@(SettingsTab == "browser")" class="settings-tab @(SettingsTab == "browser" ? "active" : "")" @onclick='() => SettingsTab = "browser"'>Browser</button>
+                    <button type="button" role="tab" aria-selected="@(SettingsTab == "macros")" class="settings-tab @(SettingsTab == "macros" ? "active" : "")" @onclick='() => SettingsTab = "macros"'>Macros</button>
+                    <button type="button" role="tab" aria-selected="@(SettingsTab == "tools")" class="settings-tab @(SettingsTab == "tools" ? "active" : "")" @onclick='() => SettingsTab = "tools"'>Tools</button>
                 </div>
 
                 @if (SettingsTab == "session")
@@ -182,6 +184,49 @@
                         <input type="checkbox" @bind="AllowWorkspaceWrite" disabled="@ActiveTab.IsBusy" />
                         <span><code>--full-auto</code>로 workspace-write 허용</span>
                     </label>
+                }
+
+                @if (SettingsTab == "browser")
+                {
+                    <div class="section-header panel-header">
+                        <h3>사이트 호환 모드</h3>
+                        <p>사이트가 WebView2를 차단하거나 잘못 인식할 때 User-Agent를 Chrome 호환 값으로 바꿀 수 있습니다.</p>
+                    </div>
+
+                    <label class="field" for="browser-user-agent-preset">
+                        <span>User-Agent</span>
+                        <select id="browser-user-agent-preset" @bind="SelectedUserAgentPresetKey" aria-describedby="browser-user-agent-help">
+                            <option value="@BrowserUserAgentPreference.DefaultPresetKey">WebView2 기본값</option>
+                            <option value="@BrowserUserAgentPreference.ChromePresetKey">Chrome 호환</option>
+                            <option value="@BrowserUserAgentPreference.CustomPresetKey">사용자 지정</option>
+                        </select>
+                    </label>
+
+                    @if (IsCustomUserAgentSelected)
+                    {
+                        <label class="field" for="browser-custom-user-agent">
+                            <span>사용자 지정 User-Agent</span>
+                            <input id="browser-custom-user-agent"
+                                   @bind="CustomUserAgent"
+                                   @bind:event="oninput"
+                                   spellcheck="false"
+                                   aria-describedby="browser-user-agent-help"
+                                   placeholder="Mozilla/5.0 ..." />
+                        </label>
+                    }
+
+                    <p id="browser-user-agent-help" class="hint">
+                        적용하면 선택값을 저장하고 현재 브라우저 페이지를 즉시 새로고침합니다. WebView2 기본값을 선택하면 앱 시작 시 캡처한 원래 UA로 복구합니다.
+                    </p>
+
+                    <div class="button-row">
+                        <button type="button" class="primary" @onclick="SaveBrowserUserAgentAsync">적용 및 새로고침</button>
+                    </div>
+
+                    @if (!string.IsNullOrWhiteSpace(UserAgentStatus))
+                    {
+                        <p class="hint" role="status" aria-live="polite">@UserAgentStatus</p>
+                    }
                 }
 
                 @if (SettingsTab == "macros")
@@ -341,6 +386,12 @@
 
     private string Model { get; set; } = string.Empty;
 
+    private string SelectedUserAgentPresetKey { get; set; } = BrowserUserAgentPreference.DefaultPresetKey;
+
+    private string CustomUserAgent { get; set; } = string.Empty;
+
+    private string UserAgentStatus { get; set; } = string.Empty;
+
     private bool AllowWorkspaceWrite { get; set; } = true;
 
     private bool IsSessionModalOpen { get; set; }
@@ -363,6 +414,8 @@
     private string _lastObservedShortcut = string.Empty;
     private DateTime _lastObservedShortcutAt = DateTime.MinValue;
     private bool IsMacrosSettingsVisible => IsSessionModalOpen && SettingsTab == "macros";
+    private bool IsCustomUserAgentSelected =>
+        string.Equals(SelectedUserAgentPresetKey, BrowserUserAgentPreference.CustomPresetKey, StringComparison.Ordinal);
     private string StatusLabel =>
         ActiveTab.IsBusy
             ? BusyIndicatorText
@@ -375,15 +428,37 @@
     private System.Threading.Timer? _loadingIndicatorTimer;
     private int _loadingDotCount = 1;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         CommandPath = CodexCli.GetDefaultCommandPath();
         WorkspacePath = CodexCli.GetDefaultWorkspacePath();
+        await BrowserState.EnsureInitializedAsync();
+        RefreshBrowserUserAgentPreference();
         CodexPromptMacroService.KeyObserved += OnMacroKeyObserved;
         CodexPromptMacroService.PromptRequested += OnExternalPromptRequested;
         CodexPromptMacroService.Load();
         CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
         AddNewTab();
+    }
+
+    private async Task SaveBrowserUserAgentAsync()
+    {
+        if (IsCustomUserAgentSelected && string.IsNullOrWhiteSpace(CustomUserAgent))
+        {
+            UserAgentStatus = "사용자 지정 User-Agent를 입력해 주세요.";
+            return;
+        }
+
+        await BrowserState.SaveUserAgentPreferenceAsync(SelectedUserAgentPresetKey, CustomUserAgent);
+        RefreshBrowserUserAgentPreference();
+        UserAgentStatus = BrowserState.Status;
+    }
+
+    private void RefreshBrowserUserAgentPreference()
+    {
+        var preference = BrowserState.UserAgentPreference;
+        SelectedUserAgentPresetKey = preference.PresetKey;
+        CustomUserAgent = preference.CustomUserAgent;
     }
 
     private async Task SendAsync()
