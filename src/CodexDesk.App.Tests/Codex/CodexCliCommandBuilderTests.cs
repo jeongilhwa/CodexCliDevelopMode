@@ -36,7 +36,7 @@ public sealed class CodexCliCommandBuilderTests
     }
 
     [TestMethod]
-    public void BuildExecCommandLine_should_include_color_and_full_auto_for_new_thread()
+    public void BuildExecCommandLine_should_include_workspace_write_auto_approval_for_new_thread()
     {
         var request = new CodexChatRequest(
             Prompt: "Summarize the repo",
@@ -51,7 +51,8 @@ public sealed class CodexCliCommandBuilderTests
         commandLine.Should().Contain(" exec ");
         commandLine.Should().Contain(" --color ");
         commandLine.Should().Contain(" never ");
-        commandLine.Should().Contain(" --full-auto ");
+        commandLine.Should().Contain(" --approve-for-me ");
+        commandLine.Should().NotContain(" --full-auto ");
         commandLine.Should().NotContain(" resume ");
         commandLine.Should().NotContain(" read-only ");
     }
@@ -69,7 +70,8 @@ public sealed class CodexCliCommandBuilderTests
         commandLine.Should().Contain("codex");
         commandLine.Should().Contain("-m");
         commandLine.Should().Contain("gpt-5");
-        commandLine.Should().Contain("--full-auto");
+        commandLine.Should().Contain("--approve-for-me");
+        commandLine.Should().NotContain("--full-auto");
         commandLine.Should().Contain("\"check completed-chats first\"");
     }
 

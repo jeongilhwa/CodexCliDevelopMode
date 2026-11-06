@@ -1195,13 +1195,13 @@ public partial class MainPage : ContentPage
 
             if (string.IsNullOrEmpty(body))
             {
-                return string.Empty;
+                return string.Empty;                                                                                                                                  
             }
 
             if (!IsLikelyTextMimeType(mimeType))
             {
                 return $"[base64:{body.Length}]";
-            }
+            }                                              
 
             try
             {
@@ -1344,6 +1344,38 @@ public partial class MainPage : ContentPage
 
                 case BrowserCommandType.Reload:
                     BrowserWebView.Reload();
+                    break;
+
+                case BrowserCommandType.Back:
+                    if (BrowserWebView.CanGoBack)
+                    {
+                        BrowserWebView.GoBack();
+                    }
+                    break;
+
+                case BrowserCommandType.Forward:
+                    if (BrowserWebView.CanGoForward)
+                    {
+                        BrowserWebView.GoForward();
+                    }
+                    break;
+
+                case BrowserCommandType.EnableNetworkCapture:
+#if WINDOWS
+                    _webViewNetworkCaptureEnabled = true;
+                    await ApplyWebViewNetworkCaptureModeAsync(enabled: true);
+#else
+                    _browserState.SetStatus("Network capture is only available on Windows WebView2.");
+#endif
+                    break;
+
+                case BrowserCommandType.DisableNetworkCapture:
+#if WINDOWS
+                    _webViewNetworkCaptureEnabled = false;
+                    await ApplyWebViewNetworkCaptureModeAsync(enabled: false);
+#else
+                    _browserState.SetStatus("Network capture is only available on Windows WebView2.");
+#endif
                     break;
 
                 case BrowserCommandType.ApplyUserAgent:

@@ -124,6 +124,33 @@ public class BrowserStateService
         CommandRequested?.Invoke(new BrowserCommand(BrowserCommandType.Reload));
     }
 
+    /// <summary>Requests browser back navigation from the native host.</summary>
+    public void RequestBack()
+    {
+        _status = "Navigating back.";
+        NotifyStateChanged();
+        CommandRequested?.Invoke(new BrowserCommand(BrowserCommandType.Back));
+    }
+
+    /// <summary>Requests browser forward navigation from the native host.</summary>
+    public void RequestForward()
+    {
+        _status = "Navigating forward.";
+        NotifyStateChanged();
+        CommandRequested?.Invoke(new BrowserCommand(BrowserCommandType.Forward));
+    }
+
+    /// <summary>Requests native WebView network capture mode to change.</summary>
+    public void RequestNetworkCapture(bool enabled)
+    {
+        _status = enabled
+            ? "Turning network capture on."
+            : "Turning network capture off.";
+        NotifyStateChanged();
+        CommandRequested?.Invoke(new BrowserCommand(
+            enabled ? BrowserCommandType.EnableNetworkCapture : BrowserCommandType.DisableNetworkCapture));
+    }
+
     /// <summary>Updates the browser status and optionally the current URL.</summary>
     /// <param name="status">The status message to expose.</param>
     /// <param name="currentUrl">An optional current URL.</param>
@@ -239,5 +266,13 @@ public enum BrowserCommandType
     /// <summary>Reload the current page.</summary>
     Reload,
     /// <summary>Apply the saved User-Agent and reload the current page.</summary>
-    ApplyUserAgent
+    ApplyUserAgent,
+    /// <summary>Navigate back in the native browser if possible.</summary>
+    Back,
+    /// <summary>Navigate forward in the native browser if possible.</summary>
+    Forward,
+    /// <summary>Enable native WebView network capture.</summary>
+    EnableNetworkCapture,
+    /// <summary>Disable native WebView network capture.</summary>
+    DisableNetworkCapture
 }

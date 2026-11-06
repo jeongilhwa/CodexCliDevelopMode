@@ -31,7 +31,7 @@ internal static class CodexCliCommandBuilder
 
         if (request.AllowWorkspaceWrite)
         {
-            args.Add("--full-auto");
+            AddWorkspaceWriteApprovalArgs(args);
         }
         else
         {
@@ -67,7 +67,7 @@ internal static class CodexCliCommandBuilder
 
         if (allowWorkspaceWrite)
         {
-            arguments.Add("--full-auto");
+            AddWorkspaceWriteApprovalArgs(arguments);
         }
 
         if (!string.IsNullOrWhiteSpace(threadId))
@@ -114,6 +114,11 @@ internal static class CodexCliCommandBuilder
         }
 
         return $"\"{value.Replace("\"", "\\\"")}\"";
+    }
+
+    private static void AddWorkspaceWriteApprovalArgs(List<string> args)
+    {
+        args.Add("--approve-for-me");
     }
 }
 
