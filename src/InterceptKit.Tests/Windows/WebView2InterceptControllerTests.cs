@@ -251,6 +251,56 @@ public sealed class WebView2InterceptControllerTests
     }
 
     [TestMethod]
+    public async Task InstagramOneTapRedirect_IsImmediatelyForwardedWithoutCreatingPendingSession()
+    {
+        var store = new InterceptSessionStore();
+        var adapter = new FakePlatformAdapter();
+        var controller = new WebView2InterceptController(store, adapter);
+
+        await controller.SetEnabledAsync(true);
+        adapter.RaiseRequestPaused(
+            """
+            {
+              "requestId":"fetch-onetap",
+              "resourceType":"Document",
+              "request":{
+                "method":"GET",
+                "url":"https://www.instagram.com/accounts/onetap/?lsrc=ci",
+                "headers":{}
+              }
+            }
+            """);
+
+        adapter.ForwardedRequestIds.Should().Contain("fetch-onetap");
+        store.GetPendingSessions().Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task InstagramLoginMutation_IsImmediatelyForwardedWithoutCreatingPendingSession()
+    {
+        var store = new InterceptSessionStore();
+        var adapter = new FakePlatformAdapter();
+        var controller = new WebView2InterceptController(store, adapter);
+
+        await controller.SetEnabledAsync(true);
+        adapter.RaiseRequestPaused(
+            """
+            {
+              "requestId":"fetch-login",
+              "resourceType":"XHR",
+              "request":{
+                "method":"POST",
+                "url":"https://www.instagram.com/api/graphql",
+                "headers":{"X-FB-Friendly-Name":"useCDSWebLoginMutation"}
+              }
+            }
+            """);
+
+        adapter.ForwardedRequestIds.Should().Contain("fetch-login");
+        store.GetPendingSessions().Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task ForwardDecision_RemovesPendingSessionBeforeAdapterCompletes()
     {
         var store = new InterceptSessionStore();

@@ -42,6 +42,7 @@ public partial class MainPage : ContentPage
                     _ = EnsureWebViewInterceptAttachedAsync(webView2.CoreWebView2);
                     AttachWebViewNewWindowHandler(webView2.CoreWebView2);
                     AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
+                    _ = EnsureInstagramLoginRedirectFallbackScriptRegisteredAsync(webView2.CoreWebView2);
                     _ = EnsureWebViewInspectorScriptRegisteredAsync(webView2.CoreWebView2);
                     _ = ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
                     _ = ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
@@ -67,6 +68,7 @@ public partial class MainPage : ContentPage
         _browserState.SetStatus("WebView2 is ready.");
         AttachWebViewNewWindowHandler(sender.CoreWebView2);
         AttachWebViewKeyboardDebugHandlers(sender.CoreWebView2);
+        _ = EnsureInstagramLoginRedirectFallbackScriptRegisteredAsync(sender.CoreWebView2);
         _ = EnsureWebViewInspectorScriptRegisteredAsync(sender.CoreWebView2);
         _ = ApplyWebViewInspectorModeAsync(_webViewInspectorModeEnabled);
         _ = ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
@@ -91,10 +93,16 @@ public partial class MainPage : ContentPage
         {
             var target = string.IsNullOrWhiteSpace(e.Uri) ? _browserState.CurrentUrl : e.Uri;
             e.Handled = true;
-            _ = MainThread.InvokeOnMainThreadAsync(async () =>
+            _ = MainThread.InvokeOnMainThreadAsync(() =>
             {
-                await _browserState.NavigateAsync(target);
-                _browserState.SetStatus("New window request was opened in the current WebView.", target);
+                // Keep OAuth/OneTap redirects in the existing CoreWebView2 profile.
+                // Replacing the MAUI WebView Source here can interrupt the cookie
+                // handoff that the authentication provider initiated.
+                if (sender is CoreWebView2 coreWebView2)
+                {
+                    coreWebView2.Navigate(target);
+                    _browserState.SetStatus("New window request was opened in the current WebView.", target);
+                }
             });
         }
         catch (Exception ex)
@@ -128,6 +136,18 @@ public partial class MainPage : ContentPage
                 }, true);
             })();
             """);
+    }
+
+    private async Task EnsureInstagramLoginRedirectFallbackScriptRegisteredAsync(CoreWebView2 coreWebView2)
+    {
+        if (_webViewInstagramLoginRedirectScriptRegistered)
+        {
+            return;
+        }
+
+        _webViewInstagramLoginRedirectScriptRegistered = true;
+        await coreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+            InstagramLoginRedirectScriptBuilder.Build());
     }
 
     private void OnWebViewMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)

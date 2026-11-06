@@ -192,6 +192,15 @@ public sealed class WebView2InterceptController : IWebViewInterceptController, I
 
     private bool ShouldIntercept(WebView2PausedRequest pausedRequest)
     {
+        // Authentication redirects must finish without waiting for a user decision.
+        // Providers commonly rotate cookies while navigating through these endpoints;
+        // pausing even one document or login mutation can leave the WebView at the
+        // logged-out page after the credentials were accepted.
+        if (IsAuthenticationFlow(pausedRequest.Request))
+        {
+            return false;
+        }
+
         if (!Options.InterceptRequests)
         {
             return false;
@@ -208,6 +217,33 @@ public sealed class WebView2InterceptController : IWebViewInterceptController, I
         }
 
         return Options.IncludedResourceTypes.Contains(pausedRequest.ResourceType);
+    }
+
+    private static bool IsAuthenticationFlow(InterceptedRequest request)
+    {
+        if (!Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) ||
+            (!uri.Host.Equals("instagram.com", StringComparison.OrdinalIgnoreCase) &&
+              !uri.Host.EndsWith(".instagram.com", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        if (uri.AbsolutePath.StartsWith("/accounts/onetap", StringComparison.OrdinalIgnoreCase) ||
+            uri.AbsolutePath.StartsWith("/accounts/login", StringComparison.OrdinalIgnoreCase) ||
+            uri.AbsolutePath.StartsWith("/challenge", StringComparison.OrdinalIgnoreCase) ||
+            uri.AbsolutePath.StartsWith("/checkpoint", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!uri.AbsolutePath.Equals("/api/graphql", StringComparison.OrdinalIgnoreCase) ||
+            !request.Headers.TryGetValue("X-FB-Friendly-Name", out var friendlyName))
+        {
+            return false;
+        }
+
+        return friendlyName.Equals("useCDSWebLoginMutation", StringComparison.OrdinalIgnoreCase) ||
+               friendlyName.Equals("CAAFetaAYMHPasswordEntryQuery", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsTemporaryPassThroughActive()

@@ -167,6 +167,7 @@ public partial class MainPage : ContentPage
     private bool _webViewNetworkDomainEnabled;
     private bool _webViewNewWindowHandlerAttached;
     private bool _webViewInspectorScriptRegistered;
+    private bool _webViewInstagramLoginRedirectScriptRegistered;
     private bool _savedDomainCookieSnapshotsRestored;
     private CoreWebView2? _networkReceiversAttachedCore;
     private CoreWebView2DevToolsProtocolEventReceiver? _networkRequestWillBeSentReceiver;
