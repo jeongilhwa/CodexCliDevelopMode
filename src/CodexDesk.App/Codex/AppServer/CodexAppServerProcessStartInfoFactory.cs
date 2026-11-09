@@ -1,10 +1,13 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace CodexDesk.AppServer;
 
 /// <summary>Builds the isolated stdio process configuration for Codex app-server.</summary>
 public sealed class CodexAppServerProcessStartInfoFactory : ICodexAppServerProcessStartInfoFactory
 {
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
     /// <inheritdoc />
     public ProcessStartInfo Create(CodexAppServerOptions options)
     {
@@ -28,7 +31,10 @@ public sealed class CodexAppServerProcessStartInfoFactory : ICodexAppServerProce
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardInputEncoding = Utf8NoBom,
+            StandardOutputEncoding = Utf8NoBom,
+            StandardErrorEncoding = Utf8NoBom
         };
 
         startInfo.ArgumentList.Add("app-server");

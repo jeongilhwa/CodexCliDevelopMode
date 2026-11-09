@@ -49,7 +49,7 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
         {
             await SendRequestAsync("initialize", new
             {
-                clientInfo = new { name = options.ClientName, title = options.ClientTitle, version = options.ClientVersion },
+                clientInfo = new { name = options.ClientName, title = options.ClientTitle, version = options.ClientVersion },                                
                 capabilities = new { }
             }, cancellationToken).ConfigureAwait(false);
             await SendNotificationAsync("initialized", new { }, cancellationToken).ConfigureAwait(false);
