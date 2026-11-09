@@ -1,4 +1,11 @@
 using System.Text.Json;
+using System.Reflection;
+using CodexDesk.Components.Pages;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.RenderTree;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.JSInterop;
 using CodexDesk.AppServer;
 using CodexDesk.Models;
 using CodexDesk.Services;
@@ -9,6 +16,89 @@ namespace CodexDesk.Tests.Codex.AppServer;
 [TestClass]
 public sealed class CodexAppServerChatServiceTests
 {
+    [TestMethod]
+    public async Task ResolveApprovalAsync_rejection_from_the_chat_modal_should_decline_without_starting_another_turn()
+    {
+        var client = new FakeClient();
+        using var service = new CodexAppServerChatService(client);
+        using var services = ChatServices(service);
+        await using var renderer = new ChatRenderer(services);
+        var home = await renderer.MountAsync();
+        var tab = GetProperty(home, "ActiveTab");
+        SetProperty(tab, "ThreadId", "thread-1");
+        SetProperty(tab, "IsBusy", true);
+
+        client.Request(42, "item/commandExecution/requestApproval", new { threadId = "thread-1", turnId = "turn-1", reason = "Run validation", command = "dotnet test" });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+        GetProperty(tab, "IsApprovalModalOpen").Should().Be(true);
+
+        await renderer.Dispatcher.InvokeAsync(() => InvokeHomeAsync(home, "RejectApprovalAsync"));
+
+        client.Responses.Should().ContainSingle();
+        client.Responses[0].Id.Should().Be(42);
+        client.Responses[0].Result.GetRawText().Should().Be("{\"decision\":\"decline\"}");
+        client.Calls.Should().BeEmpty("rejecting an approval must not start a chat turn or process");
+        GetProperty(tab, "IsBusy").Should().Be(true, "the original turn continues until a terminal event");
+        GetProperty(tab, "IsApprovalModalOpen").Should().Be(false);
+    }
+
+    [TestMethod]
+    public async Task Chat_send_should_stream_into_one_message_and_stop_through_the_existing_thread()
+    {
+        var client = new FakeClient();
+        using var service = new CodexAppServerChatService(client);
+        using var services = ChatServices(service);
+        await using var renderer = new ChatRenderer(services);
+        var home = await renderer.MountAsync();
+        var tab = GetProperty(home, "ActiveTab");
+        SetProperty(tab, "DraftMessage", "Hello");
+        await renderer.Dispatcher.InvokeAsync(() => InvokeHomeAsync(home, "SendAsync"));
+
+        client.Calls.Should().Contain("turn/start:thread-new:Hello");
+        GetProperty(tab, "IsBusy").Should().Be(true);
+        client.Notify("item/agentMessage/delta", new { threadId = "thread-new", turnId = "turn-new", itemId = "message-1", delta = "Hello " });
+        client.Notify("item/agentMessage/delta", new { threadId = "thread-new", turnId = "turn-new", itemId = "message-1", delta = "world" });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+
+        var messages = (IList<ChatMessage>)GetProperty(tab, "Messages");
+        messages.Where(m => m.Role == "assistant").Should().ContainSingle().Which.Content.Should().Be("Hello world");
+        await renderer.Dispatcher.InvokeAsync(() => InvokeHomeAsync(home, "CancelRun"));
+        client.Calls.Last().Should().Be("turn/interrupt:thread-new");
+        GetProperty(tab, "IsBusy").Should().Be(true, "Stop waits for server confirmation");
+        client.Notify("turn/completed", new { threadId = "thread-new", turn = new { id = "turn-new", status = "interrupted" } });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+
+        GetProperty(tab, "IsBusy").Should().Be(false);
+        messages.Should().Contain(m => m.Role == "system" && m.Content.Contains("interrupted"));
+    }
+
+    [TestMethod]
+    public async Task Chat_approval_acceptance_and_failure_should_update_the_modal_and_transcript()
+    {
+        var client = new FakeClient();
+        using var service = new CodexAppServerChatService(client);
+        using var services = ChatServices(service);
+        await using var renderer = new ChatRenderer(services);
+        var home = await renderer.MountAsync();
+        var tab = GetProperty(home, "ActiveTab");
+        SetProperty(tab, "DraftMessage", "Hello");
+        await renderer.Dispatcher.InvokeAsync(() => InvokeHomeAsync(home, "SendAsync"));
+        client.Request(99, "item/fileChange/requestApproval", new { threadId = "thread-new", turnId = "turn-new", itemId = "file-1", reason = "Edit source" });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+        GetProperty(tab, "IsApprovalModalOpen").Should().Be(true);
+        await renderer.Dispatcher.InvokeAsync(() => InvokeHomeAsync(home, "SelectApprovalOptionAsync", "accept"));
+
+        client.Responses.Should().ContainSingle();
+        client.Responses[0].Result.GetProperty("decision").GetString().Should().Be("accept");
+        GetProperty(tab, "IsApprovalModalOpen").Should().Be(false);
+        client.Notify("turn/completed", new { threadId = "thread-new", turn = new { id = "turn-new", status = "failed", error = new { message = "Model unavailable" } } });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+
+        GetProperty(tab, "IsBusy").Should().Be(false);
+        ((IList<ChatMessage>)GetProperty(tab, "Messages")).Should().Contain(m => m.IsError && m.Content == "Model unavailable");
+        client.Calls.Count(c => c.StartsWith("turn/start:")).Should().Be(1);
+    }
+
     [TestMethod]
     public async Task New_requests_should_start_one_process_and_keep_threads_available_for_follow_up_turns()
     {
@@ -174,6 +264,36 @@ public sealed class CodexAppServerChatServiceTests
     }
 
     private static CodexChatRequest Request(string? threadId = null) => new("Hello", "D:\\workspace", "codex-test", "gpt-test", threadId, true);
+
+    private static object GetProperty(object target, string name) => target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(target)!;
+    private static void SetProperty(object target, string name, object value) => target.GetType().GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(target, value);
+    private static Task InvokeHomeAsync(Home home, string name, params object[] args) => (Task)typeof(Home).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(home, args)!;
+
+    private static ServiceProvider ChatServices(CodexAppServerChatService service) => new ServiceCollection().AddLogging()
+        .AddSingleton(service).AddSingleton<CodexInteractiveChatService>()
+        .AddSingleton<CodexPromptMacroService>().AddSingleton<BrowserStateService>()
+        .AddSingleton<IJSRuntime, UnusedJsRuntime>().BuildServiceProvider();
+
+#pragma warning disable BL0006 // Test renderer hosts the real Razor component without a native MAUI window.
+    private sealed class ChatRenderer(IServiceProvider services) : Renderer(services, services.GetRequiredService<ILoggerFactory>())
+    {
+        public override Microsoft.AspNetCore.Components.Dispatcher Dispatcher { get; } = Microsoft.AspNetCore.Components.Dispatcher.CreateDefault();
+        protected override void HandleException(Exception exception) => throw exception;
+        protected override Task UpdateDisplayAsync(in RenderBatch renderBatch) => Task.CompletedTask;
+        public Task<Home> MountAsync() => Dispatcher.InvokeAsync(async () =>
+        {
+            var home = (Home)InstantiateComponent(typeof(Home));
+            await RenderRootComponentAsync(AssignRootComponentId(home));
+            return home;
+        });
+    }
+#pragma warning restore BL0006
+
+    private sealed class UnusedJsRuntime : IJSRuntime
+    {
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, object?[]? args) => throw new NotSupportedException();
+        public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object?[]? args) => throw new NotSupportedException();
+    }
 
     private static List<CodexAppServerChatEvent> Collect(CodexAppServerChatService service)
     {

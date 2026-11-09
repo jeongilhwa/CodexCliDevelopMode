@@ -2,6 +2,7 @@
 
 @implements IDisposable
 @inject CodexInteractiveChatService CodexCli
+@inject CodexAppServerChatService CodexChat
 @inject CodexPromptMacroService CodexPromptMacroService
 @inject BrowserStateService BrowserState
 @inject IJSRuntime JS
@@ -14,7 +15,7 @@
             <p class="eyebrow">Windows-only MAUI Blazor shell</p>
             <h1>CodexDesk</h1>
             <p class="lede">
-                <code>codex exec</code>와 <code>codex exec resume</code>를 감싸서 별도 UI에서 Codex와 대화할 수 있게 만든 최소 시작점입니다.
+                Codex와 대화하고 응답과 승인 요청을 앱 안에서 바로 확인할 수 있습니다.
                 작업 폴더, 모델, 실행 모드를 바꿔가며 로컬 에이전트처럼 사용할 수 있습니다.
             </p>
         </div>
@@ -57,7 +58,7 @@
         <div class="panel chat-panel">
             <div class="panel-header">
                 <h2>Conversation</h2>
-                <p>첫 메시지는 <code>exec</code>, 이후에는 같은 thread id로 <code>resume</code>을 사용합니다.</p>
+                <p>같은 대화에서 이어서 질문하고 응답을 실시간으로 확인하세요.</p>
             </div>
 
             <div class="tab-bar">
@@ -142,6 +143,10 @@
 
                 <div class="button-row">
                     <button type="button" class="primary" @onclick="SendAsync" disabled="@ActiveTab.IsBusy">Send</button>
+                    @if (ActiveTab.IsBusy)
+                    {
+                        <button type="button" class="ghost" @onclick="CancelRun">Stop</button>
+                    }
                 </div>
             </div>
         </div>
@@ -358,15 +363,17 @@
             <section class="approval-modal panel" @onclick:stopPropagation="true">
                 <div class="panel-header">
                     <h2>Approval Required</h2>
-                    <p>@ActiveTab.PendingApprovalRequest.Prompt</p>
+                    <p>@(ActiveTab.PendingApprovalRequest.Reason ?? ActiveTab.PendingApprovalRequest.Kind.ToString())</p>
+                    @if (!string.IsNullOrWhiteSpace(ActiveTab.PendingApprovalRequest.Command))
+                    {
+                        <pre>@ActiveTab.PendingApprovalRequest.Command</pre>
+                    }
+                    <p>@(ActiveTab.PendingApprovalRequest.WorkingDirectory ?? ActiveTab.PendingApprovalRequest.GrantRoot)</p>
                 </div>
 
                 <div class="button-row">
-                    @foreach (var option in ActiveTab.PendingApprovalRequest.Options)
-                    {
-                        <button type="button" class="primary" @onclick="() => SelectApprovalOptionAsync(option.Value)">@option.Label</button>
-                    }
-                    <button type="button" class="ghost" @onclick="RejectApprovalAsync">Reject</button>
+                    <button type="button" class="primary" @onclick='() => SelectApprovalOptionAsync("accept")' disabled="@ActiveTab.IsResolvingApproval">Approve</button>
+                    <button type="button" class="ghost" @onclick="RejectApprovalAsync" disabled="@ActiveTab.IsResolvingApproval">Reject</button>
                 </div>
             </section>
         </div>
@@ -377,6 +384,9 @@
     private int _tabCounter;
     private List<ChatTab> _tabs = new();
     private string _activeTabId = string.Empty;
+    private readonly SemaphoreSlim _turnStartLock = new(1, 1);
+    private ChatTab? _startingTab;
+    private bool _disposed;
 
     private ChatTab ActiveTab => _tabs.FirstOrDefault(t => t.Id == _activeTabId) ?? _tabs[0];
 
@@ -439,6 +449,7 @@
         CodexPromptMacroService.Load();
         CodexPromptMacros = CodexPromptMacroService.Macros.ToList();
         AddNewTab();
+        CodexChat.EventReceived += OnChatEventReceived;
     }
 
     private async Task SaveBrowserUserAgentAsync()
@@ -494,10 +505,16 @@
         tab.BusyStartedAt = DateTimeOffset.Now;
         StartLoadingIndicator();
         tab.RunCts = new CancellationTokenSource();
+        tab.PendingAssistantIndex = null;
+        tab.TurnId = null;
 
         try
         {
-            var result = await CodexCli.SendAsync(
+            await _turnStartLock.WaitAsync(tab.RunCts.Token);
+            try
+            {
+                _startingTab = tab;
+                tab.ThreadId = await CodexChat.StartTurnAsync(
                 new CodexChatRequest(
                     prompt,
                     WorkspacePath.Trim(),
@@ -506,33 +523,103 @@
                     tab.ThreadId,
                     AllowWorkspaceWrite),
                 tab.RunCts.Token);
-
-            tab.ThreadId = result.ThreadId ?? tab.ThreadId;
-            if (result.PendingApproval is not null)
-            {
-                tab.PendingApprovalRequest = result.PendingApproval;
-                tab.IsApprovalModalOpen = true;
-
-                if (!string.IsNullOrWhiteSpace(result.Message))
-                {
-                    tab.Messages.Add(ChatMessage.System($"Approval requested: {result.Message}"));
-                }
-
-                return;
             }
-
-            tab.Messages.Add(result.Success ? ChatMessage.Assistant(result.Message) : ChatMessage.Error(result.Message));
+            finally
+            {
+                _startingTab = null;
+                _turnStartLock.Release();
+            }
         }
-        finally
+        catch (OperationCanceledException)
         {
-            tab.IsBusy = false;
-            tab.BusyStartedAt = null;
-            StopLoadingIndicatorIfIdle();
-            tab.RunCts?.Dispose();
-            tab.RunCts = null;
+            if (tab.IsBusy)
+            {
+                tab.Messages.Add(ChatMessage.System("Turn cancelled before it started."));
+                FinishTurn(tab);
+            }
+        }
+        catch (Exception exception)
+        {
+            // The service may already have published a failure for this same request.
+            if (tab.IsBusy)
+            {
+                tab.Messages.Add(ChatMessage.Error(exception.Message));
+                FinishTurn(tab);
+            }
         }
     }
 
+    private void OnChatEventReceived(object? sender, CodexAppServerChatEvent notification)
+    {
+        // ThreadReady is raised before StartTurnAsync returns, so capture the initiating tab now.
+        var startingTab = notification.Kind == CodexAppServerChatEventKind.ThreadReady || string.IsNullOrEmpty(notification.ThreadId)
+            ? _startingTab
+            : null;
+        if (_disposed) return;
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            var tab = startingTab ?? _tabs.FirstOrDefault(t => t.ThreadId == notification.ThreadId);
+            if (tab is null || !_tabs.Contains(tab)) return;
+            if (notification.Kind == CodexAppServerChatEventKind.ThreadReady)
+            {
+                tab.ThreadId = notification.ThreadId;
+            }
+            else if (notification.Kind == CodexAppServerChatEventKind.TurnStarted)
+            {
+                if (tab.IsBusy) tab.TurnId = notification.TurnId;
+            }
+            else if (tab.IsBusy && (tab.TurnId is null || notification.TurnId is null || tab.TurnId == notification.TurnId))
+            {
+                switch (notification.Kind)
+                {
+                    case CodexAppServerChatEventKind.AssistantDelta:
+                        if (tab.PendingAssistantIndex is not { } index)
+                        {
+                            tab.PendingAssistantIndex = tab.Messages.Count;
+                            tab.Messages.Add(ChatMessage.Assistant(notification.Text ?? string.Empty));
+                        }
+                        else
+                        {
+                            var message = tab.Messages[index];
+                            tab.Messages[index] = message with { Content = message.Content + notification.Text };
+                        }
+                        break;
+                    case CodexAppServerChatEventKind.ApprovalRequired:
+                        if (notification.Approval is { } approval && !tab.PendingApprovals.Any(a => a.Id == approval.Id))
+                            tab.PendingApprovals.Add(approval);
+                        break;
+                    case CodexAppServerChatEventKind.ApprovalResolved:
+                        var resolved = tab.PendingApprovals.FirstOrDefault(a => a.Id == notification.Approval?.Id);
+                        if (resolved is not null) tab.PendingApprovals.Remove(resolved);
+                        break;
+                    case CodexAppServerChatEventKind.TurnFailed:
+                        tab.Messages.Add(ChatMessage.Error(notification.Text ?? "Codex could not complete this turn."));
+                        FinishTurn(tab);
+                        break;
+                    case CodexAppServerChatEventKind.TurnInterrupted:
+                        tab.Messages.Add(ChatMessage.System("Turn interrupted."));
+                        FinishTurn(tab);
+                        break;
+                    case CodexAppServerChatEventKind.TurnCompleted:
+                        FinishTurn(tab);
+                        break;
+                }
+            }
+            StateHasChanged();
+        });
+    }
+
+    private void FinishTurn(ChatTab tab)
+    {
+        tab.IsBusy = false;
+        tab.BusyStartedAt = null;
+        tab.PendingAssistantIndex = null;
+        tab.PendingApprovals.Clear();
+        tab.RunCts?.Dispose();
+        tab.RunCts = null;
+        StopLoadingIndicatorIfIdle();
+    }
 
     private async Task HandlePromptKeyDown(KeyboardEventArgs e)
     {
@@ -927,24 +1014,27 @@
     private async Task SelectApprovalOptionAsync(string selectedValue)
     {
         var tab = ActiveTab;
-        tab.IsApprovalModalOpen = false;
-        tab.PendingApprovalRequest = null;
-        tab.Messages.Add(ChatMessage.System($"Approval selected: {selectedValue}"));
-        await SendPromptAsync(selectedValue, addAsUserMessage: false, tab);
+        if (tab.PendingApprovalRequest is not { } approval || tab.IsResolvingApproval) return;
+        tab.IsResolvingApproval = true;
+        try
+        {
+            await CodexChat.ResolveApprovalAsync(approval.Id, selectedValue);
+            tab.PendingApprovals.Remove(approval);
+            tab.Messages.Add(ChatMessage.System(selectedValue == "accept" ? "Approval accepted." : "Approval rejected."));
+        }
+        catch (Exception exception)
+        {
+            tab.Messages.Add(ChatMessage.Error(exception.Message));
+        }
+        finally
+        {
+            tab.IsResolvingApproval = false;
+        }
     }
 
     private async Task RejectApprovalAsync()
     {
-        var tab = ActiveTab;
-        if (!tab.IsApprovalModalOpen)
-        {
-            return;
-        }
-
-        tab.IsApprovalModalOpen = false;
-        tab.PendingApprovalRequest = null;
-        tab.Messages.Add(ChatMessage.System("Approval rejected."));
-        await SendPromptAsync("n", addAsUserMessage: false, tab);
+        await SelectApprovalOptionAsync("reject");
     }
 
     private async Task AddCodexPromptMacroAsync()
@@ -1194,19 +1284,34 @@
         }
     }
 
-    private void CancelRun()
+    private Task CancelRun() => InterruptTabAsync(ActiveTab);
+
+    private async Task InterruptTabAsync(ChatTab tab)
     {
-        ActiveTab.RunCts?.Cancel();
+        if (!tab.IsBusy) return;
+        try
+        {
+            if (tab.ThreadId is { } threadId)
+                await CodexChat.InterruptAsync(threadId);
+            else
+                tab.RunCts?.Cancel();
+        }
+        catch (Exception exception)
+        {
+            tab.Messages.Add(ChatMessage.Error(exception.Message));
+        }
     }
 
     public void Dispose()
     {
+        _disposed = true;
+        CodexChat.EventReceived -= OnChatEventReceived;
         CodexPromptMacroService.KeyObserved -= OnMacroKeyObserved;
         CodexPromptMacroService.PromptRequested -= OnExternalPromptRequested;
         _loadingIndicatorTimer?.Dispose();
         foreach (var tab in _tabs)
         {
-            tab.RunCts?.Cancel();
+            if (tab.IsBusy) _ = InterruptTabAsync(tab);
             tab.RunCts?.Dispose();
         }
     }
@@ -1261,7 +1366,7 @@
         }
     }
 
-    private void CloseTab(string tabId)
+    private async Task CloseTab(string tabId)
     {
         if (_tabs.Count <= 1)
         {
@@ -1276,7 +1381,7 @@
 
         if (tab.IsBusy)
         {
-            tab.RunCts?.Cancel();
+            await InterruptTabAsync(tab);
         }
 
         tab.RunCts?.Dispose();
@@ -1312,13 +1417,17 @@
         public int TabNumber { get; }
         public string Title { get; set; } = string.Empty;
         public string? ThreadId { get; set; }
+        public string? TurnId { get; set; }
+        public int? PendingAssistantIndex { get; set; }
         public IList<ChatMessage> Messages { get; } = new List<ChatMessage>();
         public string DraftMessage { get; set; } = string.Empty;
         public string PendingPromptNotice { get; set; } = string.Empty;
         public bool IsBusy { get; set; }
         public DateTimeOffset? BusyStartedAt { get; set; }
         public CancellationTokenSource? RunCts { get; set; }
-        public bool IsApprovalModalOpen { get; set; }
-        public CodexApprovalRequest? PendingApprovalRequest { get; set; }
+        public IList<CodexAppServerApproval> PendingApprovals { get; } = new List<CodexAppServerApproval>();
+        public bool IsApprovalModalOpen => PendingApprovalRequest is not null;
+        public CodexAppServerApproval? PendingApprovalRequest => PendingApprovals.FirstOrDefault();
+        public bool IsResolvingApproval { get; set; }
     }
 }
