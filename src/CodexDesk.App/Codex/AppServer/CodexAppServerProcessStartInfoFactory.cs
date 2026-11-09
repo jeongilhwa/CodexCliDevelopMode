@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 
 namespace CodexDesk.AppServer;
 
@@ -29,9 +28,6 @@ public sealed class CodexAppServerProcessStartInfoFactory : ICodexAppServerProce
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            StandardInputEncoding = Encoding.UTF8,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
             CreateNoWindow = true
         };
 

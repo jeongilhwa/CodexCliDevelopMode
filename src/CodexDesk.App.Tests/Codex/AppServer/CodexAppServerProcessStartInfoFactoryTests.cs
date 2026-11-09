@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using FluentAssertions;
 
 namespace CodexDesk.Tests.Codex.AppServer;
@@ -32,9 +31,6 @@ public sealed class CodexAppServerProcessStartInfoFactoryTests
         startInfo.RedirectStandardInput.Should().BeTrue();
         startInfo.RedirectStandardOutput.Should().BeTrue();
         startInfo.RedirectStandardError.Should().BeTrue();
-        startInfo.StandardInputEncoding.Should().Be(Encoding.UTF8);
-        startInfo.StandardOutputEncoding.Should().Be(Encoding.UTF8);
-        startInfo.StandardErrorEncoding.Should().Be(Encoding.UTF8);
         startInfo.ArgumentList.Should().ContainInOrder("app-server", "--listen", "stdio://");
     }
 }
