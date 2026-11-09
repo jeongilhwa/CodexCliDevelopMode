@@ -1,9 +1,44 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject WorkspaceNavigationService WorkspaceNavigation
 
-<div class="shell-frame">
-    <div class="ambient ambient-one"></div>
-    <div class="ambient ambient-two"></div>
-    <main class="shell-main">
-        @Body
-    </main>
+<div class="prototype-shell main-content-host">
+    <aside class="prototype-sidebar" aria-label="CodexDesk navigation">
+        <div class="prototype-brand"><span class="prototype-brand-mark">✦</span><strong>CodexDesk</strong><span class="prototype-chip">Prototype</span></div>
+        <button class="prototype-workspace-switcher" type="button"><span class="prototype-avatar">C</span><span><strong>Local workspace</strong><small>Ready to connect</small></span><span class="prototype-caret">⌄</span></button>
+        <nav class="prototype-nav" aria-label="Primary navigation">
+            <NavLink class="prototype-nav-item" href="/overview"><span>⌂</span>Overview</NavLink>
+            <NavLink class="prototype-nav-item" href="/chat"><span>◌</span>Codex chat <b>3</b></NavLink>
+            <a class="prototype-nav-item" href="/browser" @onclick="OpenBrowser" @onclick:preventDefault><span>◫</span>Browser</a>
+            <a class="prototype-nav-item" href="/network-captures" @onclick="OpenNetworkCaptures" @onclick:preventDefault><span>⌁</span>Network captures</a>
+            <button class="prototype-nav-item" type="button"><span>⌘</span>Prompt library</button>
+        </nav>
+        <div class="prototype-sidebar-footer"><button class="prototype-nav-item" type="button"><span>⌕</span>Quick search <kbd>Ctrl K</kbd></button><button class="prototype-nav-item" type="button"><span>⚙</span>Settings</button><button class="prototype-nav-item" type="button"><span>?</span>Help</button></div>
+    </aside>
+    <section class="prototype-workspace">
+        <header class="prototype-topbar"><div><p>CODEX DESK / LOCAL AGENT</p><h1>Workspace</h1></div><div class="prototype-top-actions"><span class="prototype-status"><i></i>Ready for a new conversation</span><button type="button" aria-label="Settings">⚙</button><span class="prototype-avatar prototype-avatar-small">C</span></div></header>
+        <main class="prototype-page-content">@Body</main>
+    </section>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        WorkspaceNavigation.ContentRouteRequested += OnContentRouteRequested;
+    }
+
+    private void OpenBrowser() => WorkspaceNavigation.Request(WorkspaceDestination.Browser);
+
+    private void OpenNetworkCaptures() => WorkspaceNavigation.Request(WorkspaceDestination.NetworkCaptures);
+
+    private void OnContentRouteRequested(object? sender, string route)
+    {
+        _ = InvokeAsync(() => Navigation.NavigateTo(route));
+    }
+
+    public void Dispose()
+    {
+        WorkspaceNavigation.ContentRouteRequested -= OnContentRouteRequested;
+    }
+}

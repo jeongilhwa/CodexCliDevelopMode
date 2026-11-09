@@ -18,7 +18,9 @@ using UI = Microsoft.UI.Xaml;
 public partial class MainPage : ContentPage
 {
     private readonly BrowserStateService _browserState;
+    private readonly NetworkCaptureStateService _networkCaptureState;
     private readonly CodexPromptMacroService _codexPromptMacroService;
+    private readonly WorkspaceNavigationService _workspaceNavigation;
     private readonly WebView2InterceptController _webViewInterceptController;
     private readonly WebViewInterceptPanelState _webViewInterceptPanelState;
     private static readonly JsonSerializerOptions AppJsonOptions = new()
@@ -233,14 +235,19 @@ public partial class MainPage : ContentPage
 
     public MainPage(
         BrowserStateService browserState,
+        NetworkCaptureStateService networkCaptureState,
         CodexPromptMacroService codexPromptMacroService,
+        WorkspaceNavigationService workspaceNavigation,
         WebView2InterceptController webViewInterceptController,
         WebViewInterceptPanelState webViewInterceptPanelState)
     {
         InitializeComponent();
 
         _browserState = browserState;
+        _networkCaptureState = networkCaptureState;
         _codexPromptMacroService = codexPromptMacroService;
+        _workspaceNavigation = workspaceNavigation;
+        _workspaceNavigation.DestinationRequested += OnWorkspaceDestinationRequested;
         _webViewInterceptController = webViewInterceptController;
         _webViewInterceptPanelState = webViewInterceptPanelState;
         _browserState.StateChanged += OnBrowserStateChanged;
@@ -311,6 +318,16 @@ public partial class MainPage : ContentPage
         ApplyWorkspaceTab(tab);
     }
 
+    private void OnWorkspaceDestinationRequested(object? sender, WorkspaceDestination destination)
+    {
+        Dispatcher.Dispatch(() => ApplyWorkspaceTab(destination switch
+        {
+            WorkspaceDestination.Browser => WorkspaceTab.WebBrowser,
+            WorkspaceDestination.NetworkCaptures => WorkspaceTab.Codex,
+            _ => WorkspaceTab.Codex
+        }));
+    }
+
     private void ApplyWorkspaceTab(WorkspaceTab tab)
     {
         _activeWorkspaceTab = tab;
@@ -330,33 +347,33 @@ public partial class MainPage : ContentPage
             NetworkWorkspacePanel.IsVisible = tab == WorkspaceTab.NetworkCapture;
         }
 
-        ApplyTabStyle(
-            CodexTabBorder,
-            CodexTabIcon,
-            CodexTabTitleLabel,
-            CodexTabCountLabel,
+        ApplyNavigationStyle(
+            CodexNavigationBorder,
+            CodexNavigationIcon,
+            CodexNavigationTitleLabel,
+            CodexNavigationCountLabel,
             tab == WorkspaceTab.Codex,
             activeCount: "default",
-            inactiveCount: "tab");
-        ApplyTabStyle(
-            WebBrowserTabBorder,
-            WebBrowserTabIcon,
-            WebBrowserTabTitleLabel,
-            WebBrowserTabCountLabel,
+            inactiveCount: "");
+        ApplyNavigationStyle(
+            WebBrowserNavigationBorder,
+            WebBrowserNavigationIcon,
+            WebBrowserNavigationTitleLabel,
+            WebBrowserNavigationCountLabel,
             tab == WorkspaceTab.WebBrowser,
             activeCount: _webViewInterceptPanelState.CountText,
             inactiveCount: _webViewInterceptPanelState.CountText);
-        ApplyTabStyle(
-            NetworkCaptureTabBorder,
-            NetworkCaptureTabIcon,
-            NetworkCaptureTabTitleLabel,
-            NetworkCaptureTabCountLabel,
+        ApplyNavigationStyle(
+            NetworkCaptureNavigationBorder,
+            NetworkCaptureNavigationIcon,
+            NetworkCaptureNavigationTitleLabel,
+            NetworkCaptureNavigationCountLabel,
             tab == WorkspaceTab.NetworkCapture,
-            activeCount: "active",
-            inactiveCount: "tab");
+            activeCount: _webViewNetworkEntries.Count.ToString(CultureInfo.InvariantCulture),
+            inactiveCount: _webViewNetworkEntries.Count.ToString(CultureInfo.InvariantCulture));
     }
 
-    private static void ApplyTabStyle(
+    private static void ApplyNavigationStyle(
         Border? border,
         Border? iconBorder,
         Label? titleLabel,
@@ -368,29 +385,31 @@ public partial class MainPage : ContentPage
         if (border is not null)
         {
             border.BackgroundColor = isActive
-                ? Color.FromArgb("#F7FFFCF8")
-                : Color.FromArgb("#1120252C");
-            border.Stroke = isActive
-                ? Color.FromArgb("#12000000")
-                : Color.FromArgb("#10000000");
+                ? Color.FromArgb("#1F6780")
+                : Colors.Transparent;
+            border.Stroke = Colors.Transparent;
         }
 
         if (iconBorder is not null)
         {
-            iconBorder.BackgroundColor = Color.FromArgb("#1220252C");
+            iconBorder.BackgroundColor = isActive
+                ? Color.FromArgb("#33FFFFFF")
+                : Color.FromArgb("#1420252C");
         }
 
         if (titleLabel is not null)
         {
             titleLabel.TextColor = isActive
-                ? Color.FromArgb("#14232B")
-                : Color.FromArgb("#637780");
+                ? Colors.White
+                : Color.FromArgb("#516A74");
         }
 
         if (countLabel is not null)
         {
             countLabel.Text = isActive ? activeCount : inactiveCount;
-            countLabel.TextColor = Color.FromArgb("#61757E");
+            countLabel.TextColor = isActive
+                ? Color.FromArgb("#D6F2E7")
+                : Color.FromArgb("#70838B");
         }
     }
 
@@ -453,7 +472,7 @@ public partial class MainPage : ContentPage
         }
 
 #if WINDOWS
-        var buttonText = _webViewNetworkCaptureEnabled ? "Capture ON" : "Capture OFF";
+        var buttonText = _webViewNetworkCaptureEnabled ? "Stop capture" : "Start capture";
         var background = _webViewNetworkCaptureEnabled
             ? Color.FromArgb("#A95C00")
             : Color.FromArgb("#EEF3F6");
@@ -509,6 +528,14 @@ public partial class MainPage : ContentPage
         var shouldAutoScroll = _isNetworkListPinnedToBottom;
 
         NetworkCaptureListSupport.AppendEntry(_webViewNetworkEntries, entry, MaxWebViewNetworkEntries);
+        _networkCaptureState.Append(new NetworkCaptureRow(
+            entry.PathDisplay,
+            entry.StatusDisplay,
+            entry.MethodDisplay,
+            entry.ResourceTypeDisplay,
+            entry.SizeDisplay,
+            entry.TimeDisplay,
+            entry.FullUrlDisplay));
 
         RefreshFilteredNetworkEntries(preserveSelection: true);
 
@@ -1438,6 +1465,12 @@ public partial class MainPage : ContentPage
 
     private void UpdateNetworkCount()
     {
+        var countText = _webViewNetworkEntries.Count.ToString(CultureInfo.InvariantCulture);
+        if (NetworkCaptureNavigationCountLabel is not null)
+        {
+            NetworkCaptureNavigationCountLabel.Text = countText;
+        }
+
         if (NetworkCountLabel is not null)
         {
             NetworkCountLabel.Text = _networkCaptureFilter == NetworkCaptureFilterKind.All &&

@@ -6,6 +6,143 @@
     font-family: "Bahnschrift", "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 
+/* Prototype skin must be last so legacy Home styles cannot override it. */
+.page { padding: 0; gap: 1.25rem; color: #182b3c; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+.hero { display: block; margin: 0; }
+.hero > div:first-child { max-width: 46rem; }
+.hero h1 { margin: 4px 0 0; font-size: 25px; line-height: 1.2; letter-spacing: -.65px; }
+.hero .eyebrow { margin: 0; color: #728497; font-size: 10px; letter-spacing: .72px; }
+.lede { margin: 6px 0 0; color: #66788a; font-size: 14px; line-height: 1.45; }
+.desktop-status-card,.hamburger-button { display: none; }
+.panel,.status-card { border: 1px solid #dce5ed; border-radius: 12px; background: #fff; box-shadow: 0 2px 8px rgba(28,54,80,.07),0 14px 30px rgba(28,54,80,.035); backdrop-filter: none; }
+.panel { padding: 20px; }
+.chat-panel .panel-header { height: auto; min-height: 38px; margin-bottom: 14px; padding-bottom: 13px; border-bottom: 1px solid #edf2f6; }
+.chat-panel .panel-header h2 { font-size: 14px; }
+.chat-panel .panel-header p { color: #66788a; font-size: 11px; }
+.tab-bar { margin: 0 0 12px; border-bottom: 0; }
+.tab-item,.tab-add { border-radius: 7px; }
+.transcript { min-height: 260px; border: 1px dashed #dce6ee; border-radius: 9px; background: linear-gradient(145deg,#fbfdff,#f4f8fd); }
+.empty-state { color: #66788a; }
+.composer { padding-top: 12px; border-top: 1px solid #edf2f6; }
+.composer textarea { min-height: 108px; border: 1px solid #cfdce7; border-radius: 8px; background: #fff; }
+.primary { border-radius: 7px; background: #0866ff; }
+.primary:hover { background: #055be4; }
+
+/* The chat keeps its existing behavior, but uses the sidebar prototype's visual system. */
+.page {
+    padding: 0;
+    gap: 1.25rem;
+    color: #182b3c;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+}
+
+.hero {
+    display: block;
+    margin: 0;
+}
+
+.hero > div:first-child {
+    max-width: 46rem;
+}
+
+.hero h1 {
+    margin: 4px 0 0;
+    font-size: 25px;
+    line-height: 1.2;
+    letter-spacing: -.65px;
+}
+
+.hero .eyebrow {
+    margin: 0;
+    color: #728497;
+    font-size: 10px;
+    letter-spacing: .72px;
+}
+
+.lede {
+    margin: 6px 0 0;
+    color: #66788a;
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+.desktop-status-card,
+.hamburger-button {
+    display: none;
+}
+
+.panel,
+.status-card {
+    border: 1px solid #dce5ed;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(28, 54, 80, .07), 0 14px 30px rgba(28, 54, 80, .035);
+    backdrop-filter: none;
+}
+
+.panel {
+    padding: 20px;
+}
+
+.chat-panel .panel-header {
+    height: auto;
+    min-height: 38px;
+    margin-bottom: 14px;
+    padding-bottom: 13px;
+    border-bottom: 1px solid #edf2f6;
+}
+
+.chat-panel .panel-header h2 {
+    font-size: 14px;
+}
+
+.chat-panel .panel-header p {
+    color: #66788a;
+    font-size: 11px;
+}
+
+.tab-bar {
+    margin: 0 0 12px;
+    border-bottom: 0;
+}
+
+.tab-item,
+.tab-add {
+    border-radius: 7px;
+}
+
+.transcript {
+    min-height: 260px;
+    border: 1px dashed #dce6ee;
+    border-radius: 9px;
+    background: linear-gradient(145deg, #fbfdff, #f4f8fd);
+}
+
+.empty-state {
+    color: #66788a;
+}
+
+.composer {
+    padding-top: 12px;
+    border-top: 1px solid #edf2f6;
+}
+
+.composer textarea {
+    min-height: 108px;
+    border: 1px solid #cfdce7;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.primary {
+    border-radius: 7px;
+    background: #0866ff;
+}
+
+.primary:hover {
+    background: #055be4;
+}
+
 .hero {
     display: grid;
     grid-template-columns: minmax(0, 1.8fr) minmax(18rem, 0.9fr);
@@ -985,3 +1122,25 @@ button:disabled {
         border-color: rgba(183, 221, 232, 0.14);
     }
 }
+
+/* Final prototype overrides. */
+.page { padding: 0; gap: 1.25rem; color: #182b3c; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+.hero { display: block; margin: 0; }
+.hero > div:first-child { max-width: 46rem; }
+.hero h1 { margin: 4px 0 0; font-size: 25px; line-height: 1.2; letter-spacing: -.65px; }
+.hero .eyebrow { margin: 0; color: #728497; font-size: 10px; letter-spacing: .72px; }
+.lede { margin: 6px 0 0; color: #66788a; font-size: 14px; line-height: 1.45; }
+.desktop-status-card,.hamburger-button { display: none; }
+.panel,.status-card { border: 1px solid #dce5ed; border-radius: 12px; background: #fff; box-shadow: 0 2px 8px rgba(28,54,80,.07),0 14px 30px rgba(28,54,80,.035); backdrop-filter: none; }
+.panel { padding: 20px; }
+.chat-panel .panel-header { height: auto; min-height: 38px; margin-bottom: 14px; padding-bottom: 13px; border-bottom: 1px solid #edf2f6; }
+.chat-panel .panel-header h2 { font-size: 14px; }
+.chat-panel .panel-header p { color: #66788a; font-size: 11px; }
+.tab-bar { margin: 0 0 12px; border-bottom: 0; }
+.tab-item,.tab-add { border-radius: 7px; }
+.transcript { min-height: 260px; border: 1px dashed #dce6ee; border-radius: 9px; background: linear-gradient(145deg,#fbfdff,#f4f8fd); }
+.empty-state { color: #66788a; }
+.composer { padding-top: 12px; border-top: 1px solid #edf2f6; }
+.composer textarea { min-height: 108px; border: 1px solid #cfdce7; border-radius: 8px; background: #fff; }
+.primary { border-radius: 7px; background: #0866ff; }
+.primary:hover { background: #055be4; }

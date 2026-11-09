@@ -1,0 +1,33 @@
+@inject WorkspaceNavigationService WorkspaceNavigation
+
+<aside class="html-sidebar" aria-label="CodexDesk navigation">
+    <div class="html-brand"><span>CD</span><strong>CodexDesk</strong><small>Prototype</small></div>
+    <button class="html-workspace" type="button"><b>C</b><span><strong>Local workspace</strong><small>Ready to connect</small></span><i>⌄</i></button>
+    <nav>
+        <a href="/" @onclick="OpenOverview" @onclick:preventDefault>⌂ <span>Overview</span></a>
+        <a href="/chat" @onclick="OpenChat" @onclick:preventDefault>◌ <span>Codex chat</span><b>3</b></a>
+        <a href="/browser" @onclick="OpenBrowser" @onclick:preventDefault>◫ <span>Browser</span></a>
+        <a href="/network-captures" @onclick="OpenNetworkCaptures" @onclick:preventDefault>⌁ <span>Network captures</span></a>
+        <button type="button">⌘ <span>Prompt library</span></button>
+    </nav>
+    <footer><button type="button">⌕ <span>Quick search</span><kbd>Ctrl K</kbd></button><button type="button">⚙ <span>Settings</span></button><button type="button">? <span>Help</span></button></footer>
+</aside>
+
+@code {
+    private void OpenOverview()
+    {
+        WorkspaceNavigation.RequestContentRoute(WorkspaceDestination.Codex, "/");
+    }
+
+    private void OpenChat()
+    {
+        WorkspaceNavigation.RequestContentRoute(WorkspaceDestination.Codex, "/chat");
+    }
+
+    private void OpenBrowser() => WorkspaceNavigation.Request(WorkspaceDestination.Browser);
+
+    private void OpenNetworkCaptures()
+    {
+        WorkspaceNavigation.RequestContentRoute(WorkspaceDestination.NetworkCaptures, "/network-captures");
+    }
+}

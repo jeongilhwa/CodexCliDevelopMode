@@ -14,6 +14,7 @@ public sealed class CodexPromptMacroService
 
     private readonly object _sync = new();
     private List<CodexPromptMacroItem> _macros = new();
+    private string? _pendingPrompt;
 
     public event Action<string>? KeyObserved;
     public event Action<string>? PromptRequested;
@@ -167,7 +168,30 @@ public sealed class CodexPromptMacroService
             return;
         }
 
-        PromptRequested?.Invoke(prompt.Trim());
+        var normalizedPrompt = prompt.Trim();
+        var promptRequested = PromptRequested;
+        if (promptRequested is null)
+        {
+            lock (_sync)
+            {
+                _pendingPrompt = normalizedPrompt;
+            }
+        }
+
+        promptRequested?.Invoke(normalizedPrompt);
+    }
+
+    /// <summary>
+    /// Returns a prompt requested before the chat page finished loading.
+    /// </summary>
+    public string? TakePendingPrompt()
+    {
+        lock (_sync)
+        {
+            var prompt = _pendingPrompt;
+            _pendingPrompt = null;
+            return prompt;
+        }
     }
 
     private void Save()

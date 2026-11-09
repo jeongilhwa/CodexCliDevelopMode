@@ -1,0 +1,88 @@
+@page "/network-captures"
+@implements IDisposable
+@inject BrowserStateService BrowserState
+@inject NetworkCaptureStateService NetworkCaptureState
+
+<PageTitle>Network captures - CodexDesk</PageTitle>
+
+<section class="prototype-detail-page">
+    <header class="prototype-page-heading">
+        <div>
+            <p>REQUEST INSPECTION</p>
+            <h2>Review captured network activity</h2>
+            <span>@CaptureStatus</span>
+        </div>
+        <div class="network-action-row">
+            <button type="button" class="prototype-ghost-button" @onclick="ClearCapture" disabled="@(NetworkCaptureState.Entries.Count == 0)">Clear</button>
+            <button type="button" class="prototype-primary-button" @onclick="ToggleCapture">@(NetworkCaptureState.IsCapturing ? "Stop capture" : "Start capture")</button>
+        </div>
+    </header>
+
+    <section class="prototype-metrics">
+        <article><span>TOTAL REQUESTS</span><strong>@NetworkCaptureState.Entries.Count</strong><small>@(NetworkCaptureState.IsCapturing ? "Capturing new requests" : "Capture is paused")</small></article>
+        <article><span>SUCCESS RATE</span><strong>@SuccessRate</strong><small>@SuccessCount successful</small></article>
+        <article><span>TRANSFERRED</span><strong>@Transferred</strong><small>Live values from WebView2</small></article>
+        <article><span>STATUS</span><strong>@(NetworkCaptureState.IsCapturing ? "ON" : "OFF")</strong><small>@BrowserState.CurrentUrl</small></article>
+    </section>
+
+    <section class="prototype-capture-layout">
+        <aside>
+            <strong>Current capture</strong>
+            <a class="active"><b>Net</b><span><strong>WebView2 session</strong><small>@NetworkCaptureState.Entries.Count requests collected</small></span></a>
+        </aside>
+        <div>
+            <header><span><p>LIVE ACTIVITY</p><h3>Current browser session</h3><small>@BrowserState.CurrentUrl</small></span></header>
+            <nav><button class="active">All <b>@NetworkCaptureState.Entries.Count</b></button></nav>
+            <div class="prototype-request-table">
+                <div class="prototype-request-head"><span>Name</span><span>Status</span><span>Type</span><span>Size</span><span>Time</span></div>
+                @if (NetworkCaptureState.Entries.Count == 0)
+                {
+                    <div class="network-empty"><span>No captured requests yet. Start capture, then navigate or reload a page in Browser.</span></div>
+                }
+                else
+                {
+                    @foreach (var entry in NetworkCaptureState.Entries.Reverse())
+                    {
+                        <div title="@entry.Url"><span><i class="xhr"></i>@entry.Name</span><strong class="@(entry.IsFailure ? "fail" : string.Empty)">@entry.Status</strong><span>@entry.Method @entry.Type</span><span>@entry.Size</span><span>@entry.Duration</span></div>
+                    }
+                }
+            </div>
+        </div>
+    </section>
+</section>
+
+@code {
+    private string CaptureStatus => NetworkCaptureState.IsCapturing
+        ? "Capture is on. Navigate or reload a page in Browser to collect requests."
+        : BrowserState.Status;
+
+    private int SuccessCount => NetworkCaptureState.Entries.Count(entry =>
+        int.TryParse(entry.Status, out var statusCode) && statusCode is >= 200 and < 400);
+
+    private string SuccessRate => NetworkCaptureState.Entries.Count == 0
+        ? "-"
+        : $"{(SuccessCount * 100d / NetworkCaptureState.Entries.Count):0.0}%";
+
+    private string Transferred => NetworkCaptureState.Entries.Count == 0 ? "-" : "Live";
+
+    protected override void OnInitialized()
+    {
+        BrowserState.StateChanged += OnStateChanged;
+        NetworkCaptureState.Changed += OnStateChanged;
+    }
+
+    private void ToggleCapture()
+    {
+        BrowserState.RequestNetworkCapture(!NetworkCaptureState.IsCapturing);
+    }
+
+    private void ClearCapture() => NetworkCaptureState.Clear();
+
+    private void OnStateChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        BrowserState.StateChanged -= OnStateChanged;
+        NetworkCaptureState.Changed -= OnStateChanged;
+    }
+}

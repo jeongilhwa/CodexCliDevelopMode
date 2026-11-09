@@ -419,6 +419,7 @@ public partial class MainPage : ContentPage
             _webViewNetworkCaptureEnabled = !_webViewNetworkCaptureEnabled;
             UpdateWebViewNetworkCaptureToggleButton();
             await ApplyWebViewNetworkCaptureModeAsync(_webViewNetworkCaptureEnabled);
+            _networkCaptureState.SetCapturing(_webViewNetworkCaptureEnabled);
             _browserState.SetStatus(
                 _webViewNetworkCaptureEnabled
                     ? "WebView network capture turned on."
@@ -1364,6 +1365,8 @@ public partial class MainPage : ContentPage
 #if WINDOWS
                     _webViewNetworkCaptureEnabled = true;
                     await ApplyWebViewNetworkCaptureModeAsync(enabled: true);
+                    _networkCaptureState.SetCapturing(true);
+                    _browserState.SetStatus("WebView network capture turned on.", _browserState.CurrentUrl);
 #else
                     _browserState.SetStatus("Network capture is only available on Windows WebView2.");
 #endif
@@ -1373,6 +1376,8 @@ public partial class MainPage : ContentPage
 #if WINDOWS
                     _webViewNetworkCaptureEnabled = false;
                     await ApplyWebViewNetworkCaptureModeAsync(enabled: false);
+                    _networkCaptureState.SetCapturing(false);
+                    _browserState.SetStatus("WebView network capture turned off.", _browserState.CurrentUrl);
 #else
                     _browserState.SetStatus("Network capture is only available on Windows WebView2.");
 #endif
@@ -1530,9 +1535,9 @@ public partial class MainPage : ContentPage
                 : Color.FromArgb("#31474F");
         }
 
-        if (WebBrowserTabCountLabel is not null)
+        if (WebBrowserNavigationCountLabel is not null)
         {
-            WebBrowserTabCountLabel.Text = _webViewInterceptPanelState.CountText;
+            WebBrowserNavigationCountLabel.Text = _webViewInterceptPanelState.CountText;
         }
 
         if (InterceptQueueCollection is not null)

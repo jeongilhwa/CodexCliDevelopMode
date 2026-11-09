@@ -1,0 +1,71 @@
+@page "/overview"
+@page "/"
+@inject CodexPromptMacroService CodexPromptMacroService
+@inject WorkspaceNavigationService WorkspaceNavigation
+
+<PageTitle>Workspace - CodexDesk</PageTitle>
+
+<section class="prototype-overview">
+    <header class="prototype-welcome">
+        <div>
+            <p>CONVERSATION</p>
+            <h2>Ask Codex about your workspace</h2>
+            <span>Review code, documents, and browser captures from one local workspace.</span>
+        </div>
+        <button type="button" class="prototype-primary-button" @onclick="OpenNewConversation">New conversation</button>
+    </header>
+
+    <section class="prototype-conversation-card" aria-label="Conversation">
+        <header>
+            <div><i></i><strong>New conversation</strong><small>Active thread</small></div>
+            <span>Ready</span>
+        </header>
+        <div class="prototype-empty-thread">
+            <b>✦</b>
+            <h3>Start with a prompt</h3>
+            <p>Ask about a file, inspect a browser capture, or describe the change you want to make.</p>
+            <div><button type="button" @onclick="ReviewCode">Review this code</button><button type="button" @onclick="OpenBrowser">Analyze a snapshot</button><button type="button" @onclick="PlanFeature">Plan a feature</button></div>
+        </div>
+        <div class="prototype-overview-composer">
+            <label>Prompt</label>
+            <textarea @bind="Prompt" @bind:event="oninput" placeholder="Ask Codex about your workspace"></textarea>
+            <footer><span>Enter to send / Shift + Enter for a new line</span><button type="button" class="prototype-primary-button" @onclick="SendPrompt" disabled="@string.IsNullOrWhiteSpace(Prompt)">Send</button></footer>
+        </div>
+    </section>
+
+    <section class="prototype-overview-grid">
+        <a href="/browser"><b class="blue">◫</b><span><p>LATEST CAPTURE</p><strong>Web snapshot ready</strong><small>One capture is available for inspection.</small></span><em>›</em></a>
+        <a href="/chat"><b class="amber">⌘</b><span><p>PROMPT LIBRARY</p><strong>Reusable prompts</strong><small>Keep frequently used tasks close at hand.</small></span><em>›</em></a>
+    </section>
+</section>
+
+@code {
+    private string Prompt { get; set; } = string.Empty;
+
+    private void OpenNewConversation() => WorkspaceNavigation.RequestContentRoute(WorkspaceDestination.Codex, "/chat");
+
+    private void OpenBrowser() => WorkspaceNavigation.Request(WorkspaceDestination.Browser);
+
+    private void ReviewCode()
+    {
+        Prompt = "Review the current workspace and identify the most important code changes.";
+        SendPrompt();
+    }
+
+    private void PlanFeature()
+    {
+        Prompt = "Plan the next feature for this workspace, including implementation steps and risks.";
+        SendPrompt();
+    }
+
+    private void SendPrompt()
+    {
+        if (string.IsNullOrWhiteSpace(Prompt))
+        {
+            return;
+        }
+
+        CodexPromptMacroService.PublishPromptRequested(Prompt);
+        WorkspaceNavigation.RequestContentRoute(WorkspaceDestination.Codex, "/chat");
+    }
+}

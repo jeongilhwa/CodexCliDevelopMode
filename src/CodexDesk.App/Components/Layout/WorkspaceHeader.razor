@@ -1,0 +1,40 @@
+@implements IDisposable
+@inject WorkspaceNavigationService WorkspaceNavigation
+
+<header class="html-workspace-header">
+    <div><p>CODEX DESK / LOCAL AGENT</p><h1>@Title</h1></div>
+    <div><span><i></i>@Status</span><button type="button">⚙</button><b>C</b></div>
+</header>
+
+@code {
+    private WorkspaceDestination _destination = WorkspaceDestination.Codex;
+
+    private string Title => _destination switch
+    {
+        WorkspaceDestination.Browser => "Browser",
+        WorkspaceDestination.NetworkCaptures => "Network captures",
+        _ => "Workspace"
+    };
+
+    private string Status => _destination switch
+    {
+        WorkspaceDestination.Browser => "WebView2 ready",
+        WorkspaceDestination.NetworkCaptures => "Capture service ready",
+        _ => "Ready for a new conversation"
+    };
+
+    protected override void OnInitialized()
+    {
+        _destination = WorkspaceNavigation.CurrentDestination;
+        WorkspaceNavigation.DestinationRequested += OnDestinationRequested;
+    }
+
+    private void OnDestinationRequested(object? sender, WorkspaceDestination destination) =>
+        _ = InvokeAsync(() =>
+        {
+            _destination = destination;
+            StateHasChanged();
+        });
+
+    public void Dispose() => WorkspaceNavigation.DestinationRequested -= OnDestinationRequested;
+}

@@ -37,6 +37,28 @@
     background: rgba(199, 128, 72, 0.22);
 }
 
+.main-content-host {
+    display: block;
+    min-height: 100vh;
+    background: #f5f8fb;
+}
+
+.main-content-host .prototype-sidebar,
+.main-content-host .prototype-topbar {
+    display: none;
+}
+
+.main-content-host .prototype-workspace {
+    width: 100%;
+}
+
+.main-content-host .prototype-page-content {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 28px 32px 48px;
+}
+
 @media (prefers-color-scheme: dark) {
     .shell-frame {
         background:
