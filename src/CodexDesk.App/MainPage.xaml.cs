@@ -529,6 +529,7 @@ public partial class MainPage : ContentPage
 
         NetworkCaptureListSupport.AppendEntry(_webViewNetworkEntries, entry, MaxWebViewNetworkEntries);
         _networkCaptureState.Append(new NetworkCaptureRow(
+            entry.HostDisplay,
             entry.PathDisplay,
             entry.StatusDisplay,
             entry.MethodDisplay,

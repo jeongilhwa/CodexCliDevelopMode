@@ -1,0 +1,22 @@
+.prototype-request-table > div {
+    grid-template-columns: 36px minmax(120px, 0.8fr) minmax(300px, 2.4fr) 96px 78px 62px;
+    min-width: 760px;
+}
+
+.prototype-request-table > div > span,
+.prototype-request-table > div > strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.prototype-request-table .network-host,
+.prototype-request-table .network-url {
+    display: block;
+}
+
+.prototype-request-table .network-url {
+    font-family: Consolas, "Cascadia Code", monospace;
+    font-size: 10px;
+}

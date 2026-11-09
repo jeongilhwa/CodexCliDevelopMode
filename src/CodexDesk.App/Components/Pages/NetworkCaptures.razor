@@ -34,7 +34,7 @@
             <header><span><p>LIVE ACTIVITY</p><h3>Current browser session</h3><small>@BrowserState.CurrentUrl</small></span></header>
             <nav><button class="active">All <b>@NetworkCaptureState.Entries.Count</b></button></nav>
             <div class="prototype-request-table">
-                <div class="prototype-request-head"><span>Name</span><span>Status</span><span>Type</span><span>Size</span><span>Time</span></div>
+                <div class="prototype-request-head"><span>St.</span><span>Host</span><span>URL</span><span>Type</span><span>Size</span><span>Time</span></div>
                 @if (NetworkCaptureState.Entries.Count == 0)
                 {
                     <div class="network-empty"><span>No captured requests yet. Start capture, then navigate or reload a page in Browser.</span></div>
@@ -43,7 +43,7 @@
                 {
                     @foreach (var entry in NetworkCaptureState.Entries.Reverse())
                     {
-                        <div title="@entry.Url"><span><i class="xhr"></i>@entry.Name</span><strong class="@(entry.IsFailure ? "fail" : string.Empty)">@entry.Status</strong><span>@entry.Method @entry.Type</span><span>@entry.Size</span><span>@entry.Duration</span></div>
+                        <div><strong class="@(entry.IsFailure ? "fail" : string.Empty)">@entry.Status</strong><span class="network-host" title="@entry.Host"><i class="xhr"></i>@entry.Host</span><span class="network-url" title="@entry.Url">@entry.Path</span><span>@entry.Method @entry.Type</span><span>@entry.Size</span><span>@entry.Duration</span></div>
                     }
                 }
             </div>

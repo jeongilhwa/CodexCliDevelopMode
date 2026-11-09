@@ -57,7 +57,8 @@ public sealed class NetworkCaptureStateService
 
 /// <summary>A capture row safe to render in the Razor network activity view.</summary>
 public sealed record NetworkCaptureRow(
-    string Name,
+    string Host,
+    string Path,
     string Status,
     string Method,
     string Type,
