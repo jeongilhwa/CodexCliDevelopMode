@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodexDesk — sidebar prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="CodexDesk navigation">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">⌘</span>
+        <strong>CodexDesk</strong>
+        <span class="prototype-chip">Prototype</span>
+      </div>
+
+      <button class="workspace-switcher" type="button">
+        <span class="avatar">C</span>
+        <span class="workspace-copy"><strong>Local workspace</strong><small>Ready to connect</small></span>
+        <span class="caret" aria-hidden="true">⌄</span>
+      </button>
+
+      <nav class="nav-list" aria-label="Primary navigation">
+        <a class="nav-item active" href="#overview"><span class="nav-icon">⌂</span>Overview</a>
+        <a class="nav-item" href="conversations.html"><span class="nav-icon">◌</span>Codex chat <b>3</b></a>
+        <a class="nav-item" href="browser.html"><span class="nav-icon">◫</span>Browser</a>
+        <a class="nav-item" href="network-captures.html"><span class="nav-icon">⌁</span>Network captures</a>
+        <a class="nav-item" href="#prompts"><span class="nav-icon">✦</span>Prompt library</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="nav-item" type="button"><span class="nav-icon">⌕</span>Quick search <kbd>Ctrl K</kbd></button>
+        <button class="nav-item" type="button"><span class="nav-icon">⚙</span>Settings</button>
+        <button class="nav-item" type="button"><span class="nav-icon">?</span>Help</button>
+      </div>
+    </aside>
+
+    <main id="overview" class="workspace">
+      <header class="topbar">
+        <div><p class="eyebrow">CODEX DESK / LOCAL AGENT</p><h1>Workspace</h1></div>
+        <div class="top-actions"><span class="status"><i></i>Ready for a new conversation</span><button class="round-button" type="button" aria-label="Settings">⚙</button><span class="avatar small">C</span></div>
+      </header>
+
+      <div class="content">
+        <section class="welcome" aria-labelledby="workspace-title">
+          <div><p class="eyebrow">CONVERSATION</p><h2 id="workspace-title">Ask Codex about your workspace</h2><p>대화를 이어가며 코드, 문서, 브라우저 캡처를 한곳에서 검토합니다.</p></div>
+          <button class="primary-button" type="button"><span>＋</span>New conversation</button>
+        </section>
+
+        <section id="conversation" class="conversation-card" aria-label="Conversation">
+          <div class="conversation-header"><div><span class="live-dot"></span><strong>New conversation</strong><small>Active thread</small></div><span class="working-state">Ready</span></div>
+          <div class="empty-thread"><div class="spark" aria-hidden="true">✦</div><h3>Start with a prompt</h3><p>Ask about a file, inspect a browser capture, or describe the change you want to make.</p><div class="suggestion-row"><button type="button">Review this code</button><button type="button">Analyze a snapshot</button><button type="button">Plan a feature</button></div></div>
+          <div class="composer"><label for="prompt">Prompt</label><textarea id="prompt" placeholder="질문만 입력하세요."></textarea><div class="composer-footer"><span>Enter to send · Shift + Enter for a new line</span><button class="send-button" type="button">Send <span>↑</span></button></div></div>
+        </section>
+
+        <section class="overview-grid" aria-label="Workspace summary">
+          <article class="summary-card"><span class="card-icon blue">⌁</span><div><p class="eyebrow">LATEST CAPTURE</p><h3>Web snapshot ready</h3><p>One capture is available for inspection.</p></div><span class="arrow">→</span></article>
+          <article class="summary-card"><span class="card-icon amber">✦</span><div><p class="eyebrow">PROMPT LIBRARY</p><h3>Reusable prompts</h3><p>Keep frequently used tasks close at hand.</p></div><span class="arrow">→</span></article>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

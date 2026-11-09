@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meta Business Suite — static mockup</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Business Suite navigation">
+      <div class="brand-row">
+        <div class="meta-mark" aria-hidden="true">∞</div>
+        <span>Meta Business Suite</span>
+        <button class="icon-button compact" aria-label="Collapse navigation">‹</button>
+      </div>
+
+      <button class="profile-switcher" aria-label="Switch profile">
+        <span class="avatar avatar-small">j</span>
+        <span class="profile-copy"><strong>jilhwa</strong><small>Instagram account</small></span>
+        <span aria-hidden="true">⌄</span>
+      </button>
+
+      <nav class="main-nav" aria-label="Primary">
+        <a class="nav-item active" href="#home"><span class="nav-icon">⌂</span>Home</a>
+        <a class="nav-item" href="#notifications"><span class="nav-icon">♢</span>Notifications</a>
+        <a class="nav-item" href="#inbox"><span class="nav-icon">▰</span>Inbox</a>
+        <a class="nav-item" href="#content"><span class="nav-icon">▣</span>Content</a>
+        <a class="nav-item" href="#creator"><span class="nav-icon">✦</span>Creator Marketing</a>
+        <a class="nav-item" href="#planner"><span class="nav-icon">□</span>Planner</a>
+        <a class="nav-item" href="#ads"><span class="nav-icon">◉</span>Ads</a>
+        <a class="nav-item" href="#insights"><span class="nav-icon">⌁</span>Insights</a>
+        <button class="nav-item"><span class="nav-icon">⊞</span>All tools</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="nav-item"><span class="nav-icon">⌕</span>Search <kbd>Ctrl K</kbd></button>
+        <a class="nav-item" href="#get-started"><span class="nav-icon">▷</span>Get started</a>
+        <a class="nav-item" href="#settings"><span class="nav-icon">⚙</span>Settings</a>
+        <button class="nav-item"><span class="nav-icon">?</span>Help</button>
+      </div>
+    </aside>
+
+    <main id="home" class="workspace">
+      <header class="topbar">
+        <div class="crumb"><span class="dot"></span><span>Home</span></div>
+        <div class="top-actions">
+          <button class="icon-button" aria-label="Meta AI business assistant">✦</button>
+          <button class="icon-button" aria-label="Notifications">♢</button>
+          <button class="icon-button" aria-label="Help">?</button>
+          <span class="avatar avatar-small">j</span>
+        </div>
+      </header>
+
+      <div class="content-wrap">
+        <section class="profile-hero" aria-labelledby="profile-name">
+          <div class="avatar avatar-large">j</div>
+          <div class="hero-copy">
+            <p class="eyebrow">Your profiles</p>
+            <h1 id="profile-name">@jilhwa</h1>
+            <a href="#edit-profile">Edit Instagram Profile <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="hero-metric">
+            <div class="metric-icon">◎</div>
+            <div><span>Instagram followers</span><strong>226</strong></div>
+          </div>
+          <button class="more-button" aria-label="More profile actions">•••</button>
+        </section>
+
+        <section class="quick-actions" aria-label="Quick actions">
+          <button class="quick-action primary"><span class="action-symbol">＋</span>Create post</button>
+          <button class="quick-action"><span class="action-symbol">◉</span>Create ad</button>
+          <button class="quick-action"><span class="action-symbol">▷</span>Create reel</button>
+          <button class="quick-action"><span class="action-symbol">◌</span>Create story</button>
+          <button class="quick-action dropdown" aria-label="Open create menu">⌄</button>
+        </section>
+
+        <div class="dashboard-grid">
+          <div class="main-column">
+            <section class="card onboarding-card" aria-labelledby="onboarding-title">
+              <div class="card-heading">
+                <div>
+                  <p class="eyebrow">GET STARTED</p>
+                  <h2 id="onboarding-title">Get familiar with Meta Business Suite</h2>
+                </div>
+                <button class="text-button">See all steps</button>
+              </div>
+              <div class="onboarding-body">
+                <div class="onboarding-illustration" aria-hidden="true"><span>↗</span><i></i><b></b></div>
+                <div>
+                  <span class="step-count">1 of 3</span>
+                  <h3>Reply to messages and more</h3>
+                  <p>Manage conversations from Instagram and Facebook in one place.</p>
+                  <div class="inline-actions"><button class="button-dark">Go to Inbox</button><button class="text-button">Skip</button></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="card todo-card" aria-labelledby="todo-title">
+              <div class="section-title"><div><p class="eyebrow">STAY ON TOP OF THINGS</p><h2 id="todo-title">To-do list</h2></div><button class="more-button" aria-label="To-do list options">•••</button></div>
+              <div class="todo-empty"><span class="check">✓</span><div><strong>You're up to date on your to-do list.</strong><p>Check unread messages, comments and other things that may need your attention.</p></div></div>
+            </section>
+
+            <section class="card marketing-card" aria-labelledby="marketing-title">
+              <div class="section-title">
+                <div><p class="eyebrow">CONTENT OVERVIEW</p><h2 id="marketing-title">Manage your marketing content</h2><p class="section-subtitle">See your recent and upcoming posts, stories and ads, and plan ahead.</p></div>
+                <button class="more-button" aria-label="Marketing content options">•••</button>
+              </div>
+              <div class="tabs" role="tablist" aria-label="Marketing content">
+                <button role="tab" aria-selected="false">Planner</button>
+                <button role="tab" aria-selected="true">Posts &amp; reels</button>
+                <button role="tab" aria-selected="false">Stories</button>
+                <button class="tab-more" aria-label="More content tabs">⌄</button>
+              </div>
+              <div class="empty-posts">
+                <div class="post-illustration" aria-hidden="true"><span>▧</span><i></i><b></b></div>
+                <h3>No posts or reels created in the last 60 days</h3>
+                <p>Posting regularly helps you connect with your audience.</p>
+                <button class="button-blue">Create post</button>
+              </div>
+              <a class="card-footer-link" href="#all-posts">See all posts &amp; reels <span>→</span></a>
+            </section>
+          </div>
+
+          <aside class="right-rail" aria-label="Business recommendations">
+            <section class="rail-card verified-card">
+              <div class="badge-icon">✓</div>
+              <p class="eyebrow">META VERIFIED</p>
+              <h2>Get a verified badge</h2>
+              <p>Build trust with a badge and get enhanced support.</p>
+              <button class="button-outline">Learn more</button>
+            </section>
+            <section class="rail-card tips-card">
+              <div class="tip-icon">✦</div>
+              <div><p class="eyebrow">TIP</p><h3>Make your profile stand out</h3><p>Add contact details to help people reach you.</p><a href="#profile">Update profile</a></div>
+            </section>
+          </aside>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
