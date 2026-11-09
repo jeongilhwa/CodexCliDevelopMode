@@ -8,6 +8,15 @@ public interface ICodexAppServerClient : IAsyncDisposable
     /// <summary>Occurs when app-server sends a JSON-RPC notification.</summary>
     event EventHandler<CodexAppServerEvent>? EventReceived;
 
+    /// <summary>Occurs when app-server sends a JSON-RPC request that requires a response.</summary>
+    event EventHandler<CodexAppServerServerRequest>? ServerRequestReceived;
+
+    /// <summary>Sends the result of a server-initiated JSON-RPC request.</summary>
+    /// <param name="requestId">The server-assigned identifier from the incoming request.</param>
+    /// <param name="result">The result payload to send to app-server.</param>
+    /// <param name="cancellationToken">A token used to cancel the operation.</param>
+    Task RespondAsync(long requestId, object result, CancellationToken cancellationToken = default);
+
     /// <summary>Gets a value indicating whether a local app-server process is active.</summary>
     bool IsRunning { get; }
 

@@ -18,6 +18,13 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
     public event EventHandler<CodexAppServerEvent>? EventReceived;
 
     /// <inheritdoc />
+    public event EventHandler<CodexAppServerServerRequest>? ServerRequestReceived;
+
+    /// <inheritdoc />
+    public Task RespondAsync(long requestId, object result, CancellationToken cancellationToken = default) =>
+        SendAsync(new { jsonrpc = "2.0", id = requestId, result }, cancellationToken);
+
+    /// <inheritdoc />
     public bool IsRunning => _process is { HasExited: false };
 
     /// <inheritdoc />
@@ -194,16 +201,25 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
         {
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
-            if (root.TryGetProperty("id", out var id) && id.TryGetInt64(out var requestId))
-            {
-                HandleResponse(requestId, root);
-                return;
-            }
-
+            var hasRequestId = root.TryGetProperty("id", out var id) && id.TryGetInt64(out _);
             if (root.TryGetProperty("method", out var method))
             {
                 var parameters = root.TryGetProperty("params", out var value) ? value.Clone() : JsonSerializer.SerializeToElement(new { });
-                EventReceived?.Invoke(this, new CodexAppServerEvent(method.GetString() ?? "unknown", parameters));
+                if (hasRequestId)
+                {
+                    ServerRequestReceived?.Invoke(this, new CodexAppServerServerRequest(id.GetInt64(), method.GetString() ?? "unknown", parameters));
+                }
+                else
+                {
+                    EventReceived?.Invoke(this, new CodexAppServerEvent(method.GetString() ?? "unknown", parameters));
+                }
+
+                return;
+            }
+
+            if (hasRequestId)
+            {
+                HandleResponse(id.GetInt64(), root);
             }
         }
         catch (JsonException exception)
