@@ -21,6 +21,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<CodexDesk.Services.CodexInteractiveChatService>();
 		builder.Services.AddSingleton<CodexDesk.AppServer.ICodexAppServerProcessStartInfoFactory, CodexDesk.AppServer.CodexAppServerProcessStartInfoFactory>();
 		builder.Services.AddSingleton<CodexDesk.AppServer.ICodexAppServerClient, CodexDesk.AppServer.CodexAppServerClient>();
+		builder.Services.AddSingleton<CodexDesk.Services.CodexAppServerChatService>();
 		builder.Services.AddSingleton<CodexDesk.Services.CodexPromptMacroService>();
 		builder.Services.AddSingleton<CodexDesk.Services.BrowserStateService>();
 		builder.Services.AddSingleton<IInterceptSessionStore, InterceptSessionStore>();
