@@ -46,6 +46,16 @@
             </BlazorWebView.RootComponents>
         </BlazorWebView>
 
+        <ContentView Grid.Column="1"
+                     Grid.Row="0"
+                     x:Name="WindowDragRegion"
+                     WidthRequest="220"
+                     HeightRequest="48"
+                     HorizontalOptions="Center"
+                     VerticalOptions="Start"
+                     ZIndex="2"
+                     BackgroundColor="Transparent" />
+
         <Border Grid.Column="0"
                 IsVisible="False"
                 BackgroundColor="#F7FFFCF8"
@@ -286,13 +296,6 @@
                                FontAttributes="Bold"
                                TextColor="#526972"
                                VerticalTextAlignment="Center" />
-                        <ContentView Grid.Column="1"
-                                     x:Name="WindowDragRegion"
-                                     WidthRequest="180"
-                                     HeightRequest="48"
-                                     HorizontalOptions="Fill"
-                                     VerticalOptions="Start"
-                                     BackgroundColor="Transparent" />
                     </Grid>
                 </Border>
 

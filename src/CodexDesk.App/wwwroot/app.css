@@ -5,6 +5,8 @@ html, body {
 
 body {
     min-height: 100vh;
+    color: #1c2b3a;
+    font: 14px/1.42 ui-rounded, "Segoe UI", system-ui, sans-serif;
 }
 
 *, *::before, *::after {
