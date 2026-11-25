@@ -7,6 +7,12 @@ namespace CodexDesk.AppServer;
 /// <summary>Owns one local Codex app-server process and its stdio JSON-RPC connection.</summary>
 public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory startInfoFactory) : ICodexAppServerClient
 {
+    private const string JsonRpcVersion = "2.0";
+    private const string InitializeMethod = "initialize";
+    private const string InitializedMethod = "initialized";
+    private const string StandardErrorMethod = "server/stderr";
+    private const string UnknownMethodName = "unknown";
+
     private readonly ICodexAppServerProcessStartInfoFactory _startInfoFactory = startInfoFactory ?? throw new ArgumentNullException(nameof(startInfoFactory));
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly Dictionary<long, TaskCompletionSource<JsonElement>> _pendingRequests = [];
@@ -47,12 +53,12 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
 
         try
         {
-            await SendRequestAsync("initialize", new
+            await SendRequestAsync(InitializeMethod, new
             {
-                clientInfo = new { name = options.ClientName, title = options.ClientTitle, version = options.ClientVersion },                                
+                clientInfo = new { name = options.ClientName, title = options.ClientTitle, version = options.ClientVersion },
                 capabilities = new { }
             }, cancellationToken).ConfigureAwait(false);
-            await SendNotificationAsync("initialized", new { }, cancellationToken).ConfigureAwait(false);
+            await SendNotificationAsync(InitializedMethod, new { }, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -128,7 +134,7 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
 
         try
         {
-            await SendAsync(new { jsonrpc = "2.0", id = requestId, method, @params = parameters }, cancellationToken).ConfigureAwait(false);
+            await SendAsync(CreateRequestPayload(requestId, method, parameters), cancellationToken).ConfigureAwait(false);
             return await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -141,7 +147,13 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
     }
 
     private Task SendNotificationAsync(string method, object parameters, CancellationToken cancellationToken) =>
-        SendAsync(new { jsonrpc = "2.0", method, @params = parameters }, cancellationToken);
+        SendAsync(CreateNotificationPayload(method, parameters), cancellationToken);
+
+    private static object CreateRequestPayload(long requestId, string method, object parameters) =>
+        new { jsonrpc = JsonRpcVersion, id = requestId, method, @params = parameters };
+
+    private static object CreateNotificationPayload(string method, object parameters) =>
+        new { jsonrpc = JsonRpcVersion, method, @params = parameters };
 
     private async Task SendAsync(object payload, CancellationToken cancellationToken)
     {
@@ -187,7 +199,7 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
         {
             while (await process.StandardError.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
             {
-                EventReceived?.Invoke(this, new CodexAppServerEvent("server/stderr", JsonSerializer.SerializeToElement(new { message = line })));
+                PublishStandardError(line);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -200,26 +212,17 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
         try
         {
             using var document = JsonDocument.Parse(line);
-            var root = document.RootElement;
-            var hasRequestId = root.TryGetProperty("id", out var id) && id.TryGetInt64(out _);
-            if (root.TryGetProperty("method", out var method))
-            {
-                var parameters = root.TryGetProperty("params", out var value) ? value.Clone() : JsonSerializer.SerializeToElement(new { });
-                if (hasRequestId)
-                {
-                    ServerRequestReceived?.Invoke(this, new CodexAppServerServerRequest(id.GetInt64(), method.GetString() ?? "unknown", parameters));
-                }
-                else
-                {
-                    EventReceived?.Invoke(this, new CodexAppServerEvent(method.GetString() ?? "unknown", parameters));
-                }
+            var message = document.RootElement;
 
+            if (TryGetMethod(message, out var method))
+            {
+                HandleServerMessage(method, message);
                 return;
             }
 
-            if (hasRequestId)
+            if (TryGetRequestId(message, out var requestId))
             {
-                HandleResponse(id.GetInt64(), root);
+                HandleResponse(requestId, message);
             }
         }
         catch (JsonException exception)
@@ -227,6 +230,44 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
             FailPendingRequests(new InvalidOperationException("Codex app-server emitted invalid JSON-RPC.", exception));
         }
     }
+
+    private void HandleServerMessage(string method, JsonElement message)
+    {
+        var parameters = GetParameters(message);
+        if (TryGetRequestId(message, out var requestId))
+        {
+            ServerRequestReceived?.Invoke(this, new CodexAppServerServerRequest(requestId, method, parameters));
+            return;
+        }
+
+        EventReceived?.Invoke(this, new CodexAppServerEvent(method, parameters));
+    }
+
+    private void PublishStandardError(string line) =>
+        EventReceived?.Invoke(this, new CodexAppServerEvent(StandardErrorMethod, JsonSerializer.SerializeToElement(new { message = line })));
+
+    private static bool TryGetMethod(JsonElement message, out string method)
+    {
+        if (message.TryGetProperty("method", out var methodElement))
+        {
+            method = methodElement.GetString() ?? UnknownMethodName;
+            return true;
+        }
+
+        method = string.Empty;
+        return false;
+    }
+
+    private static bool TryGetRequestId(JsonElement message, out long requestId)
+    {
+        requestId = default;
+        return message.TryGetProperty("id", out var idElement) && idElement.TryGetInt64(out requestId);
+    }
+
+    private static JsonElement GetParameters(JsonElement message) =>
+        message.TryGetProperty("params", out var parameters)
+            ? parameters.Clone()
+            : JsonSerializer.SerializeToElement(new { });
 
     private void HandleResponse(long requestId, JsonElement response)
     {

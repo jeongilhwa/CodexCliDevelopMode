@@ -6,6 +6,10 @@ namespace CodexDesk.AppServer;
 /// <summary>Builds the isolated stdio process configuration for Codex app-server.</summary>
 public sealed class CodexAppServerProcessStartInfoFactory : ICodexAppServerProcessStartInfoFactory
 {
+    private const string AppServerCommand = "app-server";
+    private const string ListenOption = "--listen";
+    private const string StandardInputEndpoint = "stdio://";
+
     private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <inheritdoc />
@@ -37,20 +41,29 @@ public sealed class CodexAppServerProcessStartInfoFactory : ICodexAppServerProce
             StandardErrorEncoding = Utf8NoBom
         };
 
-        startInfo.ArgumentList.Add("app-server");
-        startInfo.ArgumentList.Add("--listen");
-        startInfo.ArgumentList.Add("stdio://");
+        AddArguments(startInfo, options.AdditionalArguments);
+        AddEnvironmentVariables(startInfo, options.EnvironmentVariables);
 
-        foreach (var argument in options.AdditionalArguments.Where(static argument => !string.IsNullOrWhiteSpace(argument)))
+        return startInfo;
+    }
+
+    private static void AddArguments(ProcessStartInfo startInfo, IEnumerable<string> additionalArguments)
+    {
+        startInfo.ArgumentList.Add(AppServerCommand);
+        startInfo.ArgumentList.Add(ListenOption);
+        startInfo.ArgumentList.Add(StandardInputEndpoint);
+
+        foreach (var argument in additionalArguments.Where(static argument => !string.IsNullOrWhiteSpace(argument)))
         {
             startInfo.ArgumentList.Add(argument);
         }
+    }
 
-        foreach (var (key, value) in options.EnvironmentVariables)
+    private static void AddEnvironmentVariables(ProcessStartInfo startInfo, IEnumerable<KeyValuePair<string, string>> environmentVariables)
+    {
+        foreach (var (key, value) in environmentVariables)
         {
             startInfo.Environment[key] = value;
         }
-
-        return startInfo;
     }
 }

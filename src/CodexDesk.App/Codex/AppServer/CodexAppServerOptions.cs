@@ -19,7 +19,7 @@ public sealed class CodexAppServerOptions
     public string ClientVersion { get; set; } = "1.0";
 
     /// <summary>Gets a collection of additional, explicitly supplied app-server arguments.</summary>
-    public IList<string> AdditionalArguments { get; } = new List<string>();
+    public IList<string> AdditionalArguments { get; } = [];
 
     /// <summary>Gets environment variables to add to the app-server child process.</summary>
     public IDictionary<string, string> EnvironmentVariables { get; } = new Dictionary<string, string>(StringComparer.Ordinal);

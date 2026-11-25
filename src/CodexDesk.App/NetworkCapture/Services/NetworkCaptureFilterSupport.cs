@@ -16,6 +16,8 @@ internal enum NetworkCaptureFilterKind
     Other
 }
 
+internal enum NetworkCaptureImageFormat { Jpg, Png }
+
 internal static class NetworkCaptureFilterSupport
 {
     public const int MaxEntries = 1000;
@@ -23,6 +25,28 @@ internal static class NetworkCaptureFilterSupport
     public static bool Matches(NetworkCaptureFilterKind selected, NetworkCaptureFilterKind actual)
     {
         return selected == NetworkCaptureFilterKind.All || selected == actual;
+    }
+
+    public static bool MatchesImageFormat(NetworkCaptureImageFormat format, string? mimeType, string? path)
+    {
+        var mime = Normalize(mimeType).Split(';', 2)[0].Trim();
+        if (mime.StartsWith("image/", StringComparison.Ordinal))
+        {
+            return format switch
+            {
+                NetworkCaptureImageFormat.Jpg => mime is "image/jpeg" or "image/jpg" or "image/pjpeg",
+                NetworkCaptureImageFormat.Png => mime == "image/png",
+                _ => false
+            };
+        }
+
+        var normalizedPath = Normalize(path);
+        return format switch
+        {
+            NetworkCaptureImageFormat.Jpg => HasAnyExtension(normalizedPath, ".jpg", ".jpeg"),
+            NetworkCaptureImageFormat.Png => HasAnyExtension(normalizedPath, ".png"),
+            _ => false
+        };
     }
 
     public static bool MatchesSearch(

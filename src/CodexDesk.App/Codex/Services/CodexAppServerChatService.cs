@@ -8,6 +8,17 @@ namespace CodexDesk.Services;
 /// <summary>Orchestrates persistent app-server threads, streaming turns, and approvals for the UI.</summary>
 public sealed class CodexAppServerChatService : IDisposable
 {
+    private const string ConfigurationOption = "-c";
+    private const string WorkspaceWriteSandboxMode = "sandbox_mode=\"workspace-write\"";
+    private const string ReadOnlySandboxMode = "sandbox_mode=\"read-only\"";
+    private const string ApprovalPolicy = "approval_policy=\"on-request\"";
+    private const string AgentMessageDeltaMethod = "agentMessage/delta";
+    private const string ItemAgentMessageDeltaMethod = "item/agentMessage/delta";
+    private const string ItemStartedMethod = "item/started";
+    private const string ItemCompletedMethod = "item/completed";
+    private const string TurnStartedMethod = "turn/started";
+    private const string TurnCompletedMethod = "turn/completed";
+
     private readonly ICodexAppServerClient _client;
     private readonly SemaphoreSlim _turnStartLock = new(1, 1);
     private readonly HashSet<string> _loadedThreads = new(StringComparer.Ordinal);
@@ -41,33 +52,11 @@ public sealed class CodexAppServerChatService : IDisposable
         await _turnStartLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (!_client.IsRunning)
-            {
-                var options = new CodexAppServerOptions { CommandPath = request.CommandPath, WorkspacePath = request.WorkspacePath };
-                options.AdditionalArguments.Add("-c");
-                options.AdditionalArguments.Add($"sandbox_mode=\"{(request.AllowWorkspaceWrite ? "workspace-write" : "read-only")}\"");
-                options.AdditionalArguments.Add("-c");
-                options.AdditionalArguments.Add("approval_policy=\"on-request\"");
-                _loadedThreads.Clear();
-                await _client.StartAsync(options, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (string.IsNullOrWhiteSpace(threadId))
-            {
-                var result = await _client.StartThreadAsync(request.Model, cancellationToken).ConfigureAwait(false);
-                threadId = ReadString(ReadObject(result, "thread"), "id")
-                    ?? throw new InvalidOperationException("Codex app-server did not return a thread identifier.");
-                _loadedThreads.Add(threadId);
-            }
-            else if (!_loadedThreads.Contains(threadId))
-            {
-                await _client.ResumeThreadAsync(threadId, cancellationToken).ConfigureAwait(false);
-                _loadedThreads.Add(threadId);
-            }
+            await EnsureServerStartedAsync(request, cancellationToken).ConfigureAwait(false);
+            threadId = await ResolveThreadIdAsync(request, threadId, cancellationToken).ConfigureAwait(false);
 
             Publish(new(CodexAppServerChatEventKind.ThreadReady, threadId));
-            var turn = await _client.StartTurnAsync(threadId, request.Prompt, cancellationToken).ConfigureAwait(false);
-            Publish(new(CodexAppServerChatEventKind.TurnStarted, threadId, ReadString(ReadObject(turn, "turn"), "id")));
+            await StartTurnAsync(threadId, request.Prompt, cancellationToken).ConfigureAwait(false);
             return threadId;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -104,37 +93,18 @@ public sealed class CodexAppServerChatService : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(approvalId);
-        var serverDecision = decision switch
-        {
-            "accept" => "accept",
-            "reject" or "decline" => "decline",
-            _ => throw new ArgumentException("The decision must be accept, reject, or decline.", nameof(decision))
-        };
-        CodexAppServerApproval approval;
-        lock (_approvals)
-        {
-            if (!_approvals.TryGetValue(approvalId, out approval!) || !_resolvingApprovals.Add(approvalId))
-            {
-                throw new InvalidOperationException("The approval is no longer pending or is already being resolved.");
-            }
-        }
+        var serverDecision = NormalizeApprovalDecision(decision);
+        var approval = BeginApprovalResolution(approvalId);
 
         try
         {
             await _client.RespondAsync(approval.RequestId, new { decision = serverDecision }, cancellationToken).ConfigureAwait(false);
-            lock (_approvals)
-            {
-                _approvals.Remove(approvalId);
-            }
-
+            CompleteApprovalResolution(approvalId);
             Publish(new(CodexAppServerChatEventKind.ApprovalResolved, approval.ThreadId, approval.TurnId, Approval: approval));
         }
         finally
         {
-            lock (_approvals)
-            {
-                _resolvingApprovals.Remove(approvalId);
-            }
+            EndApprovalResolution(approvalId);
         }
     }
 
@@ -154,25 +124,199 @@ public sealed class CodexAppServerChatService : IDisposable
         var threadId = ReadString(parameters, "threadId");
         if (threadId is null) return;
 
-        if (notification.Method is "item/agentMessage/delta" or "agentMessage/delta")
+        if (notification.Method is ItemAgentMessageDeltaMethod or AgentMessageDeltaMethod)
         {
-            if (ReadString(parameters, "delta") is { } delta)
-            {
-                Publish(new(CodexAppServerChatEventKind.AssistantDelta, threadId, ReadString(parameters, "turnId"), delta));
-            }
+            PublishAssistantDelta(parameters, threadId);
+            return;
+        }
 
+        if (notification.Method is ItemStartedMethod or ItemCompletedMethod)
+        {
+            PublishItemActivity(notification.Method, parameters, threadId);
+            return;
+        }
+
+        var progress = notification.Method switch
+        {
+            "item/reasoning/summaryTextDelta" or "item/reasoning/summaryPartAdded" => "생각 정리 중",
+            "item/commandExecution/outputDelta" => "명령 실행 중",
+            "item/plan/delta" or "turn/plan/updated" => "계획 작성 중",
+            "item/mcpToolCall/progress" => "도구 실행 중",
+            "turn/diff/updated" => "변경 내용 정리 중",
+            _ => null
+        };
+        if (progress is not null)
+        {
+            Publish(new(CodexAppServerChatEventKind.ActivityProgress, threadId,
+                ReadString(parameters, "turnId"), progress, ItemId: ReadString(parameters, "itemId")));
+            return;
+        }
+
+        if (notification.Method == "error" && ReadBoolean(parameters, "willRetry"))
+        {
+            Publish(new(CodexAppServerChatEventKind.ActivityProgress, threadId,
+                ReadString(parameters, "turnId"), "연결 재시도 중"));
             return;
         }
 
         var turn = ReadObject(parameters, "turn");
         var turnId = ReadString(turn, "id") ?? ReadString(parameters, "turnId");
-        if (notification.Method == "turn/started")
+        if (notification.Method == TurnStartedMethod)
         {
             Publish(new(CodexAppServerChatEventKind.TurnStarted, threadId, turnId));
             return;
         }
 
-        if (notification.Method != "turn/completed") return;
+        if (notification.Method == TurnCompletedMethod)
+        {
+            PublishTurnCompletion(turn, threadId, turnId);
+        }
+    }
+
+    private void OnServerRequestReceived(object? sender, CodexAppServerServerRequest request)
+    {
+        if (!TryCreateApproval(request, out var approval)) return;
+
+        lock (_approvals)
+        {
+            _approvals[approval.Id] = approval;
+        }
+
+        Publish(new(CodexAppServerChatEventKind.ApprovalRequired, approval.ThreadId, approval.TurnId, Approval: approval));
+    }
+
+    private async Task EnsureServerStartedAsync(CodexChatRequest request, CancellationToken cancellationToken)
+    {
+        if (_client.IsRunning) return;
+
+        _loadedThreads.Clear();
+        await _client.StartAsync(CreateServerOptions(request), cancellationToken).ConfigureAwait(false);
+    }
+
+    private static CodexAppServerOptions CreateServerOptions(CodexChatRequest request)
+    {
+        var options = new CodexAppServerOptions { CommandPath = request.CommandPath, WorkspacePath = request.WorkspacePath };
+        options.AdditionalArguments.Add(ConfigurationOption);
+        options.AdditionalArguments.Add(request.AllowWorkspaceWrite ? WorkspaceWriteSandboxMode : ReadOnlySandboxMode);
+        options.AdditionalArguments.Add(ConfigurationOption);
+        options.AdditionalArguments.Add(ApprovalPolicy);
+        return options;
+    }
+
+    private async Task<string> ResolveThreadIdAsync(CodexChatRequest request, string? threadId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(threadId))
+        {
+            var result = await _client.StartThreadAsync(request.Model, cancellationToken).ConfigureAwait(false);
+            threadId = ReadString(ReadObject(result, "thread"), "id")
+                ?? throw new InvalidOperationException("Codex app-server did not return a thread identifier.");
+            _loadedThreads.Add(threadId);
+            return threadId;
+        }
+
+        if (!_loadedThreads.Contains(threadId))
+        {
+            await _client.ResumeThreadAsync(threadId, cancellationToken).ConfigureAwait(false);
+            _loadedThreads.Add(threadId);
+        }
+
+        return threadId;
+    }
+
+    private async Task StartTurnAsync(string threadId, string prompt, CancellationToken cancellationToken)
+    {
+        var turn = await _client.StartTurnAsync(threadId, prompt, cancellationToken).ConfigureAwait(false);
+        Publish(new(CodexAppServerChatEventKind.TurnStarted, threadId, ReadString(ReadObject(turn, "turn"), "id")));
+    }
+
+    private static string NormalizeApprovalDecision(string decision) => decision switch
+    {
+        "accept" => "accept",
+        "reject" or "decline" => "decline",
+        _ => throw new ArgumentException("The decision must be accept, reject, or decline.", nameof(decision))
+    };
+
+    private CodexAppServerApproval BeginApprovalResolution(string approvalId)
+    {
+        lock (_approvals)
+        {
+            if (!_approvals.TryGetValue(approvalId, out var approval) || !_resolvingApprovals.Add(approvalId))
+            {
+                throw new InvalidOperationException("The approval is no longer pending or is already being resolved.");
+            }
+
+            return approval;
+        }
+    }
+
+    private void CompleteApprovalResolution(string approvalId)
+    {
+        lock (_approvals)
+        {
+            _approvals.Remove(approvalId);
+        }
+    }
+
+    private void EndApprovalResolution(string approvalId)
+    {
+        lock (_approvals)
+        {
+            _resolvingApprovals.Remove(approvalId);
+        }
+    }
+
+    private void PublishAssistantDelta(JsonElement parameters, string threadId)
+    {
+        if (ReadString(parameters, "delta") is { } delta)
+        {
+            Publish(new(CodexAppServerChatEventKind.AssistantDelta, threadId, ReadString(parameters, "turnId"), delta,
+                ItemId: ReadString(parameters, "itemId")));
+        }
+    }
+
+    private void PublishItemActivity(string method, JsonElement parameters, string threadId)
+    {
+        var item = ReadObject(parameters, "item");
+        var type = ReadString(item, "type");
+        var activity = type switch
+        {
+            "agentMessage" => "답변 작성 중",
+            "reasoning" => "생각 정리 중",
+            "commandExecution" => FormatActivity("명령 실행 중", ReadString(item, "command")),
+            "fileChange" => "파일 수정 중",
+            "mcpToolCall" => FormatActivity("도구 실행 중", JoinToolName(item)),
+            "dynamicToolCall" => FormatActivity("도구 실행 중", ReadString(item, "tool")),
+            "webSearch" => "웹 검색 중",
+            "imageView" => "이미지 확인 중",
+            "plan" => "계획 작성 중",
+            "collabToolCall" => "하위 작업 진행 중",
+            "contextCompaction" => "대화 기록 정리 중",
+            _ => null
+        };
+        if (activity is null) return;
+
+        var started = method == ItemStartedMethod;
+        Publish(new(started ? CodexAppServerChatEventKind.ActivityStarted : CodexAppServerChatEventKind.ActivityCompleted,
+            threadId, ReadString(parameters, "turnId"), started ? activity : "단계 완료 · 계속 처리 중",
+            ItemId: ReadString(item, "id")));
+    }
+
+    private static string? JoinToolName(JsonElement item)
+    {
+        var server = ReadString(item, "server");
+        var tool = ReadString(item, "tool");
+        return string.IsNullOrWhiteSpace(server) ? tool : string.IsNullOrWhiteSpace(tool) ? server : $"{server}/{tool}";
+    }
+
+    private static string FormatActivity(string label, string? detail)
+    {
+        if (string.IsNullOrWhiteSpace(detail)) return label;
+        var compact = string.Join(' ', detail.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return $"{label}: {(compact.Length <= 72 ? compact : compact[..69] + "…")}";
+    }
+
+    private void PublishTurnCompletion(JsonElement turn, string threadId, string? turnId)
+    {
         var kind = ReadString(turn, "status") switch
         {
             "completed" => CodexAppServerChatEventKind.TurnCompleted,
@@ -182,18 +326,22 @@ public sealed class CodexAppServerChatService : IDisposable
         };
         if (kind is null) return;
 
+        RemoveTurnApprovals(threadId, turnId);
+        Publish(new(kind.Value, threadId, turnId, ReadString(ReadObject(turn, "error"), "message")));
+    }
+
+    private void RemoveTurnApprovals(string threadId, string? turnId)
+    {
         lock (_approvals)
         {
-            foreach (var approval in _approvals.Values.Where(a => a.ThreadId == threadId && a.TurnId == turnId).ToArray())
+            foreach (var approval in _approvals.Values.Where(approval => approval.ThreadId == threadId && approval.TurnId == turnId).ToArray())
             {
                 _approvals.Remove(approval.Id);
             }
         }
-
-        Publish(new(kind.Value, threadId, turnId, ReadString(ReadObject(turn, "error"), "message")));
     }
 
-    private void OnServerRequestReceived(object? sender, CodexAppServerServerRequest request)
+    private static bool TryCreateApproval(CodexAppServerServerRequest request, out CodexAppServerApproval approval)
     {
         var kind = request.Method switch
         {
@@ -201,19 +349,20 @@ public sealed class CodexAppServerChatService : IDisposable
             "fileChange/requestApproval" or "item/fileChange/requestApproval" => CodexAppServerApprovalKind.FileChange,
             _ => (CodexAppServerApprovalKind?)null
         };
-        if (kind is null) return;
+
+        if (kind is null)
+        {
+            approval = default!;
+            return false;
+        }
+
         var parameters = request.Parameters;
-        var approval = new CodexAppServerApproval(
+        approval = new CodexAppServerApproval(
             request.RequestId.ToString(CultureInfo.InvariantCulture), request.RequestId, kind.Value,
             ReadString(parameters, "threadId") ?? string.Empty, ReadString(parameters, "turnId"),
             ReadString(parameters, "itemId"), ReadString(parameters, "reason"),
             ReadString(parameters, "command"), ReadString(parameters, "cwd"), ReadString(parameters, "grantRoot"));
-        lock (_approvals)
-        {
-            _approvals[approval.Id] = approval;
-        }
-
-        Publish(new(CodexAppServerChatEventKind.ApprovalRequired, approval.ThreadId, approval.TurnId, Approval: approval));
+        return true;
     }
 
     private void Publish(CodexAppServerChatEvent notification) => EventReceived?.Invoke(this, notification);
@@ -223,4 +372,7 @@ public sealed class CodexAppServerChatService : IDisposable
 
     private static string? ReadString(JsonElement element, string name) =>
         ReadObject(element, name) is { ValueKind: JsonValueKind.String } value ? value.GetString() : null;
+
+    private static bool ReadBoolean(JsonElement element, string name) =>
+        ReadObject(element, name) is { ValueKind: JsonValueKind.True };
 }

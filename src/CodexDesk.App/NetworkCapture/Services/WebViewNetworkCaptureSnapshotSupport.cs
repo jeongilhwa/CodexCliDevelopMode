@@ -175,6 +175,7 @@ internal static partial class WebViewNetworkCaptureSnapshotWriter
         builder.AppendLine(CultureInfo.InvariantCulture, $"Request count: {entries.Count}");
         builder.AppendLine($"Scope: {scope}");
         builder.AppendLine($"Detail mode: {detailMode}");
+        builder.AppendLine("저장된 범위의 모든 네트워크 항목을 확인하고, 각 요청과 그에 대응하는 응답을 함께 분석해줘.");
         builder.AppendLine();
         builder.AppendLine("읽을 파일:");
         builder.AppendLine("- manifest.json");

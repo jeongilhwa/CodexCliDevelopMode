@@ -56,6 +56,20 @@ public sealed class NetworkCaptureFilterSupportTests
     }
 
     [TestMethod]
+    [DataRow("Jpg", "image/jpeg", "/images/photo.png", true)]
+    [DataRow("Jpg", "-", "/images/photo.jpeg?v=1", true)]
+    [DataRow("Png", "image/png; charset=binary", "/images/photo.jpg", true)]
+    [DataRow("Png", "image/jpeg", "/images/photo.png", false)]
+    [DataRow("Png", "-", "/images/photo.jpg", false)]
+    public void MatchesImageFormat_UsesMimeTypeOrFileExtension(
+        string format, string mimeType, string path, bool expected)
+    {
+        NetworkCaptureFilterSupport.MatchesImageFormat(
+                Enum.Parse<NetworkCaptureImageFormat>(format), mimeType, path)
+            .Should().Be(expected);
+    }
+
+    [TestMethod]
     [DataRow("", "GET", "200", "www.youtube.com", "/watch?v=1", "https://www.youtube.com/watch?v=1", "xhr", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: text/html", true)]
     [DataRow("youtube", "GET", "200", "www.youtube.com", "/watch?v=1", "https://www.youtube.com/watch?v=1", "xhr", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: text/html", true)]
     [DataRow("POST", "POST", "200", "api.example.com", "/v1/log_event", "https://api.example.com/v1/log_event", "fetch", "application/json", "HEADERS:\nAccept: */*", "HEADERS:\nContent-Type: application/json", true)]

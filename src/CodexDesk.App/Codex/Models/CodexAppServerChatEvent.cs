@@ -9,6 +9,12 @@ public enum CodexAppServerChatEventKind
     TurnStarted,
     /// <summary>Incremental assistant text is available.</summary>
     AssistantDelta,
+    /// <summary>A work item started in the active turn.</summary>
+    ActivityStarted,
+    /// <summary>A work item emitted progress without user-facing text.</summary>
+    ActivityProgress,
+    /// <summary>A work item finished while the turn may continue.</summary>
+    ActivityCompleted,
     /// <summary>The turn completed successfully.</summary>
     TurnCompleted,
     /// <summary>The turn or an operation failed.</summary>
@@ -27,9 +33,11 @@ public enum CodexAppServerChatEventKind
 /// <param name="TurnId">The affected turn, when known.</param>
 /// <param name="Text">Incremental assistant text or an error message.</param>
 /// <param name="Approval">The approval to display or dismiss.</param>
+/// <param name="ItemId">The work item associated with an activity event, when known.</param>
 public sealed record CodexAppServerChatEvent(
     CodexAppServerChatEventKind Kind,
     string ThreadId,
     string? TurnId = null,
     string? Text = null,
-    CodexAppServerApproval? Approval = null);
+    CodexAppServerApproval? Approval = null,
+    string? ItemId = null);

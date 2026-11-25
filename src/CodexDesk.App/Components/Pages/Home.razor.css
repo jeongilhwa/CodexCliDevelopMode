@@ -1144,3 +1144,8 @@ button:disabled {
 .composer textarea { min-height: 108px; border: 1px solid #cfdce7; border-radius: 8px; background: #fff; }
 .primary { border-radius: 7px; background: #0866ff; }
 .primary:hover { background: #055be4; }
+.activity-hint { display: block; color: #62798b; font-size: 11px; line-height: 1.4; }
+.tab-approval { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; color: #fff; background: #b45309; font-size: 11px; font-weight: 800; }
+.message.assistant { border: 1px solid #d5e2ee; background: #f7fbff; color: #1d3448; }
+.message.assistant header { color: #526b7d; }
+.message.assistant pre { color: #1d3448; }

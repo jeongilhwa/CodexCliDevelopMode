@@ -536,7 +536,14 @@ public partial class MainPage : ContentPage
             entry.ResourceTypeDisplay,
             entry.SizeDisplay,
             entry.TimeDisplay,
-            entry.FullUrlDisplay));
+            entry.FullUrlDisplay,
+            entry.Sequence,
+            ExtractSection(entry.RequestDetails, "HEADERS:", "BODY:"),
+            ExtractSection(entry.RequestDetails, "BODY:", null),
+            ExtractSection(entry.ResponseDetails, "HEADERS:", "BODY:"),
+            ExtractSection(entry.ResponseDetails, "BODY:", null),
+            entry.MimeTypeDisplay,
+            entry.SchemeDisplay));
 
         RefreshFilteredNetworkEntries(preserveSelection: true);
 
@@ -626,6 +633,7 @@ public partial class MainPage : ContentPage
         _filteredWebViewNetworkEntries.Clear();
         _selectedWebViewNetworkEntry = null;
         _webViewNetworkSequence = 0;
+        _networkCaptureState.Clear();
         if (WebViewNetworkListView is not null)
         {
             WebViewNetworkListView.SelectedItem = null;

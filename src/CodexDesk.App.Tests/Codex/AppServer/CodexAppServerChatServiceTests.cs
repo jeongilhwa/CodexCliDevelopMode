@@ -17,6 +17,32 @@ namespace CodexDesk.Tests.Codex.AppServer;
 public sealed class CodexAppServerChatServiceTests
 {
     [TestMethod]
+    public async Task Chat_page_remount_keeps_tabs_and_receives_events_while_unmounted()
+    {
+        var client = new FakeClient();
+        using var service = new CodexAppServerChatService(client);
+        using var services = ChatServices(service);
+        await using var renderer = new ChatRenderer(services);
+        var firstHome = await renderer.MountAsync();
+        var tab = GetProperty(firstHome, "ActiveTab");
+        SetProperty(tab, "ThreadId", "thread-1");
+        SetProperty(tab, "IsBusy", true);
+        SetProperty(tab, "DraftMessage", "unfinished draft");
+
+        await renderer.Dispatcher.InvokeAsync(firstHome.Dispose);
+        client.Notify("item/agentMessage/delta", new { threadId = "thread-1", turnId = "turn-1", delta = "Still working" });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+
+        var secondHome = await renderer.MountAsync();
+        var restoredTab = GetProperty(secondHome, "ActiveTab");
+        restoredTab.Should().BeSameAs(tab);
+        GetProperty(restoredTab, "DraftMessage").Should().Be("unfinished draft");
+        ((IList<ChatMessage>)GetProperty(restoredTab, "Messages"))
+            .Should().Contain(m => m.Role == "assistant" && m.Content == "Still working");
+        client.Calls.Should().NotContain(c => c.StartsWith("turn/interrupt:", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public async Task ResolveApprovalAsync_rejection_from_the_chat_modal_should_decline_without_starting_another_turn()
     {
         var client = new FakeClient();
@@ -70,6 +96,46 @@ public sealed class CodexAppServerChatServiceTests
 
         GetProperty(tab, "IsBusy").Should().Be(false);
         messages.Should().Contain(m => m.Role == "system" && m.Content.Contains("interrupted"));
+    }
+
+    [TestMethod]
+    public async Task Chat_status_should_follow_app_server_work_and_approval_events()
+    {
+        var client = new FakeClient();
+        using var service = new CodexAppServerChatService(client);
+        using var services = ChatServices(service);
+        await using var renderer = new ChatRenderer(services);
+        var home = await renderer.MountAsync();
+        var tab = GetProperty(home, "ActiveTab");
+        SetProperty(tab, "DraftMessage", "Check the project");
+        await renderer.Dispatcher.InvokeAsync(() => InvokeHomeAsync(home, "SendAsync"));
+
+        client.Notify("item/started", new { threadId = "thread-new", turnId = "turn-new", item = new { id = "command-1", type = "commandExecution", command = "dotnet test" } });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+        GetProperty(tab, "ActivityText").Should().Be("명령 실행 중: dotnet test");
+
+        client.Notify("item/completed", new { threadId = "thread-new", turnId = "turn-new", item = new { id = "command-1", type = "commandExecution", status = "completed" } });
+        client.Notify("item/reasoning/summaryTextDelta", new { threadId = "thread-new", turnId = "turn-new", itemId = "reason-1", delta = "Checking results" });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+        GetProperty(tab, "ActivityText").Should().Be("생각 정리 중");
+
+        client.Request(54, "item/fileChange/requestApproval", new { threadId = "thread-new", turnId = "turn-new", itemId = "file-1", reason = "Edit source" });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+        GetProperty(tab, "ActivityText").Should().Be("권한 승인 대기 중");
+        GetProperty(tab, "IsApprovalModalOpen").Should().Be(true);
+
+        await renderer.Dispatcher.InvokeAsync(() => InvokeHomeAsync(home, "SelectApprovalOptionAsync", "accept"));
+        client.Responses.Should().ContainSingle();
+        client.Responses[0].Result.GetProperty("decision").GetString().Should().Be("accept");
+
+        client.Notify("item/agentMessage/delta", new { threadId = "thread-new", turnId = "turn-new", itemId = "message-1", delta = "Done" });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+        GetProperty(tab, "ActivityText").Should().Be("답변 작성 중");
+
+        client.Notify("turn/completed", new { threadId = "thread-new", turn = new { id = "turn-new", status = "completed" } });
+        await renderer.Dispatcher.InvokeAsync(() => { });
+        GetProperty(tab, "IsBusy").Should().Be(false);
+        GetProperty(tab, "ActivityText").Should().Be(string.Empty);
     }
 
     [TestMethod]
@@ -270,7 +336,7 @@ public sealed class CodexAppServerChatServiceTests
     private static Task InvokeHomeAsync(Home home, string name, params object[] args) => (Task)typeof(Home).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(home, args)!;
 
     private static ServiceProvider ChatServices(CodexAppServerChatService service) => new ServiceCollection().AddLogging()
-        .AddSingleton(service).AddSingleton<CodexInteractiveChatService>()
+        .AddSingleton(service).AddSingleton<CodexChatSessionState>().AddSingleton<CodexInteractiveChatService>()
         .AddSingleton<CodexPromptMacroService>().AddSingleton<BrowserStateService>()
         .AddSingleton<IJSRuntime, UnusedJsRuntime>().BuildServiceProvider();
 

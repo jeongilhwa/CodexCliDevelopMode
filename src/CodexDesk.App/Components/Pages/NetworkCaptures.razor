@@ -2,8 +2,23 @@
 @implements IDisposable
 @inject BrowserStateService BrowserState
 @inject NetworkCaptureStateService NetworkCaptureState
+@inject CodexPromptMacroService CodexPromptMacroService
+@inject WorkspaceNavigationService WorkspaceNavigation
 
 <PageTitle>Network captures - CodexDesk</PageTitle>
+
+@{
+    var entries = NetworkCaptureState.Entries;
+    var visibleEntries = entries.Where(MatchesEntry).ToList();
+    var selectedEntry = ResolveSelectedEntry(visibleEntries);
+    var checkedEntries = entries.Where(entry => _checkedSequences.Contains(entry.Sequence)).ToList();
+    var analysisCount = _analysisScope switch
+    {
+        "selected" => checkedEntries.Count,
+        "visible" => visibleEntries.Count,
+        _ => entries.Count
+    };
+}
 
 <section class="prototype-detail-page">
     <header class="prototype-page-heading">
@@ -13,45 +28,302 @@
             <span>@CaptureStatus</span>
         </div>
         <div class="network-action-row">
-            <button type="button" class="prototype-ghost-button" @onclick="ClearCapture" disabled="@(NetworkCaptureState.Entries.Count == 0)">Clear</button>
+            <button type="button" class="prototype-ghost-button" @onclick="ClearCapture" disabled="@(entries.Count == 0)">Clear</button>
             <button type="button" class="prototype-primary-button" @onclick="ToggleCapture">@(NetworkCaptureState.IsCapturing ? "Stop capture" : "Start capture")</button>
         </div>
     </header>
 
     <section class="prototype-metrics">
-        <article><span>TOTAL REQUESTS</span><strong>@NetworkCaptureState.Entries.Count</strong><small>@(NetworkCaptureState.IsCapturing ? "Capturing new requests" : "Capture is paused")</small></article>
+        <article><span>TOTAL REQUESTS</span><strong>@entries.Count</strong><small>@(NetworkCaptureState.IsCapturing ? "Capturing new requests" : "Capture is paused")</small></article>
         <article><span>SUCCESS RATE</span><strong>@SuccessRate</strong><small>@SuccessCount successful</small></article>
         <article><span>TRANSFERRED</span><strong>@Transferred</strong><small>Live values from WebView2</small></article>
-        <article><span>STATUS</span><strong>@(NetworkCaptureState.IsCapturing ? "ON" : "OFF")</strong><small>@BrowserState.CurrentUrl</small></article>
+        <article><span>STATUS</span><strong>@(NetworkCaptureState.IsCapturing ? "ON" : "OFF")</strong><small class="network-metric-url" title="@BrowserState.CurrentUrl">@BrowserState.CurrentUrl</small></article>
     </section>
 
-    <section class="prototype-capture-layout">
-        <aside>
-            <strong>Current capture</strong>
-            <a class="active"><b>Net</b><span><strong>WebView2 session</strong><small>@NetworkCaptureState.Entries.Count requests collected</small></span></a>
-        </aside>
-        <div>
-            <header><span><p>LIVE ACTIVITY</p><h3>Current browser session</h3><small>@BrowserState.CurrentUrl</small></span></header>
-            <nav><button class="active">All <b>@NetworkCaptureState.Entries.Count</b></button></nav>
-            <div class="prototype-request-table">
-                <div class="prototype-request-head"><span>St.</span><span>Host</span><span>URL</span><span>Type</span><span>Size</span><span>Time</span></div>
-                @if (NetworkCaptureState.Entries.Count == 0)
+    <section class="network-workspace" aria-label="Network capture workspace">
+        <details class="network-session">
+            <summary>
+                <span class="network-session-icon" aria-hidden="true">⌁</span>
+                <span class="network-session-copy"><strong>Current capture</strong><small>WebView2 session · @entries.Count requests</small></span>
+                <span class="network-session-state">@(NetworkCaptureState.IsCapturing ? "Recording" : "Paused")</span>
+                <span class="network-session-chevron" aria-hidden="true">⌄</span>
+            </summary>
+            <div class="network-session-details"><span>Current URL</span><code title="@BrowserState.CurrentUrl">@BrowserState.CurrentUrl</code></div>
+        </details>
+
+        <div class="network-inspection-layout">
+            <section class="network-activity" aria-label="Live activity">
+                <header class="network-panel-heading">
+                    <div><p>LIVE ACTIVITY</p><h3>Requests</h3></div>
+                    <span class="network-count">@visibleEntries.Count / @entries.Count</span>
+                </header>
+                <div class="network-filter-toolbar">
+                    <nav class="network-filter-list" aria-label="Request type filters">
+                        @foreach (var filter in CaptureFilters)
+                        {
+                            <button type="button" class="@(_filter == filter.Kind ? "active" : string.Empty)" aria-pressed="@(_filter == filter.Kind)" @onclick="() => SelectFilter(filter.Kind)">@filter.Label</button>
+                        }
+                    </nav>
+                    <input type="search" aria-label="Search captured requests" placeholder="Search requests" @bind="_search" @bind:event="oninput" />
+                </div>
+                <div class="network-selection-actions">
+                    <span>@checkedEntries.Count selected for Codex</span>
+                    <button type="button" @onclick="() => SelectVisible(visibleEntries)" disabled="@(visibleEntries.Count == 0)">Select visible</button>
+                    <button type="button" @onclick="ClearSelection" disabled="@(checkedEntries.Count == 0)">Clear selection</button>
+                </div>
+                <div class="network-request-list">
+                    <div class="network-request-columns" aria-hidden="true"><span></span><span>St.</span><span>Request</span><span>Type</span><span>Time</span></div>
+                    @if (visibleEntries.Count == 0)
+                    {
+                        <div class="network-empty">@(entries.Count == 0 ? "No captured requests yet. Start capture, then navigate or reload a page in Browser." : "No requests match this filter or search.")</div>
+                    }
+                    else
+                    {
+                        @foreach (var entry in visibleEntries.AsEnumerable().Reverse())
+                        {
+                            <div class="network-request-row @(selectedEntry?.Sequence == entry.Sequence ? "inspected" : string.Empty) @(_checkedSequences.Contains(entry.Sequence) ? "checked" : string.Empty)">
+                                <input type="checkbox" checked="@_checkedSequences.Contains(entry.Sequence)" @onchange="() => ToggleChecked(entry.Sequence)" aria-label="Include @entry.Method @entry.Url in Codex analysis" />
+                                <button type="button" class="network-request-open" @onclick="() => SelectEntry(entry.Sequence)" aria-pressed="@(selectedEntry?.Sequence == entry.Sequence)" title="Inspect @entry.Url">
+                                    <strong class="@(entry.IsFailure ? "fail" : string.Empty)">@entry.Status</strong>
+                                    <span class="network-request-name"><span class="network-request-path">@entry.Path</span><small>@entry.Host</small></span>
+                                    <span class="network-request-type">@entry.Method @entry.Type</span>
+                                    <span class="network-request-duration">@entry.Duration</span>
+                                </button>
+                            </div>
+                        }
+                    }
+                </div>
+            </section>
+
+            <section class="network-inspector" aria-label="Request details">
+                @if (selectedEntry is { } selected)
                 {
-                    <div class="network-empty"><span>No captured requests yet. Start capture, then navigate or reload a page in Browser.</span></div>
+                    <header class="network-inspector-heading">
+                        <p>REQUEST DETAILS</p>
+                        <div><span class="network-method">@selected.Method</span><h3 title="@selected.Url">@selected.Path</h3></div>
+                        <small title="@selected.Url">@selected.Url</small>
+                    </header>
+                    <div class="network-detail-stack">
+                        @foreach (var side in DetailSides)
+                        {
+                            var headers = HeadersFor(selected, side);
+                            var body = BodyFor(selected, side);
+                            var activeView = ActiveView(side);
+                            <section class="network-detail-pane" aria-label="@(side == DetailSide.Request ? "Request inspector" : "Response inspector")">
+                                <div class="network-detail-pane-heading">
+                                    <strong>@(side == DetailSide.Request ? "Request" : "Response")</strong>
+                                    <span>@(side == DetailSide.Request ? selected.Method : selected.Status)</span>
+                                </div>
+                                <div class="network-detail-tabs" role="tablist" aria-label="@(side == DetailSide.Request ? "Request views" : "Response views")">
+                                    @foreach (var view in DetailViews)
+                                    {
+                                        <button type="button" role="tab" id="@TabId(side, view)" aria-controls="@PanelId(side)" aria-selected="@(activeView == view)" class="@(activeView == view ? "active" : string.Empty)" @onclick="() => SelectView(side, view)">@ViewLabel(view)</button>
+                                    }
+                                </div>
+                                <div class="network-detail-content" role="tabpanel" id="@PanelId(side)" aria-labelledby="@TabId(side, activeView)" tabindex="0">
+                                    @switch (activeView)
+                                    {
+                                        case DetailView.Headers:
+                                            <div class="network-header-summary">@(side == DetailSide.Request ? $"{selected.Method} {selected.Url}" : $"Status {selected.Status}")</div>
+                                            @if (HasContent(headers))
+                                            {
+                                                <div class="network-header-list">
+                                                    @foreach (var header in ParseHeaders(headers))
+                                                    {
+                                                        <div class="network-header-row"><strong>@header.Name</strong><span>@header.Value</span></div>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <p class="network-detail-empty">No headers captured.</p>
+                                            }
+                                            break;
+                                        case DetailView.Text:
+                                            @if (HasContent(body))
+                                            {
+                                                <pre>@body</pre>
+                                            }
+                                            else
+                                            {
+                                                <p class="network-detail-empty">No @(side == DetailSide.Request ? "request" : "response") body captured.</p>
+                                            }
+                                            break;
+                                        case DetailView.Cookies:
+                                            var cookies = CookieHeaders(headers, side);
+                                            if (cookies.Count > 0)
+                                            {
+                                                <div class="network-cookie-list">
+                                                    @foreach (var cookie in cookies)
+                                                    {
+                                                        <pre>@cookie</pre>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <p class="network-detail-empty">No @(side == DetailSide.Request ? "request" : "response") cookies captured.</p>
+                                            }
+                                            break;
+                                        case DetailView.Raw:
+                                            <pre>@RawFor(selected, side)</pre>
+                                            break;
+                                    }
+                                </div>
+                            </section>
+                        }
+                    </div>
                 }
                 else
                 {
-                    @foreach (var entry in NetworkCaptureState.Entries.Reverse())
-                    {
-                        <div><strong class="@(entry.IsFailure ? "fail" : string.Empty)">@entry.Status</strong><span class="network-host" title="@entry.Host"><i class="xhr"></i>@entry.Host</span><span class="network-url" title="@entry.Url">@entry.Path</span><span>@entry.Method @entry.Type</span><span>@entry.Size</span><span>@entry.Duration</span></div>
-                    }
+                    <div class="network-inspector-empty"><span aria-hidden="true">⌁</span><strong>No request selected</strong><p>Captured request details will appear here.</p></div>
                 }
-            </div>
+            </section>
         </div>
+    </section>
+    <section class="network-codex-toolbar" aria-label="Analyze capture with Codex">
+        <div><strong>Ask Codex</strong><span>@AnalysisDescription(analysisCount)</span></div>
+        <label>Scope
+            <select @bind="_analysisScope"><option value="all">All captured</option><option value="selected">Checked requests (@checkedEntries.Count)</option><option value="visible">Visible requests (@visibleEntries.Count)</option></select>
+        </label>
+        <label>Detail
+            <select @bind="_analysisDetail"><option value="full">Full request + response</option><option value="errors">Failures detailed</option><option value="summary">Summary only</option></select>
+        </label>
+        <button type="button" class="prototype-primary-button" @onclick="() => AnalyzeWithCodexAsync(entries, visibleEntries)" disabled="@(analysisCount == 0 || _isAnalyzing)">@(_isAnalyzing ? "Saving..." : "Ask Codex")</button>
+        @if (!string.IsNullOrWhiteSpace(_analysisMessage))
+        {
+            <p role="status">@_analysisMessage</p>
+        }
     </section>
 </section>
 
 @code {
+    private enum DetailSide { Request, Response }
+    private enum DetailView { Headers, Text, Cookies, Raw }
+    private enum CaptureFilter { All, Api, Document, Jpg, Png, JavaScript, Css, Image, Media, Font, Error, Other }
+
+    private static readonly DetailSide[] DetailSides = [DetailSide.Request, DetailSide.Response];
+    private static readonly DetailView[] DetailViews = [DetailView.Headers, DetailView.Text, DetailView.Cookies, DetailView.Raw];
+    private static readonly (CaptureFilter Kind, string Label)[] CaptureFilters =
+    [
+        (CaptureFilter.All, "All"), (CaptureFilter.Api, "API"), (CaptureFilter.Document, "Doc"),
+        (CaptureFilter.Jpg, "JPG"), (CaptureFilter.Png, "PNG"), (CaptureFilter.Image, "Image"),
+        (CaptureFilter.JavaScript, "JS"), (CaptureFilter.Css, "CSS"), (CaptureFilter.Media, "Media"),
+        (CaptureFilter.Font, "Font"), (CaptureFilter.Error, "Error"), (CaptureFilter.Other, "Other")
+    ];
+
+    private int? _selectedSequence;
+    private readonly HashSet<int> _checkedSequences = [];
+    private DetailView _requestView = DetailView.Headers;
+    private DetailView _responseView = DetailView.Headers;
+    private CaptureFilter _filter = CaptureFilter.All;
+    private string _search = string.Empty;
+    private string _analysisScope = "all";
+    private string _analysisDetail = "full";
+    private string _analysisMessage = string.Empty;
+    private bool _isAnalyzing;
+
+    private bool MatchesEntry(NetworkCaptureRow entry)
+    {
+        var kind = NetworkCaptureFilterSupport.Classify(entry.Scheme, entry.Type, entry.MimeType, entry.Path, entry.Status);
+        var matchesKind = _filter switch
+        {
+            CaptureFilter.All => true,
+            CaptureFilter.Jpg => kind == NetworkCaptureFilterKind.Image &&
+                NetworkCaptureFilterSupport.MatchesImageFormat(NetworkCaptureImageFormat.Jpg, entry.MimeType, entry.Path),
+            CaptureFilter.Png => kind == NetworkCaptureFilterKind.Image &&
+                NetworkCaptureFilterSupport.MatchesImageFormat(NetworkCaptureImageFormat.Png, entry.MimeType, entry.Path),
+            _ => Enum.TryParse<NetworkCaptureFilterKind>(_filter.ToString(), out var selectedKind) &&
+                 NetworkCaptureFilterSupport.Matches(selectedKind, kind)
+        };
+
+        return matchesKind && NetworkCaptureFilterSupport.MatchesSearch(
+            _search, entry.Method, entry.Status, entry.Host, entry.Path, entry.Url,
+            entry.Type, entry.MimeType, entry.RequestHeaders + "\n" + entry.RequestBody,
+            entry.ResponseHeaders + "\n" + entry.ResponseBody);
+    }
+
+    private void SelectFilter(CaptureFilter filter) => _filter = filter;
+
+    private void ToggleChecked(int sequence)
+    {
+        if (!_checkedSequences.Add(sequence)) _checkedSequences.Remove(sequence);
+        _analysisScope = _checkedSequences.Count == 0 ? "all" : "selected";
+    }
+
+    private void SelectVisible(IEnumerable<NetworkCaptureRow> visibleEntries)
+    {
+        _checkedSequences.Clear();
+        foreach (var entry in visibleEntries) _checkedSequences.Add(entry.Sequence);
+        _analysisScope = "selected";
+    }
+
+    private void ClearSelection()
+    {
+        _checkedSequences.Clear();
+        _analysisScope = "all";
+    }
+
+    private async Task AnalyzeWithCodexAsync(IReadOnlyList<NetworkCaptureRow> allEntries, IReadOnlyList<NetworkCaptureRow> visibleEntries)
+    {
+        var analysisEntries = _analysisScope switch
+        {
+            "selected" => allEntries.Where(entry => _checkedSequences.Contains(entry.Sequence)).ToList(),
+            "visible" => visibleEntries.ToList(),
+            _ => allEntries.ToList()
+        };
+        if (analysisEntries.Count == 0 || _isAnalyzing) return;
+
+        _isAnalyzing = true;
+        _analysisMessage = string.Empty;
+        try
+        {
+            var snapshots = analysisEntries.Select(ToSnapshot).ToList();
+            var result = await WebViewNetworkCaptureSnapshotWriter.SaveAsync(
+                snapshots, AppContext.BaseDirectory, _analysisScope, _analysisDetail);
+            CodexPromptMacroService.PublishPromptRequested(result.Prompt);
+            WorkspaceNavigation.RequestContentRoute(WorkspaceDestination.Codex, "/chat");
+        }
+        catch (Exception exception)
+        {
+            _analysisMessage = $"Could not save capture: {exception.Message}";
+        }
+        finally
+        {
+            _isAnalyzing = false;
+        }
+    }
+
+    private WebViewNetworkCaptureEntrySnapshot ToSnapshot(NetworkCaptureRow entry)
+    {
+        var includeDetails = _analysisDetail == "full" ||
+            _analysisDetail == "errors" && entry.IsFailure;
+        var requestHeaders = includeDetails ? entry.RequestHeaders : "-";
+        var requestBody = includeDetails ? entry.RequestBody : "-";
+        var responseHeaders = includeDetails ? entry.ResponseHeaders : "-";
+        var responseBody = includeDetails ? entry.ResponseBody : "-";
+        var summary = $"#{entry.Sequence} {entry.Method} {entry.Status} {entry.Duration} {entry.Size} {entry.Url}";
+        return new WebViewNetworkCaptureEntrySnapshot(
+            entry.Sequence, summary, entry.Method, entry.Status, entry.Host, entry.Path,
+            entry.Size, entry.Duration,
+            FormatSnapshotDetails(requestHeaders, requestBody),
+            FormatSnapshotDetails(responseHeaders, responseBody),
+            requestHeaders, requestBody, responseHeaders, responseBody);
+    }
+
+    private static string FormatSnapshotDetails(string headers, string body) =>
+        $"HEADERS:\n{headers}\nBODY:\n{body}";
+
+    private string AnalysisDescription(int count) => _analysisDetail switch
+    {
+        "summary" => $"Summarize {count} captured requests and responses.",
+        "errors" => $"Include request and response details for failures among {count} captured entries.",
+        _ => $"Analyze request and response headers and bodies for all {count} captured entries in this scope."
+    };
+
+    private NetworkCaptureRow? ResolveSelectedEntry(IReadOnlyList<NetworkCaptureRow> entries) =>
+        entries.FirstOrDefault(entry => entry.Sequence == _selectedSequence) ?? entries.LastOrDefault();
+
     private string CaptureStatus => NetworkCaptureState.IsCapturing
         ? "Capture is on. Navigate or reload a page in Browser to collect requests."
         : BrowserState.Status;
@@ -65,20 +337,84 @@
 
     private string Transferred => NetworkCaptureState.Entries.Count == 0 ? "-" : "Live";
 
+    private static string HeadersFor(NetworkCaptureRow entry, DetailSide side) => side == DetailSide.Request ? entry.RequestHeaders : entry.ResponseHeaders;
+
+    private static string BodyFor(NetworkCaptureRow entry, DetailSide side) => side == DetailSide.Request ? entry.RequestBody : entry.ResponseBody;
+
+    private DetailView ActiveView(DetailSide side) => side == DetailSide.Request ? _requestView : _responseView;
+
+    private void SelectView(DetailSide side, DetailView view)
+    {
+        if (side == DetailSide.Request) _requestView = view;
+        else _responseView = view;
+    }
+
+    private static string ViewLabel(DetailView view) => view switch
+    {
+        DetailView.Text => "TextView",
+        _ => view.ToString()
+    };
+
+    private static string PanelId(DetailSide side) => $"network-{side.ToString().ToLowerInvariant()}-panel";
+
+    private static string TabId(DetailSide side, DetailView view) => $"network-{side.ToString().ToLowerInvariant()}-{view.ToString().ToLowerInvariant()}-tab";
+
+    private static string RawFor(NetworkCaptureRow entry, DetailSide side)
+    {
+        var firstLine = side == DetailSide.Request ? $"{entry.Method} {entry.Url}" : $"Status {entry.Status}";
+        var headers = HeadersFor(entry, side);
+        var body = BodyFor(entry, side);
+        return $"{firstLine}\n{(HasContent(headers) ? headers : string.Empty)}\n\n{(HasContent(body) ? body : string.Empty)}".TrimEnd();
+    }
+
+    private static IReadOnlyList<(string Name, string Value)> ParseHeaders(string headers) =>
+        headers.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(line =>
+            {
+                var separator = line.IndexOf(':');
+                return separator > 0 ? (line[..separator].Trim(), line[(separator + 1)..].Trim()) : (line, string.Empty);
+            })
+            .ToArray();
+
+    private static bool HasContent(string? value) => !string.IsNullOrWhiteSpace(value) && value.Trim() != "-";
+
+    private static IReadOnlyList<string> CookieHeaders(string headers, DetailSide side)
+    {
+        if (!HasContent(headers))
+        {
+            return [];
+        }
+
+        var name = side == DetailSide.Request ? "Cookie:" : "Set-Cookie:";
+        return headers.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => line.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    private void SelectEntry(int sequence) => _selectedSequence = sequence;
+
     protected override void OnInitialized()
     {
         BrowserState.StateChanged += OnStateChanged;
         NetworkCaptureState.Changed += OnStateChanged;
     }
 
-    private void ToggleCapture()
+    private void ToggleCapture() => BrowserState.RequestNetworkCapture(!NetworkCaptureState.IsCapturing);
+
+    private void ClearCapture()
     {
-        BrowserState.RequestNetworkCapture(!NetworkCaptureState.IsCapturing);
+        _selectedSequence = null;
+        _checkedSequences.Clear();
+        _analysisScope = "all";
+        NetworkCaptureState.Clear();
     }
 
-    private void ClearCapture() => NetworkCaptureState.Clear();
-
-    private void OnStateChanged() => _ = InvokeAsync(StateHasChanged);
+    private void OnStateChanged() => _ = InvokeAsync(() =>
+    {
+        _checkedSequences.IntersectWith(NetworkCaptureState.Entries.Select(entry => entry.Sequence));
+        if (_checkedSequences.Count == 0 && _analysisScope == "selected") _analysisScope = "all";
+        StateHasChanged();
+    });
 
     public void Dispose()
     {

@@ -5,7 +5,7 @@ namespace CodexDesk.Services;
 /// </summary>
 public sealed class NetworkCaptureStateService
 {
-    private const int MaxEntries = 500;
+    private const int MaxEntries = NetworkCaptureFilterSupport.MaxEntries;
     private readonly object _sync = new();
     private readonly List<NetworkCaptureRow> _entries = [];
 
@@ -64,7 +64,14 @@ public sealed record NetworkCaptureRow(
     string Type,
     string Size,
     string Duration,
-    string Url)
+    string Url,
+    int Sequence,
+    string RequestHeaders,
+    string RequestBody,
+    string ResponseHeaders,
+    string ResponseBody,
+    string MimeType = "-",
+    string Scheme = "-")
 {
     public bool IsFailure => int.TryParse(Status, out var statusCode) && statusCode >= 400;
 }
