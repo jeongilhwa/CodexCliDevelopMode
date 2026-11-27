@@ -15,6 +15,8 @@ public enum CodexAppServerChatEventKind
     ActivityProgress,
     /// <summary>A work item finished while the turn may continue.</summary>
     ActivityCompleted,
+    /// <summary>A network capture tool executed and reported its result.</summary>
+    CaptureToolResult,
     /// <summary>The turn completed successfully.</summary>
     TurnCompleted,
     /// <summary>The turn or an operation failed.</summary>

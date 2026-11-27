@@ -18,6 +18,7 @@ using UI = Microsoft.UI.Xaml;
 public partial class MainPage : ContentPage
 {
     private readonly BrowserStateService _browserState;
+    private readonly BrowserAutomationService _browserAutomation;
     private readonly NetworkCaptureStateService _networkCaptureState;
     private readonly CodexPromptMacroService _codexPromptMacroService;
     private readonly WorkspaceNavigationService _workspaceNavigation;
@@ -235,6 +236,7 @@ public partial class MainPage : ContentPage
 
     public MainPage(
         BrowserStateService browserState,
+        BrowserAutomationService browserAutomation,
         NetworkCaptureStateService networkCaptureState,
         CodexPromptMacroService codexPromptMacroService,
         WorkspaceNavigationService workspaceNavigation,
@@ -244,6 +246,8 @@ public partial class MainPage : ContentPage
         InitializeComponent();
 
         _browserState = browserState;
+        _browserAutomation = browserAutomation;
+        _browserAutomation.Attach(ExecuteBrowserAutomationAsync);
         _networkCaptureState = networkCaptureState;
         _codexPromptMacroService = codexPromptMacroService;
         _workspaceNavigation = workspaceNavigation;
@@ -320,12 +324,21 @@ public partial class MainPage : ContentPage
 
     private void OnWorkspaceDestinationRequested(object? sender, WorkspaceDestination destination)
     {
-        Dispatcher.Dispatch(() => ApplyWorkspaceTab(destination switch
+        var tab = destination switch
         {
             WorkspaceDestination.Browser => WorkspaceTab.WebBrowser,
             WorkspaceDestination.NetworkCaptures => WorkspaceTab.Codex,
             _ => WorkspaceTab.Codex
-        }));
+        };
+
+        if (MainThread.IsMainThread)
+        {
+            ApplyWorkspaceTab(tab);
+        }
+        else
+        {
+            Dispatcher.Dispatch(() => ApplyWorkspaceTab(tab));
+        }
     }
 
     private void ApplyWorkspaceTab(WorkspaceTab tab)

@@ -3,7 +3,7 @@
 
 <header class="html-workspace-header">
     <div><p>CODEX DESK / LOCAL AGENT</p><h1>@Title</h1></div>
-    <div><span><i></i>@Status</span><button type="button">⚙</button><b>C</b></div>
+    <div><span><i></i>@Status</span><button type="button" aria-label="Settings" @onclick="OpenSettings">⚙</button><b>C</b></div>
 </header>
 
 @code {
@@ -22,6 +22,8 @@
         WorkspaceDestination.NetworkCaptures => "Capture service ready",
         _ => "Ready for a new conversation"
     };
+
+    private void OpenSettings() => WorkspaceNavigation.RequestSettings("browser");
 
     protected override void OnInitialized()
     {

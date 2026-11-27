@@ -3,6 +3,8 @@ namespace CodexDesk.Services;
 /// <summary>Coordinates workspace requests raised by the Blazor shell and handled by the native MAUI host.</summary>
 public sealed class WorkspaceNavigationService
 {
+    private string? _pendingSettingsTab;
+
     /// <summary>Gets the workspace most recently requested by the shell.</summary>
     public WorkspaceDestination CurrentDestination { get; private set; } = WorkspaceDestination.Codex;
 
@@ -11,6 +13,9 @@ public sealed class WorkspaceNavigationService
 
     /// <summary>Occurs when the sidebar requests navigation in the main Blazor content view.</summary>
     public event EventHandler<string>? ContentRouteRequested;
+
+    /// <summary>Occurs when the main content view should open its settings dialog.</summary>
+    public event EventHandler? SettingsRequested;
 
     /// <summary>Requests that the native host display a workspace destination.</summary>
     /// <param name="destination">The destination to display.</param>
@@ -28,6 +33,20 @@ public sealed class WorkspaceNavigationService
         Request(destination);
         ContentRouteRequested?.Invoke(this, route);
     }
+
+    /// <summary>Shows the chat workspace and requests a settings tab there.</summary>
+    /// <param name="tab">Settings tab to open.</param>
+    public void RequestSettings(string tab)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tab);
+        Interlocked.Exchange(ref _pendingSettingsTab, tab);
+        RequestContentRoute(WorkspaceDestination.Codex, "/chat");
+        SettingsRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Takes the most recently requested settings tab once.</summary>
+    /// <returns>The requested tab, or null when there is no pending request.</returns>
+    public string? TakePendingSettingsTab() => Interlocked.Exchange(ref _pendingSettingsTab, null);
 }
 
 /// <summary>Native workspace panels available from the Blazor shell.</summary>

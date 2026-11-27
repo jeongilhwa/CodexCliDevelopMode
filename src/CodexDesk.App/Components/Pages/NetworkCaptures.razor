@@ -4,6 +4,7 @@
 @inject NetworkCaptureStateService NetworkCaptureState
 @inject CodexPromptMacroService CodexPromptMacroService
 @inject WorkspaceNavigationService WorkspaceNavigation
+@inject IJSRuntime JS
 
 <PageTitle>Network captures - CodexDesk</PageTitle>
 
@@ -71,7 +72,7 @@
                     <button type="button" @onclick="() => SelectVisible(visibleEntries)" disabled="@(visibleEntries.Count == 0)">Select visible</button>
                     <button type="button" @onclick="ClearSelection" disabled="@(checkedEntries.Count == 0)">Clear selection</button>
                 </div>
-                <div class="network-request-list">
+                <div class="network-request-list" @ref="_requestList">
                     <div class="network-request-columns" aria-hidden="true"><span></span><span>St.</span><span>Request</span><span>Type</span><span>Time</span></div>
                     @if (visibleEntries.Count == 0)
                     {
@@ -81,9 +82,10 @@
                     {
                         @foreach (var entry in visibleEntries.AsEnumerable().Reverse())
                         {
-                            <div class="network-request-row @(selectedEntry?.Sequence == entry.Sequence ? "inspected" : string.Empty) @(_checkedSequences.Contains(entry.Sequence) ? "checked" : string.Empty)">
+                            <div @key="entry.Sequence" class="network-request-row @(selectedEntry?.Sequence == entry.Sequence ? "inspected" : string.Empty) @(_checkedSequences.Contains(entry.Sequence) ? "checked" : string.Empty)"
+                                 @oncontextmenu="e => ShowContextMenu(e, entry)" @oncontextmenu:preventDefault="true">
                                 <input type="checkbox" checked="@_checkedSequences.Contains(entry.Sequence)" @onchange="() => ToggleChecked(entry.Sequence)" aria-label="Include @entry.Method @entry.Url in Codex analysis" />
-                                <button type="button" class="network-request-open" @onclick="() => SelectEntry(entry.Sequence)" aria-pressed="@(selectedEntry?.Sequence == entry.Sequence)" title="Inspect @entry.Url">
+                                <button type="button" class="network-request-open" data-sequence="@entry.Sequence" @onclick="() => SelectEntry(entry.Sequence)" aria-pressed="@(selectedEntry?.Sequence == entry.Sequence)" title="Inspect @entry.Url">
                                     <strong class="@(entry.IsFailure ? "fail" : string.Empty)">@entry.Status</strong>
                                     <span class="network-request-name"><span class="network-request-path">@entry.Path</span><small>@entry.Host</small></span>
                                     <span class="network-request-type">@entry.Method @entry.Type</span>
@@ -93,6 +95,13 @@
                         }
                     }
                 </div>
+                @if (_contextMenu is { } menu)
+                {
+                    <div class="network-context-dismiss" @onclick="CloseContextMenu"></div>
+                    <div class="network-context-menu" style="@ContextMenuStyle" role="menu" aria-label="Request actions" @onkeydown="HandleContextMenuKeyDown">
+                        <button type="button" role="menuitem" @ref="_contextMenuButton" @onclick="() => CopyUrlAsync(menu.Url)">Copy URL</button>
+                    </div>
+                }
             </section>
 
             <section class="network-inspector" aria-label="Request details">
@@ -213,6 +222,10 @@
     ];
 
     private int? _selectedSequence;
+    private ElementReference _requestList;
+    private ElementReference _contextMenuButton;
+    private (int Sequence, string Url, int X, int Y)? _contextMenu;
+    private bool _focusContextMenu;
     private readonly HashSet<int> _checkedSequences = [];
     private DetailView _requestView = DetailView.Headers;
     private DetailView _responseView = DetailView.Headers;
@@ -392,6 +405,46 @@
     }
 
     private void SelectEntry(int sequence) => _selectedSequence = sequence;
+
+    private string ContextMenuStyle => _contextMenu is { } menu
+        ? $"left: min({menu.X}px, calc(100vw - 180px)); top: min({menu.Y}px, calc(100vh - 52px));"
+        : string.Empty;
+
+    private void ShowContextMenu(MouseEventArgs e, NetworkCaptureRow entry)
+    {
+        _selectedSequence = entry.Sequence;
+        _contextMenu = (entry.Sequence, entry.Url, Math.Max(0, (int)e.ClientX), Math.Max(0, (int)e.ClientY));
+        _focusContextMenu = true;
+    }
+
+    private void CloseContextMenu() => _contextMenu = null;
+
+    private async Task CopyUrlAsync(string url)
+    {
+        await Microsoft.Maui.ApplicationModel.DataTransfer.Clipboard.Default.SetTextAsync(url);
+        CloseContextMenu();
+    }
+
+    private async Task HandleContextMenuKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Escape" || _contextMenu is not { } menu) return;
+        CloseContextMenu();
+        await JS.InvokeVoidAsync("codexDesk.focusNetworkRequest", _requestList, menu.Sequence);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("codexDesk.enableNetworkRequestKeyboard", _requestList);
+        }
+
+        if (_focusContextMenu && _contextMenu is not null)
+        {
+            _focusContextMenu = false;
+            await _contextMenuButton.FocusAsync();
+        }
+    }
 
     protected override void OnInitialized()
     {

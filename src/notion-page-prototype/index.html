@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#191919">
+  <title>코딩인터뷰 완전분석 · 문서 프로토타입</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body class="theme-dark">
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 2.8 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.6l-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9z"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15V3m0 0L7.5 7.5M12 3l4.5 4.5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="8" cy="5" r="1"/><circle cx="16" cy="5" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="8" cy="19" r="1"/><circle cx="16" cy="19" r="1"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M5 5 19 19M19 5 5 19"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.3 15.7A8.9 8.9 0 0 1 8.3 3.7 9 9 0 1 0 20.3 15.7Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></symbol>
+  </svg>
+
+  <div class="app-shell" id="appShell">
+    <aside class="sidebar" id="sidebar" aria-label="사이드바" aria-hidden="true">
+      <div class="sidebar-head">
+        <button class="workspace-button" type="button" title="현재 작업 공간"><span class="workspace-mark">C</span><span class="workspace-name">Codex 작업 공간</span><span class="workspace-chevron">⌄</span></button>
+        <button class="icon-button" id="closeSidebar" type="button" aria-label="사이드바 닫기"><svg><use href="#i-menu"/></svg></button>
+      </div>
+      <nav class="sidebar-nav" aria-label="문서 탐색">
+        <button class="sidebar-link" id="sidebarSearch" type="button"><svg><use href="#i-search"/></svg><span>검색</span><kbd>Ctrl K</kbd></button>
+        <div class="sidebar-section-label">비공개</div>
+        <button class="sidebar-link active" id="currentPageLink" type="button" aria-current="page"><span class="page-glyph">📄</span><span class="sidebar-page-title">코딩인터뷰 완전분석</span></button>
+        <div class="outline-label">이 페이지의 목차</div>
+        <div id="outline" class="outline"></div>
+      </nav>
+      <div class="sidebar-foot"><span>로컬 문서 프로토타입</span><span class="saved-dot" id="savedDot" aria-hidden="true"></span></div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="icon-button" id="openSidebar" type="button" aria-label="사이드바 열기" aria-expanded="false"><svg><use href="#i-menu"/></svg></button>
+          <div class="breadcrumb"><span class="breadcrumb-icon">📄</span><span class="breadcrumb-title" id="breadcrumbTitle">코딩인터뷰 완전분석</span></div>
+        </div>
+        <div class="topbar-actions">
+          <button class="text-button search-top" id="topSearch" type="button" aria-label="문서 검색"><svg><use href="#i-search"/></svg><span>검색</span></button>
+          <button class="text-button" id="shareButton" type="button" aria-haspopup="menu" aria-expanded="false"><svg><use href="#i-share"/></svg><span>공유</span></button>
+          <button class="icon-button" id="favoriteButton" type="button" aria-label="즐겨찾기" aria-pressed="false"><svg><use href="#i-star"/></svg></button>
+          <button class="icon-button" id="moreButton" type="button" aria-label="더 보기" aria-haspopup="menu" aria-expanded="false"><svg><use href="#i-dots"/></svg></button>
+        </div>
+      </header>
+
+      <main class="document-scroll" id="documentScroll">
+        <div class="document">
+          <div class="page-controls"><button class="subtle-button" id="addIconButton" type="button">아이콘 추가</button><span class="control-separator">·</span><button class="subtle-button" id="addCoverButton" type="button">커버 추가</button></div>
+          <div class="page-icon" id="pageIcon" hidden>📄</div>
+          <div class="page-cover" id="pageCover" hidden><button id="removeCoverButton" type="button">커버 제거</button></div>
+          <h1 class="page-title" id="pageTitle" contenteditable="true" role="textbox" aria-label="페이지 제목" spellcheck="true">코딩인터뷰 완전분석</h1>
+          <div class="blocks" id="blocks" aria-label="문서 내용"></div>
+          <button class="end-add" id="endAdd" type="button"><svg><use href="#i-plus"/></svg><span>블록 추가</span></button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <button class="ai-fab" id="aiButton" type="button" aria-label="문서 도구 열기" aria-expanded="false"><span class="ai-face">✳</span></button>
+
+  <div class="popover" id="shareMenu" role="menu" hidden><div class="popover-title">공유</div><p>이 프로토타입은 브라우저에 저장됩니다.</p><button class="menu-item" id="copyLink" type="button" role="menuitem"><svg><use href="#i-copy"/></svg>현재 주소 복사</button></div>
+  <div class="popover" id="moreMenu" role="menu" hidden><button class="menu-item" id="themeButton" type="button" role="menuitem"><svg><use href="#i-sun"/></svg><span>밝은 테마</span></button><button class="menu-item" id="exportButton" type="button" role="menuitem"><svg><use href="#i-download"/></svg>텍스트로 저장</button><div class="menu-divider"></div><button class="menu-item danger" id="resetButton" type="button" role="menuitem">원본 문서로 초기화</button></div>
+  <div class="popover block-menu" id="blockMenu" role="menu" hidden><div class="popover-title">블록 유형</div><button class="menu-item" type="button" data-block-type="p" role="menuitem"><span class="type-preview">T</span>본문</button><button class="menu-item" type="button" data-block-type="h2" role="menuitem"><span class="type-preview">H₁</span>제목 1</button><button class="menu-item" type="button" data-block-type="h3" role="menuitem"><span class="type-preview">H₂</span>제목 2</button><button class="menu-item" type="button" data-block-type="h4" role="menuitem"><span class="type-preview">H₃</span>제목 3</button><button class="menu-item" type="button" data-block-type="bullet" role="menuitem"><span class="type-preview">•</span>글머리 기호</button></div>
+
+  <div class="search-backdrop" id="searchBackdrop" hidden>
+    <section class="search-dialog" role="dialog" aria-modal="true" aria-label="문서 검색">
+      <div class="search-field"><svg><use href="#i-search"/></svg><input id="searchInput" type="search" placeholder="이 문서에서 검색..." autocomplete="off"><kbd>ESC</kbd></div>
+      <div id="searchResults" class="search-results"></div>
+    </section>
+  </div>
+
+  <aside class="tools-panel" id="toolsPanel" aria-label="문서 도구" aria-hidden="true">
+    <div class="tools-head"><div class="tools-heading"><span class="ai-face small">✳</span><strong>문서 도구</strong></div><button class="icon-button" id="closeTools" type="button" aria-label="문서 도구 닫기"><svg><use href="#i-close"/></svg></button></div>
+    <p class="tools-description">현재 문서의 내용을 빠르게 살펴보세요.</p>
+    <div class="tools-stat"><span>글자 수</span><strong id="charCount">0</strong></div>
+    <div class="tools-stat"><span>블록 수</span><strong id="blockCount">0</strong></div>
+    <div class="tools-outline-title">문서 목차</div><div class="tools-outline" id="toolsOutline"></div>
+  </aside>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

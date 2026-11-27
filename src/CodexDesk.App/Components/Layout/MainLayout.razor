@@ -14,10 +14,10 @@
             <a class="prototype-nav-item" href="/network-captures" @onclick="OpenNetworkCaptures" @onclick:preventDefault><span>⌁</span>Network captures</a>
             <button class="prototype-nav-item" type="button"><span>⌘</span>Prompt library</button>
         </nav>
-        <div class="prototype-sidebar-footer"><button class="prototype-nav-item" type="button"><span>⌕</span>Quick search <kbd>Ctrl K</kbd></button><button class="prototype-nav-item" type="button"><span>⚙</span>Settings</button><button class="prototype-nav-item" type="button"><span>?</span>Help</button></div>
+        <div class="prototype-sidebar-footer"><button class="prototype-nav-item" type="button"><span>⌕</span>Quick search <kbd>Ctrl K</kbd></button><button class="prototype-nav-item" type="button" @onclick="OpenSettings"><span>⚙</span>Settings</button><button class="prototype-nav-item" type="button"><span>?</span>Help</button></div>
     </aside>
     <section class="prototype-workspace">
-        <header class="prototype-topbar"><div><p>CODEX DESK / LOCAL AGENT</p><h1>Workspace</h1></div><div class="prototype-top-actions"><span class="prototype-status"><i></i>Ready for a new conversation</span><button type="button" aria-label="Settings">⚙</button><span class="prototype-avatar prototype-avatar-small">C</span></div></header>
+        <header class="prototype-topbar"><div><p>CODEX DESK / LOCAL AGENT</p><h1>Workspace</h1></div><div class="prototype-top-actions"><span class="prototype-status"><i></i>Ready for a new conversation</span><button type="button" aria-label="Settings" @onclick="OpenSettings">⚙</button><span class="prototype-avatar prototype-avatar-small">C</span></div></header>
         <main class="prototype-page-content">@Body</main>
     </section>
 </div>
@@ -29,6 +29,8 @@
     }
 
     private void OpenBrowser() => WorkspaceNavigation.Request(WorkspaceDestination.Browser);
+
+    private void OpenSettings() => WorkspaceNavigation.RequestSettings("browser");
 
     private void OpenNetworkCaptures() => WorkspaceNavigation.Request(WorkspaceDestination.NetworkCaptures);
 

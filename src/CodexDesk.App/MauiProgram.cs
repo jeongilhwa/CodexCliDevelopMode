@@ -25,6 +25,8 @@ public static class MauiProgram
 		builder.Services.AddSingleton<CodexDesk.Services.CodexChatSessionState>();
 		builder.Services.AddSingleton<CodexDesk.Services.CodexPromptMacroService>();
 		builder.Services.AddSingleton<CodexDesk.Services.BrowserStateService>();
+		builder.Services.AddSingleton<CodexDesk.Services.BrowserAutomationService>();
+		builder.Services.AddSingleton<CodexDesk.Services.IBrowserAutomationService>(static services => services.GetRequiredService<CodexDesk.Services.BrowserAutomationService>());
 		builder.Services.AddSingleton<CodexDesk.Services.NetworkCaptureStateService>();
 		builder.Services.AddSingleton<CodexDesk.Services.WorkspaceNavigationService>();
 		builder.Services.AddSingleton<IInterceptSessionStore, InterceptSessionStore>();

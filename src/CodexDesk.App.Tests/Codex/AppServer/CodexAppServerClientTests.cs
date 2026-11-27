@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using CodexDesk.AppServer;
 using FluentAssertions;
 
@@ -73,6 +74,43 @@ public sealed class CodexAppServerClientTests
         response.GetProperty("id").GetInt64().Should().Be(9);
         response.GetProperty("result").GetProperty("decision").GetString().Should().Be("accept");
         thread.GetProperty("threadId").GetString().Should().Be("thread-test");
+    }
+
+    [TestMethod]
+    public async Task StartThreadAsync_should_advertise_dynamic_browser_tools_over_json_rpc()
+    {
+        const string script = """
+            $initialize = [Console]::ReadLine()
+            [Console]::Out.WriteLine('{"id":1,"result":{}}')
+            [Console]::ReadLine() | Out-Null
+            $threadStart = [Console]::ReadLine()
+            [Console]::Out.WriteLine('{"method":"test/requests","params":{"initialize":' + $initialize + ',"threadStart":' + $threadStart + '}}')
+            $request = $threadStart | ConvertFrom-Json
+            [Console]::Out.WriteLine('{"id":' + $request.id + ',"result":{"thread":{"id":"thread-test"}}}')
+            while ($null -ne [Console]::ReadLine()) { }
+            """;
+        await using var client = new CodexAppServerClient(new ScriptProcessFactory(script));
+        var received = new TaskCompletionSource<CodexAppServerEvent>(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.EventReceived += (_, notification) => received.TrySetResult(notification);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await client.StartAsync(new CodexAppServerOptions(), timeout.Token);
+
+        var schema = JsonSerializer.SerializeToElement(new
+        {
+            type = "object", properties = new { url = new { type = "string" } }, required = new[] { "url" }
+        });
+        var thread = await client.StartThreadAsync(
+            "gpt-test", timeout.Token, [new CodexDynamicToolSpec("browser_navigate", "Open a URL in WebView2", schema)]);
+        var requests = (await received.Task.WaitAsync(timeout.Token)).Parameters;
+
+        thread.GetProperty("thread").GetProperty("id").GetString().Should().Be("thread-test");
+        requests.GetProperty("initialize").GetProperty("params").GetProperty("capabilities")
+            .GetProperty("experimentalApi").GetBoolean().Should().BeTrue();
+        var tool = requests.GetProperty("threadStart").GetProperty("params").GetProperty("dynamicTools")[0];
+        tool.GetProperty("type").GetString().Should().Be("function");
+        tool.GetProperty("name").GetString().Should().Be("browser_navigate");
+        tool.GetProperty("description").GetString().Should().Be("Open a URL in WebView2");
+        tool.GetProperty("inputSchema").GetProperty("required")[0].GetString().Should().Be("url");
     }
 
     private sealed class ScriptProcessFactory(string script) : ICodexAppServerProcessStartInfoFactory

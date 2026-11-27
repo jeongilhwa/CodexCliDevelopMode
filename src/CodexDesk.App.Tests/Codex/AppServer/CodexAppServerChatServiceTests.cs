@@ -184,6 +184,141 @@ public sealed class CodexAppServerChatServiceTests
     }
 
     [TestMethod]
+    public async Task New_threads_should_register_browser_tools_for_codex()
+    {
+        var client = new FakeClient();
+        using var service = new CodexAppServerChatService(client, new FakeBrowserAutomation());
+
+        await service.StartTurnAsync(Request());
+
+        client.DynamicTools.Should().NotBeNull();
+        client.DynamicTools!.Select(tool => tool.Name).Should().BeEquivalentTo(
+            "browser_navigate", "browser_search", "browser_read_page",
+            "browser_click", "browser_type", "browser_scroll",
+            "network_capture_start", "network_capture_stop", "network_capture_list");
+        client.DynamicTools.Should().OnlyContain(tool =>
+            !string.IsNullOrWhiteSpace(tool.Description) &&
+            tool.InputSchema.ValueKind == JsonValueKind.Object);
+    }
+
+    [TestMethod]
+    public async Task Browser_tool_requests_should_dispatch_arguments_and_return_correlated_results()
+    {
+        var client = new FakeClient();
+        var browser = new FakeBrowserAutomation { Result = new BrowserToolResult(true, "Opened Naver search results") };
+        using var service = new CodexAppServerChatService(client, browser);
+        await service.StartTurnAsync(Request());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        client.Request(71, "item/tool/call", new
+        {
+            threadId = "thread-new", turnId = "turn-new", tool = "browser_search",
+            arguments = new { engine = "naver", query = "사탕" }
+        });
+        var response = await client.WaitForResponseAsync(timeout.Token);
+
+        browser.Calls.Should().ContainSingle();
+        browser.Calls[0].Tool.Should().Be("browser_search");
+        browser.Calls[0].Arguments.GetProperty("engine").GetString().Should().Be("naver");
+        browser.Calls[0].Arguments.GetProperty("query").GetString().Should().Be("사탕");
+        response.Id.Should().Be(71);
+        response.Result.GetProperty("success").GetBoolean().Should().BeTrue();
+        response.Result.GetProperty("contentItems")[0].GetProperty("type").GetString().Should().Be("inputText");
+        response.Result.GetProperty("contentItems")[0].GetProperty("text").GetString().Should().Be("Opened Naver search results");
+    }
+
+    [TestMethod]
+    public async Task Capture_tool_execution_should_report_verified_usage_without_exposing_request_data()
+    {
+        var client = new FakeClient();
+        var browser = new FakeBrowserAutomation
+        {
+            Result = new BrowserToolResult(true, "Total: 7 retained requests\nAuthorization: private-value", CaptureCount: 7)
+        };
+        using var service = new CodexAppServerChatService(client, browser);
+        var events = new List<CodexAppServerChatEvent>();
+        service.EventReceived += (_, notification) => events.Add(notification);
+        await service.StartTurnAsync(Request());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        client.Request(74, "item/tool/call", new
+        {
+            threadId = "thread-new", turnId = "turn-new", tool = "network_capture_list",
+            arguments = new { }
+        });
+        await client.WaitForResponseAsync(timeout.Token);
+
+        var usage = events.Should().ContainSingle(e => e.Kind == CodexAppServerChatEventKind.CaptureToolResult).Which;
+        usage.Text.Should().Contain("7").And.Contain("network_capture_list");
+        usage.Text.Should().NotContain("private-value");
+    }
+
+    [TestMethod]
+    public async Task Unknown_browser_tool_should_fail_without_controlling_the_browser()
+    {
+        var client = new FakeClient();
+        var browser = new FakeBrowserAutomation();
+        using var service = new CodexAppServerChatService(client, browser);
+        await service.StartTurnAsync(Request());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        client.Request(72, "item/tool/call", new
+        {
+            threadId = "thread-new", turnId = "turn-new", tool = "browser_delete_cookies",
+            arguments = new { }
+        });
+        var response = await client.WaitForResponseAsync(timeout.Token);
+
+        browser.Calls.Should().BeEmpty();
+        response.Id.Should().Be(72);
+        response.Result.GetProperty("success").GetBoolean().Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task Interrupting_a_turn_should_cancel_its_active_browser_tool()
+    {
+        var client = new FakeClient();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken browserToken = default;
+        var browser = new FakeBrowserAutomation
+        {
+            Handler = async (_, _, token) =>
+            {
+                browserToken = token;
+                started.TrySetResult();
+                await release.Task.WaitAsync(token);
+                return new BrowserToolResult(true, "read");
+            }
+        };
+        using var service = new CodexAppServerChatService(client, browser);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await service.StartTurnAsync(Request());
+
+        try
+        {
+            client.Request(73, "item/tool/call", new
+            {
+                threadId = "thread-new", turnId = "turn-new", tool = "browser_read_page",
+                arguments = new { }
+            });
+            await started.Task.WaitAsync(timeout.Token);
+            browserToken.CanBeCanceled.Should().BeTrue();
+
+            await service.InterruptAsync("thread-new");
+            browserToken.IsCancellationRequested.Should().BeTrue();
+
+            var response = await client.WaitForResponseAsync(timeout.Token);
+            response.Id.Should().Be(73);
+            response.Result.GetProperty("success").GetBoolean().Should().BeFalse();
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+    }
+
+    [TestMethod]
     public async Task Saved_threads_should_resume_before_sending_the_prompt()
     {
         var client = new FakeClient();
@@ -377,6 +512,8 @@ public sealed class CodexAppServerChatServiceTests
         public CodexAppServerOptions? Options { get; private set; }
         public List<string> Calls { get; } = [];
         public List<(long Id, JsonElement Result)> Responses { get; } = [];
+        public IReadOnlyList<CodexDynamicToolSpec>? DynamicTools { get; private set; }
+        private readonly TaskCompletionSource<(long Id, JsonElement Result)> _responseReceived = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Exception? TurnFailure { get; set; }
         public Exception? ResponseFailure { get; set; }
 
@@ -388,9 +525,10 @@ public sealed class CodexAppServerChatServiceTests
             return Task.CompletedTask;
         }
 
-        public Task<JsonElement> StartThreadAsync(string? model = null, CancellationToken cancellationToken = default)
+        public Task<JsonElement> StartThreadAsync(string? model = null, CancellationToken cancellationToken = default, IReadOnlyList<CodexDynamicToolSpec>? dynamicTools = null)
         {
             Calls.Add($"thread/start:{model}");
+            DynamicTools = dynamicTools;
             return Task.FromResult(JsonSerializer.SerializeToElement(new { thread = new { id = "thread-new" } }));
         }
 
@@ -418,11 +556,28 @@ public sealed class CodexAppServerChatServiceTests
         {
             if (ResponseFailure is not null) return Task.FromException(ResponseFailure);
             Responses.Add((requestId, JsonSerializer.SerializeToElement(result)));
+            _responseReceived.TrySetResult(Responses[^1]);
             return Task.CompletedTask;
         }
+
+        public Task<(long Id, JsonElement Result)> WaitForResponseAsync(CancellationToken cancellationToken) =>
+            _responseReceived.Task.WaitAsync(cancellationToken);
 
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
         public void Notify(string method, object payload) => EventReceived?.Invoke(this, new(method, JsonSerializer.SerializeToElement(payload)));
         public void Request(long id, string method, object payload) => ServerRequestReceived?.Invoke(this, new(id, method, JsonSerializer.SerializeToElement(payload)));
+    }
+
+    private sealed class FakeBrowserAutomation : IBrowserAutomationService
+    {
+        public BrowserToolResult Result { get; set; } = new(true, "Done");
+        public Func<string, JsonElement, CancellationToken, Task<BrowserToolResult>>? Handler { get; set; }
+        public List<(string Tool, JsonElement Arguments)> Calls { get; } = [];
+
+        public Task<BrowserToolResult> ExecuteAsync(string tool, JsonElement arguments, CancellationToken cancellationToken = default)
+        {
+            Calls.Add((tool, arguments));
+            return Handler is null ? Task.FromResult(Result) : Handler(tool, arguments, cancellationToken);
+        }
     }
 }

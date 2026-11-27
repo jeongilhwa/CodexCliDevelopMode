@@ -56,7 +56,7 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
             await SendRequestAsync(InitializeMethod, new
             {
                 clientInfo = new { name = options.ClientName, title = options.ClientTitle, version = options.ClientVersion },
-                capabilities = new { }
+                capabilities = new { experimentalApi = true }
             }, cancellationToken).ConfigureAwait(false);
             await SendNotificationAsync(InitializedMethod, new { }, cancellationToken).ConfigureAwait(false);
         }
@@ -68,9 +68,16 @@ public sealed class CodexAppServerClient(ICodexAppServerProcessStartInfoFactory 
     }
 
     /// <inheritdoc />
-    public Task<JsonElement> StartThreadAsync(string? model = null, CancellationToken cancellationToken = default)
+    public Task<JsonElement> StartThreadAsync(string? model = null, CancellationToken cancellationToken = default, IReadOnlyList<CodexDynamicToolSpec>? dynamicTools = null)
     {
-        return SendRequestAsync("thread/start", string.IsNullOrWhiteSpace(model) ? new { } : new { model }, cancellationToken);
+        var tools = dynamicTools?.Select(tool => new
+        {
+            type = "function",
+            name = tool.Name,
+            description = tool.Description,
+            inputSchema = tool.InputSchema
+        }).ToArray();
+        return SendRequestAsync("thread/start", new { model, dynamicTools = tools }, cancellationToken);
     }
 
     /// <inheritdoc />

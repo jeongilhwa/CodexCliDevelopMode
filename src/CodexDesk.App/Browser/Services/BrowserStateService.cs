@@ -8,11 +8,13 @@ public class BrowserStateService
     private const string DomainCookieSnapshotsKey = "browser.domain-cookie-snapshots";
     private const string UserAgentPresetPreferenceKey = "browser.user-agent-preset";
     private const string CustomUserAgentPreferenceKey = "browser.custom-user-agent";
+    private const string PasswordAutosavePreferenceKey = "browser.password-autosave-enabled";
 
     private bool _initialized;
     private string _status = "WebView is idle.";
     private string _currentUrl = "about:blank";
     private BrowserUserAgentPreference _userAgentPreference = BrowserUserAgentPreference.Default;
+    private bool _passwordAutosaveEnabled = true;
 
     /// <summary>Occurs when browser state exposed to the UI changes.</summary>
     public event Action? StateChanged;
@@ -29,6 +31,9 @@ public class BrowserStateService
     /// <summary>Gets the normalized, persisted User-Agent preference.</summary>
     public BrowserUserAgentPreference UserAgentPreference => _userAgentPreference;
 
+    /// <summary>Gets whether WebView2 offers to save and autofill passwords in its own profile.</summary>
+    public bool PasswordAutosaveEnabled => _passwordAutosaveEnabled;
+
     /// <summary>Loads persisted browser settings once for the current application session.</summary>
     /// <returns>A task that completes after the settings are available.</returns>
     public Task EnsureInitializedAsync()
@@ -39,6 +44,7 @@ public class BrowserStateService
         }
 
         _userAgentPreference = LoadUserAgentPreference();
+        _passwordAutosaveEnabled = LoadPasswordAutosavePreference();
         _status = "WebView is ready.";
         _initialized = true;
         NotifyStateChanged();
@@ -66,6 +72,26 @@ public class BrowserStateService
         catch (Exception ex)
         {
             SetStatus($"Failed to save User-Agent setting: {ex.Message}");
+        }
+    }
+
+    /// <summary>Saves the password autosave preference and applies it to the native WebView2 profile.</summary>
+    /// <param name="enabled">Whether to offer to save new passwords.</param>
+    /// <returns>A task that completes after the preference and apply command are issued.</returns>
+    public async Task SavePasswordAutosavePreferenceAsync(bool enabled)
+    {
+        await EnsureInitializedAsync();
+        try
+        {
+            Preferences.Default.Set(PasswordAutosavePreferenceKey, enabled);
+            _passwordAutosaveEnabled = enabled;
+            _status = enabled ? "Password saving enabled." : "Password saving disabled.";
+            NotifyStateChanged();
+            CommandRequested?.Invoke(new BrowserCommand(BrowserCommandType.ApplyPasswordAutosave));
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Failed to save password setting: {ex.Message}");
         }
     }
 
@@ -212,6 +238,18 @@ public class BrowserStateService
         }
     }
 
+    private static bool LoadPasswordAutosavePreference()
+    {
+        try
+        {
+            return Preferences.Default.Get(PasswordAutosavePreferenceKey, true);
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
     private void NotifyStateChanged()
     {
         StateChanged?.Invoke();
@@ -267,6 +305,8 @@ public enum BrowserCommandType
     Reload,
     /// <summary>Apply the saved User-Agent and reload the current page.</summary>
     ApplyUserAgent,
+    /// <summary>Apply the saved WebView2 password autosave setting.</summary>
+    ApplyPasswordAutosave,
     /// <summary>Navigate back in the native browser if possible.</summary>
     Back,
     /// <summary>Navigate forward in the native browser if possible.</summary>

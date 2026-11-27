@@ -18,19 +18,23 @@ public sealed class CodexAppServerChatService : IDisposable
     private const string ItemCompletedMethod = "item/completed";
     private const string TurnStartedMethod = "turn/started";
     private const string TurnCompletedMethod = "turn/completed";
+    private const string DynamicToolCallMethod = "item/tool/call";
 
     private readonly ICodexAppServerClient _client;
+    private readonly IBrowserAutomationService? _browserAutomation;
     private readonly SemaphoreSlim _turnStartLock = new(1, 1);
     private readonly HashSet<string> _loadedThreads = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CancellationTokenSource> _browserTurnCancellations = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CodexAppServerApproval> _approvals = new(StringComparer.Ordinal);
     private readonly HashSet<string> _resolvingApprovals = new(StringComparer.Ordinal);
     private bool _disposed;
 
     /// <summary>Creates the orchestration layer over the shared app-server client.</summary>
     /// <param name="client">The transport owned and disposed by the application container.</param>
-    public CodexAppServerChatService(ICodexAppServerClient client)
+    public CodexAppServerChatService(ICodexAppServerClient client, IBrowserAutomationService? browserAutomation = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
+        _browserAutomation = browserAutomation;
         _client.EventReceived += OnEventReceived;
         _client.ServerRequestReceived += OnServerRequestReceived;
     }
@@ -56,16 +60,19 @@ public sealed class CodexAppServerChatService : IDisposable
             threadId = await ResolveThreadIdAsync(request, threadId, cancellationToken).ConfigureAwait(false);
 
             Publish(new(CodexAppServerChatEventKind.ThreadReady, threadId));
+            RegisterBrowserTurn(threadId);
             await StartTurnAsync(threadId, request.Prompt, cancellationToken).ConfigureAwait(false);
             return threadId;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            if (threadId is not null) CancelBrowserTurn(threadId);
             // Cancellation stops waiting for a request; the server may still be running the turn.
             throw;
         }
         catch (Exception exception)
         {
+            if (threadId is not null) CancelBrowserTurn(threadId);
             Publish(new(CodexAppServerChatEventKind.TurnFailed, threadId ?? string.Empty, Text: exception.Message));
             throw;
         }
@@ -82,6 +89,7 @@ public sealed class CodexAppServerChatService : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrWhiteSpace(threadId);
+        CancelBrowserTurn(threadId);
         return _client.InterruptTurnAsync(threadId, cancellationToken);
     }
 
@@ -115,6 +123,7 @@ public sealed class CodexAppServerChatService : IDisposable
         _disposed = true;
         _client.EventReceived -= OnEventReceived;
         _client.ServerRequestReceived -= OnServerRequestReceived;
+        CancelAllBrowserTurns();
         // In-flight operations may still release the semaphore during application shutdown.
     }
 
@@ -175,6 +184,12 @@ public sealed class CodexAppServerChatService : IDisposable
 
     private void OnServerRequestReceived(object? sender, CodexAppServerServerRequest request)
     {
+        if (request.Method == DynamicToolCallMethod)
+        {
+            _ = RespondToBrowserToolAsync(request);
+            return;
+        }
+
         if (!TryCreateApproval(request, out var approval)) return;
 
         lock (_approvals)
@@ -185,10 +200,112 @@ public sealed class CodexAppServerChatService : IDisposable
         Publish(new(CodexAppServerChatEventKind.ApprovalRequired, approval.ThreadId, approval.TurnId, Approval: approval));
     }
 
+    private async Task RespondToBrowserToolAsync(CodexAppServerServerRequest request)
+    {
+        var tool = ReadString(request.Parameters, "tool");
+        var threadId = ReadString(request.Parameters, "threadId");
+        var turnCancellation = GetBrowserTurnCancellation(threadId);
+        BrowserToolResult result;
+        if (_browserAutomation is null || !CodexBrowserTools.Contains(tool))
+        {
+            result = new BrowserToolResult(false, $"Unsupported browser tool: {tool ?? "(missing)"}");
+        }
+        else if (turnCancellation is null || turnCancellation.Value.IsCancellationRequested)
+        {
+            result = new BrowserToolResult(false, "The browser turn is no longer active.");
+        }
+        else
+        {
+            try
+            {
+                result = await _browserAutomation.ExecuteAsync(tool!, ReadObject(request.Parameters, "arguments"), turnCancellation.Value).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                result = new BrowserToolResult(false, $"Browser tool failed: {exception.Message}");
+            }
+        }
+
+        if (tool is "network_capture_start" or "network_capture_stop" or "network_capture_list")
+        {
+            var status = result.Success ? "succeeded" : "failed";
+            var count = result.CaptureCount is { } captured ? $"; {captured} requests retained" : string.Empty;
+            Publish(new(CodexAppServerChatEventKind.CaptureToolResult, threadId ?? string.Empty,
+                ReadString(request.Parameters, "turnId"), $"{tool} {status}{count}."));
+        }
+
+        try
+        {
+            await _client.RespondAsync(request.RequestId, new
+            {
+                success = result.Success,
+                contentItems = new[] { new { type = "inputText", text = result.Text } }
+            }).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            Publish(new(CodexAppServerChatEventKind.TurnFailed,
+                ReadString(request.Parameters, "threadId") ?? string.Empty,
+                ReadString(request.Parameters, "turnId"),
+                $"Could not return browser result to Codex: {exception.Message}"));
+        }
+    }
+
+    private void RegisterBrowserTurn(string threadId)
+    {
+        CancellationTokenSource? previous;
+        lock (_browserTurnCancellations)
+        {
+            _browserTurnCancellations.Remove(threadId, out previous);
+            _browserTurnCancellations.Add(threadId, new CancellationTokenSource());
+        }
+
+        previous?.Cancel();
+        previous?.Dispose();
+    }
+
+    private CancellationToken? GetBrowserTurnCancellation(string? threadId)
+    {
+        if (threadId is null) return null;
+        lock (_browserTurnCancellations)
+        {
+            return _browserTurnCancellations.TryGetValue(threadId, out var source) ? source.Token : null;
+        }
+    }
+
+    private void CancelBrowserTurn(string threadId)
+    {
+        CancellationTokenSource? source;
+        lock (_browserTurnCancellations)
+        {
+            _browserTurnCancellations.Remove(threadId, out source);
+        }
+
+        source?.Cancel();
+        source?.Dispose();
+    }
+
+    private void CancelAllBrowserTurns()
+    {
+        CancellationTokenSource[] sources;
+        lock (_browserTurnCancellations)
+        {
+            sources = _browserTurnCancellations.Values.ToArray();
+            _browserTurnCancellations.Clear();
+        }
+
+        foreach (var source in sources)
+        {
+            source.Cancel();
+            source.Dispose();
+        }
+    }
+
     private async Task EnsureServerStartedAsync(CodexChatRequest request, CancellationToken cancellationToken)
     {
         if (_client.IsRunning) return;
 
+        CancelAllBrowserTurns();
         _loadedThreads.Clear();
         await _client.StartAsync(CreateServerOptions(request), cancellationToken).ConfigureAwait(false);
     }
@@ -207,7 +324,8 @@ public sealed class CodexAppServerChatService : IDisposable
     {
         if (string.IsNullOrWhiteSpace(threadId))
         {
-            var result = await _client.StartThreadAsync(request.Model, cancellationToken).ConfigureAwait(false);
+            var result = await _client.StartThreadAsync(request.Model, cancellationToken,
+                _browserAutomation is null ? null : CodexBrowserTools.Specifications).ConfigureAwait(false);
             threadId = ReadString(ReadObject(result, "thread"), "id")
                 ?? throw new InvalidOperationException("Codex app-server did not return a thread identifier.");
             _loadedThreads.Add(threadId);
@@ -326,6 +444,7 @@ public sealed class CodexAppServerChatService : IDisposable
         };
         if (kind is null) return;
 
+        CancelBrowserTurn(threadId);
         RemoveTurnApprovals(threadId, turnId);
         Publish(new(kind.Value, threadId, turnId, ReadString(ReadObject(turn, "error"), "message")));
     }

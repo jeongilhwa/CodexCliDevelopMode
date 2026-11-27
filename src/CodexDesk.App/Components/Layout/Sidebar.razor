@@ -10,7 +10,7 @@
         <a href="/network-captures" @onclick="OpenNetworkCaptures" @onclick:preventDefault>⌁ <span>Network captures</span></a>
         <button type="button">⌘ <span>Prompt library</span></button>
     </nav>
-    <footer><button type="button">⌕ <span>Quick search</span><kbd>Ctrl K</kbd></button><button type="button">⚙ <span>Settings</span></button><button type="button">? <span>Help</span></button></footer>
+    <footer><button type="button">⌕ <span>Quick search</span><kbd>Ctrl K</kbd></button><button type="button" @onclick="OpenSettings">⚙ <span>Settings</span></button><button type="button">? <span>Help</span></button></footer>
 </aside>
 
 @code {
@@ -25,6 +25,8 @@
     }
 
     private void OpenBrowser() => WorkspaceNavigation.Request(WorkspaceDestination.Browser);
+
+    private void OpenSettings() => WorkspaceNavigation.RequestSettings("browser");
 
     private void OpenNetworkCaptures()
     {

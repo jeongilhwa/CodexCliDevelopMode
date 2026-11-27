@@ -7,6 +7,7 @@
 @inject CodexChatSessionState ChatState
 @inject CodexPromptMacroService CodexPromptMacroService
 @inject BrowserStateService BrowserState
+@inject WorkspaceNavigationService WorkspaceNavigation
 @inject IJSRuntime JS
 
 <PageTitle>CodexDesk</PageTitle>
@@ -241,6 +242,20 @@
                     {
                         <p class="hint" role="status" aria-live="polite">@UserAgentStatus</p>
                     }
+
+                    <label class="toggle">
+                        <input type="checkbox" @bind="PasswordAutosaveEnabled" />
+                        <span>브라우저 비밀번호 저장 및 자동 입력</span>
+                    </label>
+                    <p class="hint">로그인하면 WebView2가 비밀번호 저장 여부를 묻습니다. 저장한 비밀번호는 CodexDesk 브라우저 프로필에서 자동 입력할 수 있습니다.</p>
+                    <div class="button-row">
+                        <button type="button" class="primary" @onclick="SavePasswordAutosaveAsync">비밀번호 설정 저장</button>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(PasswordAutosaveStatus))
+                    {
+                        <p class="hint" role="status" aria-live="polite">@PasswordAutosaveStatus</p>
+                    }
+
                 }
 
                 @if (SettingsTab == "macros")
@@ -409,6 +424,10 @@
 
     private string UserAgentStatus { get; set; } = string.Empty;
 
+    private bool PasswordAutosaveEnabled { get; set; } = true;
+
+    private string PasswordAutosaveStatus { get; set; } = string.Empty;
+
     private bool AllowWorkspaceWrite { get; set; } = true;
 
     private bool IsSessionModalOpen { get; set; }
@@ -461,10 +480,16 @@
     protected override async Task OnInitializedAsync()
     {
         ChatState.AttachDispatcher(this, action => { _ = InvokeAsync(action); });
+        WorkspaceNavigation.SettingsRequested += OnSettingsRequested;
+        if (WorkspaceNavigation.TakePendingSettingsTab() is { } requestedTab)
+        {
+            OpenSettingsTab(requestedTab);
+        }
         CommandPath = CodexCli.GetDefaultCommandPath();
         WorkspacePath = CodexCli.GetDefaultWorkspacePath();
         await BrowserState.EnsureInitializedAsync();
         RefreshBrowserUserAgentPreference();
+        PasswordAutosaveEnabled = BrowserState.PasswordAutosaveEnabled;
         CodexPromptMacroService.KeyObserved += OnMacroKeyObserved;
         CodexPromptMacroService.PromptRequested += OnExternalPromptRequested;
         CodexPromptMacroService.Load();
@@ -498,6 +523,13 @@
         var preference = BrowserState.UserAgentPreference;
         SelectedUserAgentPresetKey = preference.PresetKey;
         CustomUserAgent = preference.CustomUserAgent;
+    }
+
+    private async Task SavePasswordAutosaveAsync()
+    {
+        await BrowserState.SavePasswordAutosavePreferenceAsync(PasswordAutosaveEnabled);
+        PasswordAutosaveEnabled = BrowserState.PasswordAutosaveEnabled;
+        PasswordAutosaveStatus = BrowserState.Status;
     }
 
     private async Task SendAsync()
@@ -972,8 +1004,26 @@
 
     private void OpenSessionModal()
     {
-        SettingsTab = "session";
+        OpenSettingsTab("session");
+    }
+
+    private void OpenSettingsTab(string tab)
+    {
+        SettingsTab = tab;
+        IsHamburgerOpen = false;
         IsSessionModalOpen = true;
+    }
+
+    private void OnSettingsRequested(object? sender, EventArgs e)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (WorkspaceNavigation.TakePendingSettingsTab() is { } requestedTab)
+            {
+                OpenSettingsTab(requestedTab);
+                StateHasChanged();
+            }
+        });
     }
 
     private void CloseSessionModal()
@@ -1289,6 +1339,7 @@
         _disposed = true;
         ChatState.DetachDispatcher(this);
         ChatState.Changed -= OnChatStateChanged;
+        WorkspaceNavigation.SettingsRequested -= OnSettingsRequested;
         CodexPromptMacroService.KeyObserved -= OnMacroKeyObserved;
         CodexPromptMacroService.PromptRequested -= OnExternalPromptRequested;
         _loadingIndicatorTimer?.Dispose();

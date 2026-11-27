@@ -118,6 +118,9 @@ public sealed class CodexChatSessionState : IDisposable
                         tab.ActiveItemId = null;
                     }
                     break;
+                case CodexAppServerChatEventKind.CaptureToolResult:
+                    tab.Messages.Add(ChatMessage.System(notification.Text ?? "Network capture tool executed."));
+                    break;
                 case CodexAppServerChatEventKind.ApprovalRequired:
                     if (notification.Approval is { } approval && !tab.PendingApprovals.Any(a => a.Id == approval.Id))
                         tab.PendingApprovals.Add(approval);

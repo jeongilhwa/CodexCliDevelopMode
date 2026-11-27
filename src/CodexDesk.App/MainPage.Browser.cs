@@ -39,6 +39,7 @@ public partial class MainPage : ContentPage
                 if (webView2.CoreWebView2 is not null)
                 {
                     _ = ApplyBrowserUserAgentAsync(webView2.CoreWebView2, reload: false);
+                    _ = ApplyBrowserPasswordAutosaveAsync(webView2.CoreWebView2);
                     _ = EnsureWebViewInterceptAttachedAsync(webView2.CoreWebView2);
                     AttachWebViewNewWindowHandler(webView2.CoreWebView2);
                     AttachWebViewKeyboardDebugHandlers(webView2.CoreWebView2);
@@ -65,6 +66,7 @@ public partial class MainPage : ContentPage
 
         _ = EnsureWebViewInterceptAttachedAsync(sender.CoreWebView2);
         _ = ApplyBrowserUserAgentAsync(sender.CoreWebView2, reload: false);
+        _ = ApplyBrowserPasswordAutosaveAsync(sender.CoreWebView2);
         _browserState.SetStatus("WebView2 is ready.");
         AttachWebViewNewWindowHandler(sender.CoreWebView2);
         AttachWebViewKeyboardDebugHandlers(sender.CoreWebView2);
@@ -1394,6 +1396,18 @@ public partial class MainPage : ContentPage
                     _browserState.SetStatus("User-Agent switching is only available on Windows WebView2.");
 #endif
                     break;
+
+                case BrowserCommandType.ApplyPasswordAutosave:
+#if WINDOWS
+                    var passwordWebView2 = await TryEnsureCoreWebView2Async();
+                    if (passwordWebView2 is not null)
+                    {
+                        await ApplyBrowserPasswordAutosaveAsync(passwordWebView2);
+                    }
+#else
+                    _browserState.SetStatus("Password saving requires Windows WebView2.");
+#endif
+                    break;
             }
 
             UpdateBrowserChrome();
@@ -1401,6 +1415,19 @@ public partial class MainPage : ContentPage
     }
 
 #if WINDOWS
+    private async Task ApplyBrowserPasswordAutosaveAsync(CoreWebView2 coreWebView2)
+    {
+        try
+        {
+            await _browserState.EnsureInitializedAsync();
+            coreWebView2.Settings.IsPasswordAutosaveEnabled = _browserState.PasswordAutosaveEnabled;
+        }
+        catch (Exception ex)
+        {
+            _browserState.SetStatus($"Could not apply password saving: {ex.Message}", _browserState.CurrentUrl);
+        }
+    }
+
     private async Task ApplyBrowserUserAgentAsync(CoreWebView2 coreWebView2, bool reload)
     {
         await _browserState.EnsureInitializedAsync();
@@ -2736,6 +2763,330 @@ public partial class MainPage : ContentPage
         var result = JsonSerializer.Deserialize<T>(effectiveJson, AppJsonOptions);
         return result ?? throw new InvalidOperationException($"Failed to deserialize browser script payload to {typeof(T).Name}.");
     }
+
+    private sealed record BrowserAutomationScriptResult(bool Ok, string? Message);
+    private sealed record BrowserAutomationPageLink(string? Text, string? Url);
+    private sealed record BrowserAutomationPageControl(string? Label, string? Selector, string? Type);
+    private sealed record BrowserAutomationPageResult(
+        string? Title, string? Url, string? Text, IReadOnlyList<BrowserAutomationPageLink>? Links,
+        IReadOnlyList<BrowserAutomationPageControl>? Controls,
+        int PasswordFieldCount, int FilledPasswordFieldCount);
+
+    private Task<BrowserToolResult> ExecuteBrowserAutomationAsync(
+        BrowserAutomationAction action, CancellationToken cancellationToken) =>
+        MainThread.InvokeOnMainThreadAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (action.Tool == "network_capture_list")
+            {
+                _workspaceNavigation.Request(WorkspaceDestination.NetworkCaptures);
+            }
+            else if (_activeWorkspaceTab != WorkspaceTab.WebBrowser)
+            {
+                _workspaceNavigation.Request(WorkspaceDestination.Browser);
+            }
+
+            var actionLabel = action.Tool switch
+            {
+                "browser_navigate" => "opening page",
+                "browser_search" => "searching",
+                "browser_read_page" => "reading page",
+                "browser_click" => "clicking",
+                "browser_type" => "typing",
+                "browser_scroll" => "scrolling",
+                "network_capture_start" => "starting network capture",
+                "network_capture_stop" => "stopping network capture",
+                "network_capture_list" => "reading network capture",
+                _ => "working in browser"
+            };
+            _browserState.SetStatus($"Codex is {actionLabel}...", _browserState.CurrentUrl);
+
+            BrowserToolResult result;
+            try
+            {
+                result = action.Tool switch
+                {
+                    "browser_navigate" or "browser_search" => await NavigateBrowserForCodexAsync(action.Url!, cancellationToken),
+                    "browser_read_page" => await ReadBrowserPageForCodexAsync(),
+                    "browser_click" => await ClickBrowserForCodexAsync(action.Selector!, cancellationToken),
+                    "browser_type" => await RunBrowserActionForCodexAsync(BrowserTypeScript, new { selector = action.Selector, text = action.Text }),
+                    "browser_scroll" => await RunBrowserActionForCodexAsync(BrowserScrollScript, new { pixels = action.Pixels }),
+                    "network_capture_start" => await StartNetworkCaptureForCodexAsync(),
+                    "network_capture_stop" => await StopNetworkCaptureForCodexAsync(cancellationToken),
+                    "network_capture_list" => ListNetworkCaptureForCodex(action.AfterSequence, action.Limit),
+                    _ => new BrowserToolResult(false, "Unsupported browser action.")
+                };
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _browserState.SetStatus("Codex browser action stopped.", _browserState.CurrentUrl);
+                throw;
+            }
+            catch
+            {
+                _browserState.SetStatus($"Codex could not finish {actionLabel}.", _browserState.CurrentUrl);
+                throw;
+            }
+            _browserState.SetStatus(result.Success
+                ? $"Codex finished {actionLabel}."
+                : $"Codex could not finish {actionLabel}.", _browserState.CurrentUrl);
+            return result;
+        });
+
+    private BrowserToolResult ListNetworkCaptureForCodex(int afterSequence, int limit)
+    {
+        var entries = _networkCaptureState.Entries;
+        return new BrowserToolResult(true,
+            NetworkCaptureSummaryFormatter.FormatPage(entries, _networkCaptureState.IsCapturing, afterSequence, limit),
+            entries.Count);
+    }
+
+    private async Task<BrowserToolResult> StartNetworkCaptureForCodexAsync()
+    {
+#if WINDOWS
+        if (_webViewNetworkDomainEnabled)
+        {
+            await ApplyWebViewNetworkCaptureModeAsync(enabled: false);
+        }
+
+        await ApplyWebViewNetworkCaptureModeAsync(enabled: true);
+        if (!_webViewNetworkDomainEnabled)
+        {
+            return new BrowserToolResult(false, "WebView2 network capture is not ready.");
+        }
+
+        OnNetworkClearClicked(null, EventArgs.Empty);
+        _webViewNetworkCaptureEnabled = true;
+        _networkCaptureState.SetCapturing(true);
+        UpdateWebViewNetworkCaptureToggleButton();
+        return new BrowserToolResult(true, "Network capture started and previous requests cleared. Navigate in the embedded browser, then stop capture and list the requests.", 0);
+#else
+        return new BrowserToolResult(false, "Network capture requires Windows WebView2.");
+#endif
+    }
+
+    private async Task<BrowserToolResult> StopNetworkCaptureForCodexAsync(CancellationToken cancellationToken)
+    {
+#if WINDOWS
+        if (_webViewNetworkDomainEnabled)
+        {
+            await Task.Delay(500, cancellationToken);
+            await ApplyWebViewNetworkCaptureModeAsync(enabled: false);
+        }
+
+        _webViewNetworkCaptureEnabled = false;
+        _networkCaptureState.SetCapturing(false);
+        UpdateWebViewNetworkCaptureToggleButton();
+        var count = _networkCaptureState.Entries.Count;
+        return new BrowserToolResult(true, $"Network capture stopped. {count} requests retained for analysis.", count);
+#else
+        return new BrowserToolResult(false, "Network capture requires Windows WebView2.");
+#endif
+    }
+
+    private async Task<BrowserToolResult> NavigateBrowserForCodexAsync(string url, CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<WebNavigatedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var navigationStarted = false;
+        void Navigating(object? sender, WebNavigatingEventArgs args)
+        {
+            if (Uri.TryCreate(args.Url, UriKind.Absolute, out var actual) &&
+                Uri.TryCreate(url, UriKind.Absolute, out var expected) &&
+                string.Equals(actual.Host, expected.Host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(actual.AbsolutePath, expected.AbsolutePath, StringComparison.OrdinalIgnoreCase))
+            {
+                navigationStarted = true;
+            }
+        }
+        void Navigated(object? sender, WebNavigatedEventArgs args)
+        {
+            if (navigationStarted) completion.TrySetResult(args);
+        }
+
+        BrowserWebView.Navigating += Navigating;
+        BrowserWebView.Navigated += Navigated;
+        try
+        {
+            _browserState.SetStatus("Opening page.", url);
+            BrowserWebView.Source = new UrlWebViewSource { Url = url };
+            WebNavigatedEventArgs result;
+            try
+            {
+                result = await completion.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                return new BrowserToolResult(false, $"Navigation to {url} started, but the page did not finish loading within 20 seconds.");
+            }
+
+            return result.Result == WebNavigationResult.Success
+                ? new BrowserToolResult(true, $"Opened {result.Url ?? url} in the embedded browser.")
+                : new BrowserToolResult(false, $"Page load failed: {result.Result} ({result.Url ?? url}).");
+        }
+        finally
+        {
+            BrowserWebView.Navigating -= Navigating;
+            BrowserWebView.Navigated -= Navigated;
+        }
+    }
+
+    private async Task<BrowserToolResult> ReadBrowserPageForCodexAsync()
+    {
+        const string script = """
+            (() => {
+                const text = (document.body?.innerText || "").slice(0, 12000);
+                const links = Array.from(document.querySelectorAll("a[href]"))
+                    .slice(0, 20)
+                    .map(a => ({ text: (a.innerText || a.getAttribute("aria-label") || "").trim().slice(0, 100),
+                                 url: (a.href || "").slice(0, 500) }));
+                const selectorFor = element => {
+                    const parts = [];
+                    for (let current = element; current && current !== document.body; current = current.parentElement) {
+                        if (current.id) {
+                            parts.unshift(`#${CSS.escape(current.id)}`);
+                            break;
+                        }
+                        const siblings = Array.from(current.parentElement?.children || [])
+                            .filter(child => child.tagName === current.tagName);
+                        parts.unshift(`${current.tagName.toLowerCase()}:nth-of-type(${siblings.indexOf(current) + 1})`);
+                    }
+                    if (!parts[0]?.startsWith("#")) parts.unshift("body");
+                    const selector = parts.join(" > ");
+                    return selector.length <= 512 ? selector : "";
+                };
+                const controls = Array.from(document.querySelectorAll("button, input, textarea, select, [role=button]"))
+                    .filter(element => element.getClientRects().length > 0 &&
+                        !(element instanceof HTMLInputElement && ["hidden", "password"].includes(element.type)))
+                    .slice(0, 40)
+                    .map(element => ({
+                        label: (element.innerText || element.getAttribute("aria-label") ||
+                            element.getAttribute("placeholder") || element.getAttribute("name") || "").trim().slice(0, 100),
+                        selector: selectorFor(element),
+                        type: element.getAttribute("type") || element.tagName.toLowerCase()
+                    }))
+                    .filter(element => element.selector);
+                const passwordFields = Array.from(document.querySelectorAll('input[type="password"]'))
+                    .filter(element => element.getClientRects().length > 0);
+                return { title: document.title.slice(0, 300), url: location.href.slice(0, 2048), text, links, controls,
+                    passwordFieldCount: passwordFields.length,
+                    filledPasswordFieldCount: passwordFields.filter(element => element.value.length > 0).length };
+            })()
+            """;
+        var page = ParseScriptJson<BrowserAutomationPageResult>(await RunBrowserScriptAsync(script));
+        var result = new StringBuilder()
+            .AppendLine($"Title: {page.Title}")
+            .AppendLine($"URL: {page.Url}")
+            .AppendLine("Page text:")
+            .AppendLine(page.Text ?? string.Empty);
+        if (page.PasswordFieldCount > 0)
+        {
+            result.AppendLine($"Password fields: {page.PasswordFieldCount} visible, {page.FilledPasswordFieldCount} filled. Password values are never available to this tool.");
+        }
+        if (page.Links is { Count: > 0 })
+        {
+            result.AppendLine("Links:");
+            foreach (var link in page.Links)
+            {
+                result.AppendLine($"- {link.Text}: {link.Url}");
+            }
+        }
+
+        if (page.Controls is { Count: > 0 })
+        {
+            result.AppendLine("Interactive elements:");
+            foreach (var control in page.Controls)
+            {
+                result.AppendLine($"- {control.Type} {control.Label}: {control.Selector}");
+            }
+        }
+
+        return new BrowserToolResult(true, result.ToString());
+    }
+
+    private async Task<BrowserToolResult> RunBrowserActionForCodexAsync(string body, object arguments)
+    {
+        var script = $"((args) => {{ {body} }})({JsonSerializer.Serialize(arguments)})";
+        var result = ParseScriptJson<BrowserAutomationScriptResult>(await RunBrowserScriptAsync(script));
+        return new BrowserToolResult(result.Ok, result.Message ?? (result.Ok ? "Browser action completed." : "Browser action failed."));
+    }
+
+    private async Task<BrowserToolResult> ClickBrowserForCodexAsync(string selector, CancellationToken cancellationToken)
+    {
+        var navigationStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var navigationCompleted = new TaskCompletionSource<WebNavigatedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void Navigating(object? sender, WebNavigatingEventArgs args) => navigationStarted.TrySetResult(true);
+        void Navigated(object? sender, WebNavigatedEventArgs args)
+        {
+            if (navigationStarted.Task.IsCompleted) navigationCompleted.TrySetResult(args);
+        }
+
+        BrowserWebView.Navigating += Navigating;
+        BrowserWebView.Navigated += Navigated;
+        try
+        {
+            var click = await RunBrowserActionForCodexAsync(BrowserClickScript, new { selector });
+            if (!click.Success) return click;
+
+            // A click can navigate after ExecuteScriptAsync returns. Give it a short window to start.
+            var first = await Task.WhenAny(navigationStarted.Task, Task.Delay(400, cancellationToken));
+            cancellationToken.ThrowIfCancellationRequested();
+            if (first != navigationStarted.Task) return click;
+
+            try
+            {
+                var navigation = await navigationCompleted.Task.WaitAsync(TimeSpan.FromSeconds(20), cancellationToken);
+                return navigation.Result == WebNavigationResult.Success
+                    ? new BrowserToolResult(true, $"Clicked and opened {navigation.Url}.")
+                    : new BrowserToolResult(false, $"Clicked, but page load failed: {navigation.Result}.");
+            }
+            catch (TimeoutException)
+            {
+                return new BrowserToolResult(false, "Clicked, but the new page did not finish loading within 20 seconds.");
+            }
+        }
+        finally
+        {
+            BrowserWebView.Navigating -= Navigating;
+            BrowserWebView.Navigated -= Navigated;
+        }
+    }
+
+    private const string BrowserClickScript = """
+        let element;
+        try { element = document.querySelector(args.selector); }
+        catch { return { ok: false, message: "Invalid CSS selector." }; }
+        if (!element) return { ok: false, message: "No element matches that selector." };
+        if (typeof element.click !== "function") return { ok: false, message: "The matching element cannot be clicked." };
+        element.scrollIntoView({ block: "center" });
+        setTimeout(() => element.click(), 0);
+        return { ok: true, message: "Clicked the matching element." };
+        """;
+
+    private const string BrowserTypeScript = """
+        let element;
+        try { element = document.querySelector(args.selector); }
+        catch { return { ok: false, message: "Invalid CSS selector." }; }
+        if (!element) return { ok: false, message: "No element matches that selector." };
+        if (element instanceof HTMLInputElement) {
+            if (["password", "file", "hidden", "checkbox", "radio", "button", "submit", "reset", "image"].includes(element.type))
+                return { ok: false, message: "This input type cannot be filled." };
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(element, args.text);
+        } else if (element instanceof HTMLTextAreaElement) {
+            Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(element, args.text);
+        } else if (element.isContentEditable) {
+            element.textContent = args.text;
+        } else {
+            return { ok: false, message: "The matching element is not an editable field." };
+        }
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        return { ok: true, message: "Filled the matching field." };
+        """;
+
+    private const string BrowserScrollScript = """
+        window.scrollBy(0, args.pixels);
+        return { ok: true, message: `Scrolled to Y=${Math.round(window.scrollY)}.` };
+        """;
 
     private void OnBrowserWebViewNavigating(object? sender, WebNavigatingEventArgs e)
     {
