@@ -194,7 +194,7 @@ public sealed class CodexAppServerChatServiceTests
         client.DynamicTools.Should().NotBeNull();
         client.DynamicTools!.Select(tool => tool.Name).Should().BeEquivalentTo(
             "browser_navigate", "browser_search", "browser_read_page",
-            "browser_click", "browser_screenshot", "browser_click_at", "browser_type",
+            "browser_screenshot", "browser_click_at",
             "browser_type_focused", "browser_scroll",
             "network_capture_start", "network_capture_stop", "network_capture_list");
         client.DynamicTools.Should().OnlyContain(tool =>

@@ -28,14 +28,6 @@ internal static class CodexBrowserTools
             }, ["screenshotId", "x", "y"])),
         new("browser_type_focused", "After browser_click_at focuses an ordinary text field, insert text through WebView2 browser input. Password fields are blocked. For a CAPTCHA or security challenge, ask the user to complete it.",
             Schema(new { text = new { type = "string", description = "Text to insert into the focused field" } }, ["text"])),
-        new("browser_click", "Click one element on the current embedded browser page using a CSS selector. Read the page first to identify the target. Do not submit or purchase unless the user asked.",
-            Schema(new { selector = new { type = "string", description = "CSS selector for the element to click" } }, ["selector"])),
-        new("browser_type", "Replace the value of an input or textarea on the current embedded browser page using a CSS selector. For visual interaction, prefer browser_screenshot, browser_click_at, and browser_type_focused.",
-            Schema(new
-            {
-                selector = new { type = "string", description = "CSS selector for the input or textarea" },
-                text = new { type = "string", description = "Text to enter" }
-            }, ["selector", "text"])),
         new("browser_scroll", "Scroll the current embedded browser page vertically by a signed number of pixels.",
             Schema(new { pixels = new { type = "integer", minimum = -5000, maximum = 5000 } }, ["pixels"])),
         new("network_capture_start", "Clear previous requests and start recording WebView2 network activity before browser navigation. Keep the embedded browser visible while navigating.",
