@@ -8,13 +8,16 @@ public interface IBrowserAutomationService
     Task<BrowserToolResult> ExecuteAsync(string tool, JsonElement arguments, CancellationToken cancellationToken = default);
 }
 
-public sealed record BrowserToolResult(bool Success, string Text, int? CaptureCount = null);
+public sealed record BrowserToolResult(bool Success, string Text, int? CaptureCount = null, string? ImageUrl = null);
 
 internal sealed record BrowserAutomationAction(
     string Tool,
     string? Url = null,
     string? Selector = null,
     string? Text = null,
+    string? ScreenshotId = null,
+    int X = 0,
+    int Y = 0,
     int Pixels = 0,
     int AfterSequence = 0,
     int Limit = 50);
@@ -102,6 +105,23 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
             }
             case "browser_read_page":
                 return new BrowserAutomationAction(tool);
+            case "browser_screenshot":
+                return new BrowserAutomationAction(tool);
+            case "browser_click_at":
+            {
+                var screenshotId = RequiredString(arguments, "screenshotId", 64);
+                if (!Guid.TryParse(screenshotId, out _))
+                {
+                    throw new ArgumentException("'screenshotId' must be a screenshot identifier.");
+                }
+
+                var x = RequiredCoordinate(arguments, "x");
+                var y = RequiredCoordinate(arguments, "y");
+                return new BrowserAutomationAction(tool, ScreenshotId: screenshotId, X: x, Y: y);
+            }
+            case "browser_type_focused":
+                return new BrowserAutomationAction(tool,
+                    Text: RequiredString(arguments, "text", 10000, trim: false));
             case "network_capture_start":
             case "network_capture_stop":
                 return new BrowserAutomationAction(tool);
@@ -155,6 +175,18 @@ public sealed class BrowserAutomationService : IBrowserAutomationService
         if (element.ValueKind != JsonValueKind.Number || !element.TryGetInt32(out var value))
         {
             throw new ArgumentException($"'{name}' must be an integer.");
+        }
+
+        return value;
+    }
+
+    private static int RequiredCoordinate(JsonElement arguments, string name)
+    {
+        if (!arguments.TryGetProperty(name, out var element) ||
+            element.ValueKind != JsonValueKind.Number ||
+            !element.TryGetInt32(out var value) || value is < 0 or > 10000)
+        {
+            throw new ArgumentException($"'{name}' must be an integer from 0 to 10000.");
         }
 
         return value;

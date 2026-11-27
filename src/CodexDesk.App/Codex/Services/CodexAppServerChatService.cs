@@ -236,10 +236,16 @@ public sealed class CodexAppServerChatService : IDisposable
 
         try
         {
+            var contentItems = new List<object> { new { type = "inputText", text = result.Text } };
+            if (result.Success && !string.IsNullOrWhiteSpace(result.ImageUrl))
+            {
+                contentItems.Add(new { type = "inputImage", imageUrl = result.ImageUrl });
+            }
+
             await _client.RespondAsync(request.RequestId, new
             {
                 success = result.Success,
-                contentItems = new[] { new { type = "inputText", text = result.Text } }
+                contentItems
             }).ConfigureAwait(false);
         }
         catch (Exception exception)

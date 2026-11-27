@@ -66,6 +66,119 @@ public sealed class BrowserAutomationServiceTests
     }
 
     [TestMethod]
+    public async Task Screenshot_reaches_browser_host_without_arguments()
+    {
+        var service = new BrowserAutomationService();
+        BrowserAutomationAction? received = null;
+        service.Attach((action, _) =>
+        {
+            received = action;
+            return Task.FromResult(new BrowserToolResult(true, "captured"));
+        });
+
+        var result = await service.ExecuteAsync("browser_screenshot", JsonSerializer.SerializeToElement(new { }));
+
+        result.Success.Should().BeTrue();
+        received.Should().NotBeNull();
+        received!.Tool.Should().Be("browser_screenshot");
+    }
+
+    [TestMethod]
+    public async Task Coordinate_click_forwards_a_valid_screenshot_and_position()
+    {
+        var service = new BrowserAutomationService();
+        BrowserAutomationAction? received = null;
+        service.Attach((action, _) =>
+        {
+            received = action;
+            return Task.FromResult(new BrowserToolResult(true, "clicked"));
+        });
+        const string screenshotId = "3f660e91-61e5-4d2a-8c05-8e2e231114b4";
+
+        var result = await service.ExecuteAsync("browser_click_at",
+            JsonSerializer.SerializeToElement(new { screenshotId, x = 320, y = 180 }));
+
+        result.Success.Should().BeTrue();
+        received.Should().NotBeNull();
+        received!.Tool.Should().Be("browser_click_at");
+        received.ScreenshotId.Should().Be(screenshotId);
+        received.X.Should().Be(320);
+        received.Y.Should().Be(180);
+    }
+
+    [TestMethod]
+    [DataRow(-1, 100)]
+    [DataRow(100, -1)]
+    [DataRow(10001, 100)]
+    [DataRow(100, 10001)]
+    public async Task Coordinate_click_rejects_out_of_range_positions_before_reaching_browser(int x, int y)
+    {
+        var service = new BrowserAutomationService();
+        var called = false;
+        service.Attach((_, _) => { called = true; return Task.FromResult(new BrowserToolResult(true, "clicked")); });
+
+        var result = await service.ExecuteAsync("browser_click_at", JsonSerializer.SerializeToElement(new
+        {
+            screenshotId = "3f660e91-61e5-4d2a-8c05-8e2e231114b4", x, y
+        }));
+
+        result.Success.Should().BeFalse();
+        called.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task Coordinate_click_rejects_missing_or_invalid_screenshot_id_before_reaching_browser()
+    {
+        var service = new BrowserAutomationService();
+        var called = false;
+        service.Attach((_, _) => { called = true; return Task.FromResult(new BrowserToolResult(true, "clicked")); });
+
+        var missing = await service.ExecuteAsync("browser_click_at", JsonSerializer.SerializeToElement(new { x = 1, y = 2 }));
+        var invalid = await service.ExecuteAsync("browser_click_at",
+            JsonSerializer.SerializeToElement(new { screenshotId = "not-a-guid", x = 1, y = 2 }));
+
+        missing.Success.Should().BeFalse();
+        invalid.Success.Should().BeFalse();
+        called.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task Focused_typing_forwards_text_to_browser_host()
+    {
+        var service = new BrowserAutomationService();
+        BrowserAutomationAction? received = null;
+        service.Attach((action, _) =>
+        {
+            received = action;
+            return Task.FromResult(new BrowserToolResult(true, "typed"));
+        });
+
+        var result = await service.ExecuteAsync("browser_type_focused",
+            JsonSerializer.SerializeToElement(new { text = "example-user" }));
+
+        result.Success.Should().BeTrue();
+        received.Should().NotBeNull();
+        received!.Tool.Should().Be("browser_type_focused");
+        received.Text.Should().Be("example-user");
+    }
+
+    [TestMethod]
+    public async Task Focused_typing_rejects_missing_or_oversized_text_before_reaching_browser()
+    {
+        var service = new BrowserAutomationService();
+        var called = false;
+        service.Attach((_, _) => { called = true; return Task.FromResult(new BrowserToolResult(true, "typed")); });
+
+        var missing = await service.ExecuteAsync("browser_type_focused", JsonSerializer.SerializeToElement(new { }));
+        var oversized = await service.ExecuteAsync("browser_type_focused",
+            JsonSerializer.SerializeToElement(new { text = new string('x', 10001) }));
+
+        missing.Success.Should().BeFalse();
+        oversized.Success.Should().BeFalse();
+        called.Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task Browser_actions_wait_for_the_previous_action_to_finish()
     {
         var service = new BrowserAutomationService();

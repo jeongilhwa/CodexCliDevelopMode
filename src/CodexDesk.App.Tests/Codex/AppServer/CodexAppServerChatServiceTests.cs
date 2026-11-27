@@ -194,7 +194,8 @@ public sealed class CodexAppServerChatServiceTests
         client.DynamicTools.Should().NotBeNull();
         client.DynamicTools!.Select(tool => tool.Name).Should().BeEquivalentTo(
             "browser_navigate", "browser_search", "browser_read_page",
-            "browser_click", "browser_type", "browser_scroll",
+            "browser_click", "browser_screenshot", "browser_click_at", "browser_type",
+            "browser_type_focused", "browser_scroll",
             "network_capture_start", "network_capture_stop", "network_capture_list");
         client.DynamicTools.Should().OnlyContain(tool =>
             !string.IsNullOrWhiteSpace(tool.Description) &&
@@ -225,6 +226,37 @@ public sealed class CodexAppServerChatServiceTests
         response.Result.GetProperty("success").GetBoolean().Should().BeTrue();
         response.Result.GetProperty("contentItems")[0].GetProperty("type").GetString().Should().Be("inputText");
         response.Result.GetProperty("contentItems")[0].GetProperty("text").GetString().Should().Be("Opened Naver search results");
+    }
+
+    [TestMethod]
+    public async Task Screenshot_tool_returns_image_content_after_status_text()
+    {
+        var client = new FakeClient();
+        const string imageUrl = "data:image/png;base64,iVBORw0KGgo=";
+        var browser = new FakeBrowserAutomation
+        {
+            Result = new BrowserToolResult(true, "Screenshot 320 by 180", ImageUrl: imageUrl)
+        };
+        using var service = new CodexAppServerChatService(client, browser);
+        await service.StartTurnAsync(Request());
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        client.Request(75, "item/tool/call", new
+        {
+            threadId = "thread-new", turnId = "turn-new", tool = "browser_screenshot", arguments = new { }
+        });
+        var response = await client.WaitForResponseAsync(timeout.Token);
+
+        browser.Calls.Should().ContainSingle();
+        browser.Calls[0].Tool.Should().Be("browser_screenshot");
+        response.Id.Should().Be(75);
+        response.Result.GetProperty("success").GetBoolean().Should().BeTrue();
+        var content = response.Result.GetProperty("contentItems");
+        content.GetArrayLength().Should().Be(2);
+        content[0].GetProperty("type").GetString().Should().Be("inputText");
+        content[0].GetProperty("text").GetString().Should().Be("Screenshot 320 by 180");
+        content[1].GetProperty("type").GetString().Should().Be("inputImage");
+        content[1].GetProperty("imageUrl").GetString().Should().Be(imageUrl);
     }
 
     [TestMethod]

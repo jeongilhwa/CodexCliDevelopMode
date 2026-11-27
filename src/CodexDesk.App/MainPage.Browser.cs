@@ -4,6 +4,7 @@ using CodexDesk.Services;
 using InterceptKit.Core;
 using InterceptKit.Presentation;
 using System.Collections.Generic;
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -14,6 +15,7 @@ using System.Text.RegularExpressions;
 using System.Runtime.InteropServices;
 #if WINDOWS
 using Microsoft.Web.WebView2.Core;
+using Windows.Storage.Streams;
 using UI = Microsoft.UI.Xaml;
 #endif
 
@@ -21,6 +23,14 @@ public partial class MainPage : ContentPage
 {
 #if WINDOWS
     private const int WebViewNetworkMaxPostDataPreviewBytes = 256 * 1024;
+    private const int BrowserScreenshotMaxBytes = 5 * 1024 * 1024;
+    private BrowserScreenshotFrame? _lastBrowserScreenshot;
+
+    private sealed record BrowserScreenshotFrame(
+        string Id, string Url, int ImageWidth, int ImageHeight,
+        int ViewportWidth, int ViewportHeight, DateTimeOffset CapturedAt);
+
+    private sealed record BrowserViewportSize(int Width, int Height);
 
     private void OnBrowserWebViewHandlerChanged(object? sender, EventArgs e)
     {
@@ -2765,6 +2775,7 @@ public partial class MainPage : ContentPage
     }
 
     private sealed record BrowserAutomationScriptResult(bool Ok, string? Message);
+    private sealed record BrowserFocusedInputState(bool Editable, bool Password);
     private sealed record BrowserAutomationPageLink(string? Text, string? Url);
     private sealed record BrowserAutomationPageControl(string? Label, string? Selector, string? Type);
     private sealed record BrowserAutomationPageResult(
@@ -2791,6 +2802,9 @@ public partial class MainPage : ContentPage
                 "browser_navigate" => "opening page",
                 "browser_search" => "searching",
                 "browser_read_page" => "reading page",
+                "browser_screenshot" => "capturing page",
+                "browser_click_at" => "clicking page coordinates",
+                "browser_type_focused" => "typing in focused field",
                 "browser_click" => "clicking",
                 "browser_type" => "typing",
                 "browser_scroll" => "scrolling",
@@ -2808,6 +2822,9 @@ public partial class MainPage : ContentPage
                 {
                     "browser_navigate" or "browser_search" => await NavigateBrowserForCodexAsync(action.Url!, cancellationToken),
                     "browser_read_page" => await ReadBrowserPageForCodexAsync(),
+                    "browser_screenshot" => await CaptureBrowserScreenshotForCodexAsync(),
+                    "browser_click_at" => await ClickBrowserAtForCodexAsync(action.ScreenshotId!, action.X, action.Y),
+                    "browser_type_focused" => await TypeFocusedBrowserFieldForCodexAsync(action.Text!),
                     "browser_click" => await ClickBrowserForCodexAsync(action.Selector!, cancellationToken),
                     "browser_type" => await RunBrowserActionForCodexAsync(BrowserTypeScript, new { selector = action.Selector, text = action.Text }),
                     "browser_scroll" => await RunBrowserActionForCodexAsync(BrowserScrollScript, new { pixels = action.Pixels }),
@@ -3003,6 +3020,136 @@ public partial class MainPage : ContentPage
         return new BrowserToolResult(true, result.ToString());
     }
 
+    private async Task<BrowserToolResult> CaptureBrowserScreenshotForCodexAsync()
+    {
+#if WINDOWS
+        var coreWebView2 = await TryEnsureCoreWebView2Async();
+        if (coreWebView2 is null)
+        {
+            return new BrowserToolResult(false, "WebView2 is not ready for a screenshot.");
+        }
+
+        var viewport = ParseScriptJson<BrowserViewportSize>(await coreWebView2.ExecuteScriptAsync(
+            "({ width: window.innerWidth, height: window.innerHeight })"));
+        if (viewport.Width <= 0 || viewport.Height <= 0)
+        {
+            return new BrowserToolResult(false, "The browser viewport is not visible.");
+        }
+
+        using var stream = new InMemoryRandomAccessStream();
+        await coreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+        if (stream.Size is < 24 or > BrowserScreenshotMaxBytes)
+        {
+            return new BrowserToolResult(false, "The browser screenshot is empty or too large.");
+        }
+
+        stream.Seek(0);
+        using var reader = new DataReader(stream);
+        await reader.LoadAsync((uint)stream.Size);
+        var bytes = new byte[(int)stream.Size];
+        reader.ReadBytes(bytes);
+        ReadOnlySpan<byte> pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+        if (!bytes.AsSpan(0, 8).SequenceEqual(pngSignature))
+        {
+            return new BrowserToolResult(false, "WebView2 did not return a PNG screenshot.");
+        }
+
+        var width = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4));
+        var height = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4));
+        if (width <= 0 || height <= 0)
+        {
+            return new BrowserToolResult(false, "WebView2 returned invalid screenshot dimensions.");
+        }
+
+        var screenshotId = Guid.NewGuid().ToString("N");
+        _lastBrowserScreenshot = new BrowserScreenshotFrame(
+            screenshotId, coreWebView2.Source, width, height,
+            viewport.Width, viewport.Height, DateTimeOffset.UtcNow);
+        return new BrowserToolResult(true,
+            $"Screenshot {screenshotId}: {width} × {height} pixels. Use browser_click_at with this screenshotId and pixel coordinates. If a CAPTCHA appears, ask the user to complete it.",
+            ImageUrl: $"data:image/png;base64,{Convert.ToBase64String(bytes)}");
+#else
+        return new BrowserToolResult(false, "Browser screenshots require Windows WebView2.");
+#endif
+    }
+
+    private async Task<BrowserToolResult> ClickBrowserAtForCodexAsync(string screenshotId, int x, int y)
+    {
+#if WINDOWS
+        var coreWebView2 = await TryEnsureCoreWebView2Async();
+        var screenshot = _lastBrowserScreenshot;
+        if (coreWebView2 is null || screenshot is null ||
+            !string.Equals(screenshot.Id, screenshotId, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(screenshot.Url, coreWebView2.Source, StringComparison.Ordinal) ||
+            DateTimeOffset.UtcNow - screenshot.CapturedAt > TimeSpan.FromMinutes(1))
+        {
+            return new BrowserToolResult(false, "The screenshot is no longer current. Capture a new browser_screenshot before clicking.");
+        }
+
+        if (x >= screenshot.ImageWidth || y >= screenshot.ImageHeight)
+        {
+            return new BrowserToolResult(false, "The click coordinates are outside the screenshot.");
+        }
+
+        var currentViewport = ParseScriptJson<BrowserViewportSize>(await coreWebView2.ExecuteScriptAsync(
+            "({ width: window.innerWidth, height: window.innerHeight })"));
+        if (currentViewport.Width != screenshot.ViewportWidth || currentViewport.Height != screenshot.ViewportHeight)
+        {
+            return new BrowserToolResult(false, "The browser viewport changed. Capture a new browser_screenshot before clicking.");
+        }
+
+        var cssX = (x + 0.5) * screenshot.ViewportWidth / screenshot.ImageWidth;
+        var cssY = (y + 0.5) * screenshot.ViewportHeight / screenshot.ImageHeight;
+        await coreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+            JsonSerializer.Serialize(new { type = "mouseMoved", x = cssX, y = cssY, button = "none" }));
+        await coreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+            JsonSerializer.Serialize(new { type = "mousePressed", x = cssX, y = cssY, button = "left", clickCount = 1 }));
+        await coreWebView2.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent",
+            JsonSerializer.Serialize(new { type = "mouseReleased", x = cssX, y = cssY, button = "left", clickCount = 1 }));
+        _lastBrowserScreenshot = null;
+        return new BrowserToolResult(true, $"Clicked screenshot pixel ({x}, {y}). Read or capture the page again to verify the result.");
+#else
+        return new BrowserToolResult(false, "Coordinate clicks require Windows WebView2.");
+#endif
+    }
+
+    private async Task<BrowserToolResult> TypeFocusedBrowserFieldForCodexAsync(string text)
+    {
+#if WINDOWS
+        var coreWebView2 = await TryEnsureCoreWebView2Async();
+        if (coreWebView2 is null)
+        {
+            return new BrowserToolResult(false, "WebView2 is not ready for text input.");
+        }
+
+        var focused = ParseScriptJson<BrowserFocusedInputState>(await coreWebView2.ExecuteScriptAsync(
+            """
+            (() => {
+                const element = document.activeElement;
+                if (element instanceof HTMLInputElement) {
+                    if (element.type === 'password') return { editable: false, password: true };
+                    return { editable: !['file', 'hidden', 'checkbox', 'radio', 'button', 'submit', 'reset', 'image'].includes(element.type), password: false };
+                }
+                return { editable: element instanceof HTMLTextAreaElement || Boolean(element?.isContentEditable), password: false };
+            })()
+            """));
+        if (focused.Password)
+        {
+            return new BrowserToolResult(false, "Password fields cannot be filled by the browser tool. Use WebView2 autofill or sign in yourself.");
+        }
+
+        if (!focused.Editable)
+        {
+            return new BrowserToolResult(false, "Focus a visible text field with browser_click_at before typing.");
+        }
+
+        await coreWebView2.CallDevToolsProtocolMethodAsync("Input.insertText", JsonSerializer.Serialize(new { text }));
+        return new BrowserToolResult(true, "Inserted text into the focused field. Read the page to verify the result.");
+#else
+        return new BrowserToolResult(false, "Browser text input requires Windows WebView2.");
+#endif
+    }
+
     private async Task<BrowserToolResult> RunBrowserActionForCodexAsync(string body, object arguments)
     {
         var script = $"((args) => {{ {body} }})({JsonSerializer.Serialize(arguments)})";
@@ -3090,6 +3237,9 @@ public partial class MainPage : ContentPage
 
     private void OnBrowserWebViewNavigating(object? sender, WebNavigatingEventArgs e)
     {
+#if WINDOWS
+        _lastBrowserScreenshot = null;
+#endif
         var nextUrl = string.IsNullOrWhiteSpace(e.Url) ? _browserState.CurrentUrl : e.Url;
         _browserState.SetStatus("Opening page.", nextUrl);
         UpdateBrowserChrome();
